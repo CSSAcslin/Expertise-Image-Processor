@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "example.invert",
+  "name": "示例：数值反相",
+  "description": "反相参考值减去输入；结果为 float32。使用原始数值，与显示窗宽无关。",
+  "version": "1.0",
+  "entry_point": "invert.py:Invert",
+  "execution_scope": "frame",
+  "output_kind": "image",
+  "parameters": [
+    {"key": "reference", "label": "反相参考值", "kind": "float", "default": 65535.0, "minimum": -1000000000, "maximum": 1000000000}
+  ]
+}
