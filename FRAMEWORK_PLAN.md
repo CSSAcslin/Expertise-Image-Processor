@@ -1,6 +1,6 @@
 # 高级图像与视频处理器：框架规划
 
-状态：用户已同意初步执行；已建立 Git 仓库，并实现阶段 A 的 `0.1.0` 贯通基线。实际支持范围、启动方法和未实现项见 [README.md](README.md)。本文保留完整目标规划，功能优先级不表示全部功能已经实现。
+状态：已建立 Git 仓库，实现阶段 A 的 `0.1.0` 贯通基线；根据用户界面反馈，`0.2.0` 将默认前端迁移为本机 Web 工作台，继续复用 Python 内核。实际支持范围、启动方法和未实现项见 [README.md](README.md)。本文保留完整目标规划，功能优先级不表示全部功能已经实现。
 
 ## 1. 产品定位与不可偏离的主线
 
@@ -21,7 +21,7 @@
 
 | 项目 | 暂定方案 | 对架构的影响 |
 | --- | --- | --- |
-| 运行方式 | Windows 本地桌面；接口保持可跨平台 | 本地文件访问、后台计算、桌面交互优先 |
+| 运行方式 | 本机 Web 工作台；当前验证 Windows，接口保持可跨平台 | 浏览器交互、本机文件访问、独立后台计算 |
 | 数据范围 | 常规视频、科研图像及时间序列混合 | 明确时间戳、位深、通道、维度及显示转换 |
 | 计算规模 | 单机中大型数据；CPU 可用，GPU 可选 | 按需读取、有界缓存、计算进程隔离 |
 | 专业扩展 | Python 算法优先；模型推理作为首个 ML 扩展 | 算法接口独立于界面与具体推理框架 |
@@ -144,7 +144,8 @@ flowchart TB
 
 ### 5.2 候选技术方案
 
-- 桌面外壳：Python + PySide6，优先常规 Qt Widgets 工作台布局。PySide6 是 Qt 的官方 Python 绑定；这是基于 Python 扩展优先的候选设计判断。[Qt for Python](https://doc.qt.io/qtforpython-6/)
+- 当前前端：浏览器 HTML/CSS/JavaScript + Canvas；本机 FastAPI 服务提供来源、预览和任务接口，原始数组保留在后端。仅监听本机，同源会话访问，不依赖云端。[FastAPI 官方文档](https://fastapi.tiangolo.com/)
+- Qt 兼容入口：Python + PySide6 已完成初始基线，保留用于兼容，默认不再进入该界面。[Qt for Python](https://doc.qt.io/qtforpython-6/)
 - 图像数据：NumPy 数组作为首个计算载体，明确轴、dtype、坐标及单位；具体文件读写放在适配器中。
 - 常规视频：PyAV / FFmpeg 作为候选解码后端；在 reader 中处理时间戳、关键帧跳转和像素格式转换。PyAV 的 seek 定位附近关键帧，精确目标还需要继续解码；不能依赖直接按帧号 seek。[PyAV Containers](https://pyav.basswood.io/docs/stable/api/container.html)
 - 后台执行：首版单独 worker 进程与有界任务队列；通过明确消息协议通信。
@@ -315,7 +316,8 @@ project/
 
 ```text
 src/eip/
-  ui/                    # 工作台、画布、时间轴、参数及任务面板
+  web/                   # 当前本机服务、任务编排与静态 Web 工作台
+  ui/                    # Qt 兼容工作台
   application/           # 项目、选择、预览请求及运行编排
   domain/                # 数据、范围、算法、运行及结果模型
   io/                    # reader/exporter 接口和具体格式适配器

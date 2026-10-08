@@ -15,7 +15,7 @@ def preview_entry(commands, results):
             break
         try:
             source = source_from_dict(command["source"])
-            if source.key != key:
+            if source.key != key or command["action"] == "open":
                 if reader:
                     reader.close()
                 reader = None
@@ -25,7 +25,8 @@ def preview_entry(commands, results):
                 last_ref = None
             action = command["action"]
             if action == "open":
-                frame = reader.first() if reader.meta.kind == "video" else reader.read_frame(0)
+                # Reopening the same video must reset the iterator as well as the displayed frame.
+                frame = reader.read_at_time(0) if reader.meta.kind == "video" else reader.read_frame(0)
             elif action == "time":
                 frame = reader.read_at_time(command["time"])
             elif action == "next":

@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Expertise · 图像工作台</title>
+    <link rel="icon" href="/static/logo.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/static/style.css" />
+    <script type="module" src="/static/app.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Expertise 首页"
+        ><img src="/static/logo.svg" alt="" /><span
+          >EXPERTISE<small>图像与视频工作台</small></span
+        ></a
+      >
+      <div class="project-title">
+        <span class="project-dot"></span
+        ><span id="project-title">未命名工作区</span
+        ><span class="version" id="version"></span>
+      </div>
+      <div class="top-actions">
+        <span class="connection" id="connection">正在连接</span
+        ><button id="load-project" class="quiet">打开项目</button
+        ><button id="save-project" class="quiet">保存项目</button
+        ><button id="import" class="primary small">
+          <span data-icon="plus"></span>导入数据
+        </button>
+      </div>
+    </header>
+    <main class="workspace">
+      <aside class="library">
+        <div class="panel-heading">
+          <div>
+            <span class="eyebrow">DATA LIBRARY</span>
+            <h2>数据来源 <span id="source-count" class="count">0</span></h2>
+          </div>
+          <button
+            id="import-small"
+            class="icon-button"
+            title="导入数据"
+            aria-label="导入数据"
+          >
+            <span data-icon="plus"></span>
+          </button>
+        </div>
+        <div class="library-tabs">
+          <span class="active">输入数据</span><span class="hint">本地文件</span>
+        </div>
+        <div id="source-list" class="source-list">
+          <div class="library-empty">导入图像、视频<br />或图像序列目录</div>
+        </div>
+        <div class="result-heading">
+          <span data-icon="layers"></span>处理结果
+          <span id="result-count" class="count">0</span>
+        </div>
+        <div id="result-list" class="source-list results"></div>
+        <div class="library-footer">
+          <span data-icon="folder"></span
+          ><span id="workspace-path" title="工作目录"></span>
+        </div>
+      </aside>
+      <section class="preview-workspace">
+        <div class="preview-heading">
+          <div>
+            <span class="eyebrow">VIDEO & IMAGE PREVIEW</span>
+            <h1 id="preview-title">数据预览</h1>
+          </div>
+          <div class="segmented" id="view-mode">
+            <button data-view="input" class="selected">原始</button
+            ><button data-view="compare">并排对比</button
+            ><button data-view="result">结果</button>
+          </div>
+        </div>
+        <div class="viewer-toolbar">
+          <div class="toolbar-group">
+            <button
+              id="tool-pan"
+              class="icon-button selected"
+              title="拖动平移"
+              aria-label="平移工具"
+            >
+              <span data-icon="hand"></span></button
+            ><button
+              id="tool-roi"
+              class="icon-button"
+              title="绘制 ROI"
+              aria-label="绘制 ROI"
+            >
+              <span data-icon="crop"></span></button
+            ><span class="divider"></span
+            ><button id="fit" class="quiet small">适应窗口</button
+            ><button id="actual" class="quiet small">1:1</button
+            ><span id="zoom-value" class="hint mono">100%</span>
+          </div>
+          <div class="toolbar-group">
+            <span id="dtype-badge" class="badge">等待数据</span
+            ><span id="shape-badge" class="hint mono"></span>
+          </div>
+        </div>
+        <div id="viewers" class="viewers" data-mode="input">
+          <div class="canvas-pane" id="input-pane">
+            <div class="pane-label">原始数据</div>
+            <canvas id="input-canvas" aria-label="原始数据预览"></canvas>
+          </div>
+          <div class="canvas-pane" id="result-pane">
+            <div class="pane-label">
+              <span id="result-label">处理结果</span
+              ><span id="stale" class="stale" hidden>参数已变更</span>
+            </div>
+            <canvas id="result-canvas" aria-label="处理结果预览"></canvas>
+          </div>
+          <div id="welcome" class="welcome">
+            <div class="welcome-symbol"><span data-icon="image"></span></div>
+            <span class="eyebrow">YOUR DATA, IN FOCUS</span>
+            <h2>看清每一帧，验证每一步</h2>
+            <p>在同一工作台预览视频、配置算法、对比处理结果。</p>
+            <div>
+              <button id="welcome-import" class="primary">
+                <span data-icon="plus"></span>打开本地数据</button
+              ><button id="demo" class="quiet">
+                体验示例数据 <span>→</span>
+              </button>
+            </div>
+            <small>支持高位深 TIFF · 图像序列 · 常见视频格式</small>
+          </div>
+        </div>
+        <div class="pixel-bar">
+          <span id="frame-info" class="mono">尚未打开数据</span
+          ><span id="pixel-info" class="mono">滚轮缩放 · 拖动平移</span>
+        </div>
+        <div class="timeline">
+          <div class="transport">
+            <button
+              id="previous"
+              class="icon-button"
+              title="上一帧"
+              aria-label="上一帧"
+            >
+              <span data-icon="previous"></span></button
+            ><button
+              id="play"
+              class="play-button"
+              title="播放/暂停"
+              aria-label="播放"
+            >
+              <span data-icon="play"></span></button
+            ><button
+              id="next"
+              class="icon-button"
+              title="下一帧"
+              aria-label="下一帧"
+            >
+              <span data-icon="next"></span>
+            </button>
+          </div>
+          <div class="timeline-track">
+            <input
+              id="scrubber"
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value="0"
+              aria-label="预览位置"
+            />
+            <div class="timeline-scale">
+              <span id="time-start">0</span
+              ><span id="timeline-note">按真实时间定位</span
+              ><span id="time-end">—</span>
+            </div>
+          </div>
+          <label class="seek-control"
+            ><input
+              id="seek-value"
+              type="number"
+              step="0.001"
+              value="0"
+              aria-label="定位值"
+            /><span id="seek-unit">s</span
+            ><button id="seek" class="quiet small">定位</button></label
+          >
+        </div>
+        <details class="display-panel">
+          <summary>
+            <span data-icon="sliders"></span>显示设置
+            <span class="hint">仅改变显示</span
+            ><span class="summary-end">窗宽 / 伽马 / 色图</span>
+          </summary>
+          <div class="display-content">
+            <canvas
+              id="histogram"
+              width="160"
+              height="42"
+              aria-label="像素采样直方图"
+            ></canvas
+            ><label
+              >最小值<input
+                id="display-low"
+                type="number"
+                step="any"
+                aria-label="显示最小值" /></label
+            ><label
+              >最大值<input
+                id="display-high"
+                type="number"
+                step="any"
+                aria-label="显示最大值" /></label
+            ><label
+              >伽马<input
+                id="display-gamma"
+                type="number"
+                min="0.05"
+                max="20"
+                step="0.1"
+                value="1"
+                aria-label="显示伽马" /></label
+            ><label
+              >色图<select id="colormap">
+                <option value="gray">灰度</option>
+                <option value="heat">热度</option>
+              </select></label
+            ><button id="auto-display" class="quiet small">自动窗宽</button>
+          </div>
+        </details>
+      </section>
+      <aside class="processing">
+        <div class="panel-heading">
+          <div>
+            <span class="eyebrow">PROCESSING PIPELINE</span>
+            <h2>数据处理</h2>
+          </div>
+          <span class="badge muted">Python</span>
+        </div>
+        <div class="processing-scroll">
+          <section class="pipeline-section">
+            <div class="section-title">
+              <h3>处理流程 <span id="step-count" class="count">0</span></h3>
+              <button id="plugin" class="text-button">接入算法</button>
+            </div>
+            <div id="steps" class="steps"></div>
+            <div class="add-step">
+              <select id="algorithm" aria-label="选择算法"></select
+              ><button id="add-step" class="quiet" aria-label="添加处理步骤">
+                <span data-icon="plus"></span>添加
+              </button>
+            </div>
+            <p class="hint small-copy">
+              步骤按顺序执行。自定义 Python 算法可复用同一流程。
+            </p>
+          </section>
+          <section class="settings-section">
+            <h3>处理范围</h3>
+            <div class="field">
+              <label for="scope">帧 / 时间范围</label
+              ><select id="scope">
+                <option value="current">当前帧</option>
+                <option value="all">全部数据</option>
+                <option value="range">指定范围</option>
+              </select>
+            </div>
+            <div id="range-fields" class="two-fields" hidden>
+              <label
+                >起点<input
+                  id="range-start"
+                  type="number"
+                  min="0"
+                  value="0"
+                  step="any" /></label
+              ><label
+                >终点（不包含）<input
+                  id="range-end"
+                  type="number"
+                  min="0"
+                  value="1"
+                  step="any"
+              /></label>
+              <p id="range-unit" class="hint small-copy"></p>
+            </div>
+            <label class="checkbox-line"
+              ><input id="batch" type="checkbox" />处理全部输入来源</label
+            >
+            <div class="roi-card">
+              <div>
+                <span data-icon="crop"></span><span>空间范围</span
+                ><button id="clear-roi" class="text-button">清除</button>
+              </div>
+              <span id="roi-info" class="mono">全幅图像</span
+              ><small>ROI 采用完整帧处理后裁剪输出。</small>
+            </div>
+          </section>
+          <section class="settings-section">
+            <h3>结果输出</h3>
+            <div class="field">
+              <label>输出目录</label>
+              <div class="path-field">
+                <input id="output-dir" readonly aria-label="输出目录" /><button
+                  id="choose-output"
+                  class="icon-button"
+                  title="选择输出目录"
+                  aria-label="选择输出目录"
+                >
+                  <span data-icon="folder"></span>
+                </button>
+              </div>
+            </div>
+            <div class="output-note">
+              <span class="badge muted">TIFF</span
+              ><span>保留数据类型 · 统计 CSV · 运行记录</span>
+            </div>
+            <p class="hint small-copy">
+              机器学习可通过算法插件接入；模型管理与 GPU 调度尚未实现。
+            </p>
+          </section>
+        </div>
+        <div class="run-footer">
+          <div id="run-summary" class="hint">打开数据以开始处理</div>
+          <div>
+            <button id="trial" class="quiet" disabled>
+              <span data-icon="spark"></span>当前帧试算</button
+            ><button id="run" class="primary" disabled>
+              <span data-icon="play"></span>运行处理
+            </button>
+          </div>
+        </div>
+      </aside>
+      <section class="tasks">
+        <div class="task-heading">
+          <div>
+            <span data-icon="activity"></span>
+            <h2>任务记录</h2>
+            <span id="job-count" class="count">0</span>
+          </div>
+          <span id="queue-note" class="hint">后台计算，预览可继续</span
+          ><button id="toggle-tasks" class="icon-button" aria-label="折叠任务">
+            <span data-icon="chevron"></span>
+          </button>
+        </div>
+        <div id="job-list" class="job-list">
+          <div class="task-empty">
+            试算和正式运行的进度、结果及日志会显示在这里。
+          </div>
+        </div>
+      </section>
+    </main>
+    <div id="toast" role="status" hidden></div>
+    <dialog id="file-dialog">
+      <div class="dialog-heading">
+        <div>
+          <span class="eyebrow">LOCAL FILES</span>
+          <h2 id="dialog-title">打开本地数据</h2>
+        </div>
+        <button id="dialog-close" class="icon-button" aria-label="关闭文件窗口">
+          <span data-icon="close"></span>
+        </button>
+      </div>
+      <div class="browse-bar">
+        <button id="browse-up" class="icon-button" aria-label="上级目录">
+          <span data-icon="up"></span></button
+        ><input id="browse-path" aria-label="文件或目录路径" /><button
+          id="browse-go"
+          class="quiet"
+        >
+          前往
+        </button>
+      </div>
+      <div id="drives" class="drive-list"></div>
+      <div id="file-list" class="file-list"></div>
+      <div class="dialog-options">
+        <label id="interval-label"
+          >序列帧间隔（秒，可留空）<input
+            id="interval"
+            type="number"
+            min="0.000001"
+            step="any"
+            placeholder="未知" /></label
+        ><label id="filename-label" hidden
+          >项目文件名<input id="filename" value="workspace.eip.json"
+        /></label>
+        <p id="dialog-note" class="hint">
+          选择文件，或打开目录作为图像序列。数据留在本机。
+        </p>
+      </div>
+      <div class="dialog-footer">
+        <span id="selection-info" class="hint">尚未选择文件</span
+        ><button id="dialog-submit" class="primary">打开数据</button>
+      </div>
+    </dialog>
+    <dialog id="job-dialog">
+      <div class="dialog-heading">
+        <h2>任务详情</h2>
+        <button id="job-close" class="icon-button" aria-label="关闭任务详情">
+          <span data-icon="close"></span>
+        </button>
+      </div>
+      <div id="job-detail"></div>
+    </dialog>
+  </body>
+</html>

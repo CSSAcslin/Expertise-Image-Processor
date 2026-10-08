@@ -2,7 +2,7 @@ import multiprocessing
 import sys
 
 
-def main() -> int:
+def desktop_main() -> int:
     multiprocessing.freeze_support()
     from PySide6.QtWidgets import QApplication
     from eip.ui.fonts import configure_fonts
@@ -14,6 +14,11 @@ def main() -> int:
     window = MainWindow()
     window.show()
     return app.exec()
+
+
+def main() -> int:
+    from eip.web.main import main as web_main
+    return web_main()
 
 
 if __name__ == "__main__":
