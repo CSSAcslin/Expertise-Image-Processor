@@ -13,9 +13,10 @@ from playwright.sync_api import sync_playwright, expect
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", default="http://127.0.0.1:8765")
+    parser.add_argument("--output", type=Path, help="截图及导出验证目录")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
-    output = root / ".test-output" / "web-ui"
+    output = (args.output or root / ".test-output" / "web-ui").resolve()
     output.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(channel="msedge" if sys.platform == "win32" else "chromium", headless=True)
@@ -82,6 +83,9 @@ def main():
         expect(page.locator("#file-dialog")).not_to_be_visible()
         value = json.loads((output / "browser-project.json").read_text(encoding="utf-8"))
         assert value["web_roi"] and value["steps"][0]["parameters"]["radius"] == 3
+        page.locator("#display-target").select_option("input")
+        page.locator("#display-gamma").fill("0.5");page.locator("#display-gamma").press("Tab")
+        page.locator("#clear-roi").click()
         page.locator("#load-project").click()
         page.locator("#browse-path").fill(str(output / "browser-project.json"));page.locator("#browse-go").click()
         expect(page.locator("#selection-info")).to_contain_text("browser-project.json")
@@ -90,6 +94,10 @@ def main():
         expect(page.locator("#roi-info")).to_contain_text("px")
         expect(page.locator("#range-start")).to_have_value("0.8")
         expect(page.locator("#range-end")).to_have_value("1.2")
+        expect(page.locator("#display-gamma")).to_have_value("1.8")
+        expect(page.locator("#colormap")).to_have_value("heat")
+        saved_time = value["web_views"][value["active_source"]]["ref"]["time"]
+        expect(page.locator("#seek-value")).to_have_value(f"{saved_time:.4f}")
         page.locator("#plugin").click()
         page.locator("#browse-path").fill(str(root / "examples" / "plugins" / "invert.json"));page.locator("#browse-go").click()
         expect(page.locator("#selection-info")).to_contain_text("invert.json")

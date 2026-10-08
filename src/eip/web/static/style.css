@@ -2,13 +2,191 @@
   font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
   color: #dce2ec;
   background: #101318;
-  font-size: 13px;
+  font-size: 14px;
   --panel: #181d25;
   --line: #2b333f;
   --text: #dce2ec;
   --dim: #8794a7;
   --accent: #83d9c5;
   --accent-dark: #122e29;
+}
+
+.flow-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--line);
+  background: #19242a;
+  min-height: 40px;
+  font-size: 11px;
+  color: #aac5bd;
+}
+.flow-strip > span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 20px 10px;
+}
+.file-tools > input {
+  flex: 1;
+  width: 100px;
+  font-size: 12px;
+}
+.file-selection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px 10px;
+  color: #9fafc4;
+  font-size: 12px;
+}
+.file-selection label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.file-list[aria-busy="true"] {
+  opacity: 0.55;
+  pointer-events: none;
+}
+.import-report {
+  margin: 12px 20px 0;
+  max-height: 110px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: #111923;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px;
+  color: #d0b7a9;
+  font-size: 11px;
+}
+.source-card {
+  padding-right: 23px;
+}
+.source-remove {
+  position: absolute;
+  right: 2px;
+  top: 5px;
+  width: 21px;
+  height: 21px;
+  padding: 3px;
+  color: #8a99ad;
+  opacity: 0.65;
+}
+.source-card:hover .source-remove {
+  opacity: 1;
+}
+.source-info {
+  font-size: 10px;
+  color: #8bd0bc;
+  padding: 0;
+  margin-top: 5px;
+}
+.display-content {
+  flex-wrap: wrap;
+}
+.display-content label:first-of-type select {
+  width: 90px;
+}
+.display-caption {
+  padding: 0 16px 10px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 10px;
+  color: #8195ac;
+}
+#source-dialog {
+  width: 630px;
+}
+#source-detail {
+  padding: 20px;
+  max-height: 65vh;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.metadata-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.metadata-table td {
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  word-break: break-word;
+}
+.metadata-table td:first-child {
+  width: 95px;
+  color: #8298b0;
+  white-space: nowrap;
+}
+.lineage-item {
+  border-left: 2px solid #4c8d7b;
+  padding: 9px 12px;
+  margin-top: 12px;
+  background: #141e27;
+  word-break: break-all;
+  font-size: 11px;
+}
+.eyebrow {
+  font-size: 10px;
+}
+.source-card strong {
+  font-size: 12px;
+}
+.source-card small {
+  font-size: 11px;
+}
+.small-copy,
+.step-description {
+  font-size: 11px;
+}
+.step-parameters label {
+  font-size: 11px;
+}
+.output-note {
+  font-size: 10px;
+}
+.roi-editor {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 12px 0 !important;
+}
+.roi-editor[hidden] {
+  display: none !important;
+}
+.roi-editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: #94aac1;
+}
+.roi-editor input {
+  width: 100%;
+  font:
+    12px Consolas,
+    monospace;
+  padding: 6px;
+}
+.roi-history {
+  justify-content: flex-start !important;
+  gap: 14px !important;
+  margin: 10px 0 0 !important;
+}
+.roi-history button {
+  margin: 0 !important;
 }
 * {
   box-sizing: border-box;
@@ -1301,5 +1479,111 @@ dialog::backdrop {
   .run-footer button {
     font-size: 10px;
     padding: 9px 5px;
+  }
+}
+
+.workspace {
+  --library-width: 238px;
+  --processing-width: 314px;
+}
+.layout-tools {
+  display: flex;
+  gap: 4px;
+  margin-right: 4px;
+}
+.layout-tools .selected {
+  color: var(--accent);
+  border-color: #416557;
+  background: #263d35;
+}
+.workspace.library-collapsed {
+  grid-template-columns: 0 minmax(330px, 1fr) var(--processing-width);
+}
+.workspace.library-collapsed .library {
+  display: none;
+}
+.workspace.processing-collapsed {
+  grid-template-columns: var(--library-width) minmax(330px, 1fr) 0;
+}
+.workspace.processing-collapsed .processing {
+  display: none;
+}
+.workspace.library-collapsed.processing-collapsed {
+  grid-template-columns: 0 minmax(330px, 1fr) 0;
+  grid-template-rows: minmax(0, 1fr) 0;
+}
+.workspace.library-collapsed.processing-collapsed .tasks,
+.workspace.library-collapsed.processing-collapsed .display-panel {
+  display: none;
+}
+#file-dialog {
+  max-height: calc(100dvh - 36px);
+  overflow: auto;
+}
+.file-list {
+  height: clamp(150px, 32vh, 290px);
+}
+.dialog-footer {
+  position: sticky;
+  bottom: 0;
+  background: #1a222e;
+  z-index: 3;
+}
+.histogram-box {
+  width: 110px;
+  flex-shrink: 0;
+}
+.histogram-box > div {
+  display: flex;
+  justify-content: space-between;
+  color: #7e97b1;
+  font:
+    9px Consolas,
+    monospace;
+}
+.histogram-box canvas {
+  max-width: 100%;
+}
+.roi-statistics {
+  display: block;
+  font-size: 10px !important;
+  color: #99c7b9 !important;
+  line-height: 1.8;
+  margin-top: 7px;
+}
+.small-copy,
+.step-description {
+  font-size: 11px;
+}
+.roi-card small {
+  font-size: 10px;
+}
+@media (max-width: 1200px) {
+  .workspace {
+    --library-width: 203px;
+    --processing-width: 284px;
+  }
+  .connection,
+  .project-title .version {
+    display: none;
+  }
+  .topbar .project-title {
+    max-width: 130px;
+  }
+  .layout-tools button {
+    font-size: 10px;
+    padding: 6px 7px;
+  }
+}
+@media (max-width: 950px) {
+  .workspace {
+    --library-width: 180px;
+    --processing-width: 262px;
+  }
+  .layout-tools {
+    margin-right: 0;
+  }
+  .topbar {
+    min-width: 760px;
   }
 }

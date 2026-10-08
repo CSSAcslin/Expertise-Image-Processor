@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from pathlib import Path
+import json
 import secrets
 
 from fastapi import FastAPI, Request, HTTPException
@@ -13,15 +14,20 @@ from eip import __version__
 from eip.web.runtime import Workbench
 
 
-def create_app(workspace: Path | None = None):
-    token = secrets.token_urlsafe(32)
+def create_app(workspace: Path | None = None, restore_session: Path | None = None):
+    restored = json.loads(restore_session.read_text(encoding="utf-8")) if restore_session else None
+    token = restored["state"]["session_token"] if restored else secrets.token_urlsafe(32)
+    if not isinstance(token, str) or len(token) < 32:
+        raise ValueError("会话快照缺少有效令牌")
     root = (workspace or Path.cwd()).resolve()
 
     @asynccontextmanager
     async def lifespan(app):
-        app.state.workbench = Workbench(root)
-        yield
-        app.state.workbench.close()
+        app.state.workbench = Workbench(root, restored)
+        try:
+            yield
+        finally:
+            app.state.workbench.close()
 
     app = FastAPI(title="Expertise Image Processor", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
@@ -62,9 +68,22 @@ def create_app(workspace: Path | None = None):
     def browse(path: str | None = None, mode: str = "data"):
         return workbench().browse(path, mode)
 
+    @app.get("/api/path")
+    def inspect_path(path: str):
+        return workbench().inspect_path(path)
+
     @app.post("/api/sources/open")
     def open_source(value: dict):
         return workbench().open(value)
+
+    @app.post("/api/sources/{identifier}/promote")
+    def promote(identifier: str):
+        return workbench().promote(identifier)
+
+    @app.post("/api/sources/{identifier}/remove")
+    def remove(identifier: str):
+        workbench().remove(identifier)
+        return {"ok": True}
 
     @app.post("/api/sources/{identifier}/frame")
     def frame(identifier: str, value: dict):
@@ -77,6 +96,10 @@ def create_app(workspace: Path | None = None):
     @app.get("/api/frames/{identifier}/pixel")
     def pixel(identifier: str, x: int, y: int):
         return workbench().frames.pixel(identifier, x, y)
+
+    @app.get("/api/frames/{identifier}/region")
+    def region(identifier: str, x: int, y: int, width: int, height: int):
+        return workbench().frames.region(identifier, x, y, width, height)
 
     @app.post("/api/plugins/register")
     def register(value: dict):

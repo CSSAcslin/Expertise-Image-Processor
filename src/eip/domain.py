@@ -66,6 +66,8 @@ class ROI:
 
     def validate(self, shape: tuple[int, ...]):
         h, w = shape[:2]
+        if any(type(value) is not int for value in (self.x, self.y, self.width, self.height)):
+            raise ValueError("ROI 坐标和尺寸必须是整数像素")
         if min(self.x, self.y) < 0 or min(self.width, self.height) < 1:
             raise ValueError("ROI 必须是非空的图像区域")
         if self.x + self.width > w or self.y + self.height > h:

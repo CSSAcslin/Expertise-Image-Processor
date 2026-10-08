@@ -22,6 +22,19 @@
         ><span class="version" id="version"></span>
       </div>
       <div class="top-actions">
+        <div class="layout-tools">
+          <button id="toggle-library" class="quiet small" aria-pressed="false">
+            来源</button
+          ><button
+            id="toggle-processing"
+            class="quiet small"
+            aria-pressed="false"
+          >
+            处理</button
+          ><button id="focus-preview" class="quiet small" aria-pressed="false">
+            专注预览
+          </button>
+        </div>
         <span class="connection" id="connection">正在连接</span
         ><button id="load-project" class="quiet">打开项目</button
         ><button id="save-project" class="quiet">保存项目</button
@@ -74,6 +87,12 @@
             ><button data-view="result">结果</button>
           </div>
         </div>
+        <div class="flow-strip">
+          <span id="flow-summary">导入来源 → 配置算法 → 检查结果</span
+          ><button id="promote-result" class="quiet small" disabled>
+            结果作为下一阶段输入
+          </button>
+        </div>
         <div class="viewer-toolbar">
           <div class="toolbar-group">
             <button
@@ -108,7 +127,10 @@
           <div class="canvas-pane" id="result-pane">
             <div class="pane-label">
               <span id="result-label">处理结果</span
-              ><span id="stale" class="stale" hidden>参数已变更</span>
+              ><span id="result-meta" class="mono"></span
+              ><span id="stale" class="stale" hidden
+                >帧 / 参数 / ROI 已变更</span
+              >
             </div>
             <canvas id="result-canvas" aria-label="处理结果预览"></canvas>
           </div>
@@ -190,13 +212,24 @@
             ><span class="summary-end">窗宽 / 伽马 / 色图</span>
           </summary>
           <div class="display-content">
-            <canvas
-              id="histogram"
-              width="160"
-              height="42"
-              aria-label="像素采样直方图"
-            ></canvas
-            ><label
+            <label
+              >显示目标<select id="display-target" aria-label="显示设置目标">
+                <option value="input">原始数据</option>
+                <option value="result">处理结果</option>
+              </select></label
+            >
+            <div class="histogram-box">
+              <canvas
+                id="histogram"
+                width="160"
+                height="42"
+                aria-label="像素采样直方图"
+              ></canvas>
+              <div>
+                <span id="histogram-min"></span><span id="histogram-max"></span>
+              </div>
+            </div>
+            <label
               >最小值<input
                 id="display-low"
                 type="number"
@@ -223,6 +256,12 @@
                 <option value="heat">热度</option>
               </select></label
             ><button id="auto-display" class="quiet small">自动窗宽</button>
+          </div>
+          <div class="display-caption">
+            <span id="display-status">输入与结果分别设置，仅改变显示</span
+            ><button id="copy-display" class="text-button">
+              复制到另一视图
+            </button>
           </div>
         </details>
       </section>
@@ -287,8 +326,51 @@
                 <span data-icon="crop"></span><span>空间范围</span
                 ><button id="clear-roi" class="text-button">清除</button>
               </div>
-              <span id="roi-info" class="mono">全幅图像</span
-              ><small>ROI 采用完整帧处理后裁剪输出。</small>
+              <span id="roi-info" class="mono">全幅图像</span>
+              <span
+                id="roi-statistics"
+                class="roi-statistics"
+                title="统计原始数据中所有通道的有限样本，不使用显示映射"
+              ></span>
+              <div id="roi-editor" class="roi-editor" hidden>
+                <label
+                  >X<input
+                    id="roi-x"
+                    type="number"
+                    min="0"
+                    step="1"
+                    aria-label="ROI X" /></label
+                ><label
+                  >Y<input
+                    id="roi-y"
+                    type="number"
+                    min="0"
+                    step="1"
+                    aria-label="ROI Y" /></label
+                ><label
+                  >宽度<input
+                    id="roi-width"
+                    type="number"
+                    min="1"
+                    step="1"
+                    aria-label="ROI 宽度" /></label
+                ><label
+                  >高度<input
+                    id="roi-height"
+                    type="number"
+                    min="1"
+                    step="1"
+                    aria-label="ROI 高度"
+                /></label>
+              </div>
+              <div class="roi-history">
+                <button id="roi-undo" class="text-button" disabled>撤销</button
+                ><button id="roi-redo" class="text-button" disabled>重做</button
+                ><button id="roi-full" class="text-button">选择全幅</button>
+              </div>
+              <small
+                >图中拖动选区可移动；拖动边角可缩放。完整帧处理后裁剪输出。</small
+              >
             </div>
           </section>
           <section class="settings-section">
@@ -367,7 +449,29 @@
         </button>
       </div>
       <div id="drives" class="drive-list"></div>
-      <div id="file-list" class="file-list"></div>
+      <div class="file-tools">
+        <div id="import-modes" class="segmented">
+          <button id="import-mode-files" class="selected">文件导入</button
+          ><button id="import-mode-sequence">目录序列</button>
+        </div>
+        <input
+          id="file-filter"
+          placeholder="筛选当前目录"
+          aria-label="筛选当前目录"
+        /><span id="file-count" class="hint"></span>
+      </div>
+      <div id="selection-tools" class="file-selection">
+        <label><input id="file-select-all" type="checkbox" />全选当前文件</label
+        ><button id="clear-files" class="text-button">清除选择</button>
+      </div>
+      <div
+        id="file-list"
+        class="file-list"
+        role="listbox"
+        aria-label="本地文件列表"
+        aria-multiselectable="true"
+      ></div>
+      <pre id="import-report" class="import-report" hidden></pre>
       <div class="dialog-options">
         <label id="interval-label"
           >序列帧间隔（秒，可留空）<input
@@ -396,6 +500,15 @@
         </button>
       </div>
       <div id="job-detail"></div>
+    </dialog>
+    <dialog id="source-dialog">
+      <div class="dialog-heading">
+        <h2>来源与数据属性</h2>
+        <button id="source-close" class="icon-button" aria-label="关闭来源属性">
+          <span data-icon="close"></span>
+        </button>
+      </div>
+      <div id="source-detail"></div>
     </dialog>
   </body>
 </html>

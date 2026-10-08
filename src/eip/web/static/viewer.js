@@ -1,3 +1,5 @@
+import { createROI, moveROI, resizeROI, hitROI, handles } from "./geometry.js";
+
 export class Viewer {
   constructor(canvas, scene, callbacks) {
     this.canvas = canvas;
@@ -5,7 +7,7 @@ export class Viewer {
     this.callbacks = callbacks;
     this.snapshot = null;
     this.image = null;
-    new ResizeObserver(() => this.draw()).observe(canvas);
+    new ResizeObserver(() => callbacks.redraw()).observe(canvas);
     canvas.addEventListener(
       "wheel",
       (e) => {
@@ -25,7 +27,7 @@ export class Viewer {
       { passive: false },
     );
     canvas.addEventListener("pointerdown", (e) => {
-      if (!this.snapshot) return;
+      if (!this.snapshot || (e.button !== 0 && e.button !== 1)) return;
       canvas.setPointerCapture(e.pointerId);
       const point = this.point(e);
       this.drag = {
@@ -33,9 +35,19 @@ export class Viewer {
         native: this.native(point),
         x: scene.panX,
         y: scene.panY,
+        initialROI: structuredClone(scene.roi),
+        action:
+          scene.tool === "roi" && !e.altKey && e.button === 0
+            ? hitROI(scene.roi, this.native(point), 7 / this.scale()) ||
+              "create"
+            : "pan",
       };
-      if (scene.tool === "roi") {
-        this.draft = this.drag.native;
+      if (this.drag.action === "create") {
+        const n = this.drag.native;
+        if (n.x < 0 || n.y < 0 || n.x > scene.width || n.y > scene.height) {
+          this.drag = null;
+          return;
+        }
         scene.roi = null;
       }
     });
@@ -43,42 +55,71 @@ export class Viewer {
       const p = this.point(e),
         n = this.native(p);
       if (this.drag) {
-        if (scene.tool === "roi") {
-          const x1 = Math.max(
-              0,
-              Math.min(scene.width - 1, Math.floor(this.drag.native.x)),
-            ),
-            y1 = Math.max(
-              0,
-              Math.min(scene.height - 1, Math.floor(this.drag.native.y)),
-            );
-          const x2 = Math.max(0, Math.min(scene.width, Math.round(n.x))),
-            y2 = Math.max(0, Math.min(scene.height, Math.round(n.y)));
-          scene.roi = {
-            x: Math.min(x1, x2),
-            y: Math.min(y1, y2),
-            width: Math.abs(x2 - x1),
-            height: Math.abs(y2 - y1),
-          };
-        } else {
+        const drag = this.drag;
+        if (drag.action === "create")
+          scene.roi = createROI(drag.native, n, scene.width, scene.height);
+        else if (drag.action === "move")
+          scene.roi = moveROI(
+            drag.initialROI,
+            n.x - drag.native.x,
+            n.y - drag.native.y,
+            scene.width,
+            scene.height,
+          );
+        else if (drag.action !== "pan")
+          scene.roi = resizeROI(
+            drag.initialROI,
+            drag.action,
+            n.x - drag.native.x,
+            n.y - drag.native.y,
+            scene.width,
+            scene.height,
+          );
+        else {
           scene.panX = this.drag.x + p.x - this.drag.point.x;
           scene.panY = this.drag.y + p.y - this.drag.point.y;
         }
+        if (drag.action !== "pan") callbacks.roiPreview?.();
         callbacks.redraw();
-      } else if (this.snapshot)
+      } else if (this.snapshot) {
+        const hit =
+          scene.tool === "roi" ? hitROI(scene.roi, n, 7 / this.scale()) : null;
+        canvas.style.cursor =
+          scene.tool === "roi"
+            ? {
+                n: "ns-resize",
+                s: "ns-resize",
+                e: "ew-resize",
+                w: "ew-resize",
+                nw: "nwse-resize",
+                se: "nwse-resize",
+                ne: "nesw-resize",
+                sw: "nesw-resize",
+                move: "move",
+              }[hit] || "crosshair"
+            : "grab";
         callbacks.pixel(this.snapshot, Math.floor(n.x), Math.floor(n.y));
+      }
     });
     canvas.addEventListener("pointerup", () => {
-      if (this.drag && scene.tool === "roi") {
-        if (!scene.roi?.width || !scene.roi?.height) scene.roi = null;
+      if (this.drag && this.drag.action !== "pan") {
+        if (this.drag.action === "create" && !scene.roi)
+          scene.roi = this.drag.initialROI;
         callbacks.roi(scene.roi);
       }
       this.drag = null;
     });
     canvas.addEventListener("pointercancel", () => {
+      if (this.drag) {
+        scene.roi = this.drag.initialROI;
+        callbacks.roiPreview?.();
+        callbacks.redraw();
+      }
       this.drag = null;
     });
-    canvas.addEventListener("dblclick", () => callbacks.fit());
+    canvas.addEventListener("dblclick", () => {
+      if (scene.tool === "pan") callbacks.fit();
+    });
   }
   point(event) {
     const r = this.canvas.getBoundingClientRect();
@@ -86,11 +127,12 @@ export class Viewer {
   }
   scale() {
     const r = this.canvas.getBoundingClientRect();
-    return (
+    return Math.max(
+      0.001,
       Math.min(
         (r.width - 40) / this.scene.width,
         (r.height - 50) / this.scene.height,
-      ) * this.scene.zoom
+      ) * this.scene.zoom,
     );
   }
   native(p) {
@@ -145,6 +187,15 @@ export class Viewer {
       ctx.fillStyle = "#82e1c518";
       ctx.fillRect(q.x, q.y, q.width, q.height);
       ctx.strokeRect(q.x, q.y, q.width, q.height);
+      if (scene.tool === "roi") {
+        ctx.fillStyle = "#91ead1";
+        ctx.strokeStyle = "#163f32";
+        ctx.lineWidth = 1 / s;
+        for (const p of Object.values(handles(q))) {
+          ctx.fillRect(p.x - 3 / s, p.y - 3 / s, 6 / s, 6 / s);
+          ctx.strokeRect(p.x - 3 / s, p.y - 3 / s, 6 / s, 6 / s);
+        }
+      }
     }
   }
 }

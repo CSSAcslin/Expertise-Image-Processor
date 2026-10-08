@@ -18,8 +18,9 @@ import numpy as np
 from PIL import Image
 
 from eip.algorithms import BUILTINS, load_manifest, validate_parameters
+from eip.algorithms import sha256_file
 from eip.display import DisplaySettings, display_range, labels_to_display, to_display
-from eip.domain import SourceSpec, StepSpec, selection_from_dict
+from eip.domain import ROI, SourceSpec, StepSpec, selection_from_dict
 from eip.persistence import read_project, write_json
 from eip.preview_worker import preview_entry
 from eip.processing import job_entry, statistics
@@ -109,8 +110,8 @@ class FrameStore:
         image.save(buffer, format="PNG", compress_level=2)
         finite = pixels[np.isfinite(pixels)]
         samples = finite[::max(1, finite.size // 100000)]
-        histogram = np.histogram(samples, bins=64)[0].tolist() if samples.size else [0] * 64
-        return {"token": token, "image": "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode(), "shape": list(pixels.shape), "base_shape": list(record["base_shape"]), "origin": list(record["origin"]), "ref": record["ref"], "dtype": str(pixels.dtype), "kind": record["kind"], "display": asdict(display), "histogram": histogram, "statistics": statistics(pixels), "display_shape": [image.height, image.width], "downsampled": image.width != pixels.shape[1] or image.height != pixels.shape[0]}
+        counts, edges = np.histogram(samples, bins=64) if samples.size else (np.zeros(64, dtype=int), np.linspace(0, 1, 65))
+        return {"token": token, "image": "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode(), "shape": list(pixels.shape), "base_shape": list(record["base_shape"]), "origin": list(record["origin"]), "ref": record["ref"], "dtype": str(pixels.dtype), "kind": record["kind"], "display": asdict(display), "histogram": counts.tolist(), "histogram_range": [float(edges[0]), float(edges[-1])], "histogram_samples": int(samples.size), "statistics": statistics(pixels), "display_shape": [image.height, image.width], "downsampled": image.width != pixels.shape[1] or image.height != pixels.shape[0]}
 
     def pixel(self, token, x, y):
         record = self.get(token)
@@ -122,15 +123,23 @@ class FrameStore:
         value = array[y, x]
         def clean(item):
             item = item.item() if isinstance(item, np.generic) else item
+            if isinstance(item, int) and not isinstance(item, bool) and abs(item) > 2 ** 53 - 1:
+                return str(item)
             return str(item) if isinstance(item, float) and not math.isfinite(item) else item
         value = [clean(v) for v in value] if isinstance(value, np.ndarray) else clean(value)
         return {"x": x + record["origin"][0], "y": y + record["origin"][1], "value": value, "dtype": str(array.dtype)}
 
+    def region(self, token, x, y, width, height):
+        record = self.get(token)
+        roi = ROI(x - record["origin"][0], y - record["origin"][1], width, height)
+        roi.validate(record["pixels"].shape)
+        pixels = record["pixels"][roi.y:roi.y + height, roi.x:roi.x + width]
+        return {"roi": {"x": x, "y": y, "width": width, "height": height}, "dtype": str(pixels.dtype), "pixel_count": width * height, "statistics": statistics(pixels)}
+
 
 class Workbench:
-    def __init__(self, workspace: Path):
+    def __init__(self, workspace: Path, restored: dict | None = None):
         self.workspace = workspace.resolve()
-        self.preview = PreviewBroker()
         self.frames = FrameStore()
         self.lock = threading.RLock()
         self.sources = OrderedDict()
@@ -141,8 +150,29 @@ class Workbench:
         self.project_path = None
         self.context = multiprocessing.get_context("spawn")
         self.closed = threading.Event()
+        if restored:
+            self.restore_session(restored)
+        self.preview = PreviewBroker()
         self.monitor = threading.Thread(target=self._monitor, name="EIP-job-monitor", daemon=True)
         self.monitor.start()
+
+    def restore_session(self, value):
+        """Restore a local maintenance snapshot without restarting completed jobs."""
+        if value.get("schema_version") != 1 or Path(value["state"]["workspace"]).resolve() != self.workspace:
+            raise ValueError("会话快照不属于当前工作目录")
+        entries, jobs = value["state"]["sources"], value["jobs"]
+        if len(entries) > 64 or len(jobs) > 64:
+            raise ValueError("会话快照超出来源或任务记录上限")
+        if any(job["status"] not in {"succeeded", "failed", "cancelled", "completed_with_errors"} for job in jobs):
+            raise ValueError("请等待任务完成后再恢复会话")
+        if len({entry["id"] for entry in entries}) != len(entries):
+            raise ValueError("会话快照存在重复来源")
+        for spec in value["state"]["algorithms"]:
+            if spec.get("manifest"):
+                self.register(spec["manifest"])
+        self.sources = OrderedDict((entry["id"], entry) for entry in entries)
+        self.jobs = OrderedDict((job["id"], job) for job in reversed(jobs))
+        self.project_path = value["state"].get("project_path")
 
     def state(self):
         with self.lock:
@@ -164,12 +194,39 @@ class Workbench:
         token = self.frames.add(event["pixels"], event["frame"], extra.get("origin", [0, 0]), extra.get("base_shape", event["pixels"].shape[:2]), extra.get("result_kind", "image"))
         snapshot = self.frames.render(token)
         thumbnail = self.frames.render(token, maximum=160)["image"]
-        entry = {"id": source.key, "source": asdict(source), "meta": event["meta"], "role": role, "thumbnail": thumbnail, **extra}
+        identifier = extra.pop("identifier", f"result_{source.key}" if role == "result" else source.key)
+        entry = {"id": identifier, "source": asdict(source), "meta": event["meta"], "role": role, "thumbnail": thumbnail, **extra}
         with self.lock:
-            if source.key not in self.sources and len(self.sources) >= 64:
+            if identifier not in self.sources and len(self.sources) >= 64:
                 raise ValueError("当前工作区最多保留 64 个来源，请新建工作区")
-            self.sources[source.key] = entry
+            self.sources[identifier] = entry
         return {"source": entry, "frame": snapshot}
+
+    def promote(self, identifier):
+        entry = self.get_source(identifier)
+        if entry["role"] != "result":
+            raise ValueError("请选择正式保存的处理结果")
+        manifest = Path(entry["source"]["path"]).parent / "run.json"
+        run = json.loads(manifest.read_text(encoding="utf-8"))
+        item = next((item for item in run["results"] if item["output_directory"] == Path(entry["source"]["path"]).name), None)
+        if not item or item["status"] != "succeeded" or run["status"] not in {"succeeded", "completed_with_errors"}:
+            raise ValueError("未完成的输出不能作为下一阶段输入")
+        parent = self.sources.get(entry.get("input_id"))
+        # The run snapshot remains authoritative even when a source reference was removed.
+        previous = next((value.get("lineage", []) for value in run["spec"].get("provenance", []) if value["source_id"] == entry.get("input_id")), parent.get("lineage", []) if parent else [])
+        if len(previous) >= 32:
+            raise ValueError("当前来源链最多支持 32 个阶段")
+        lineage = [*previous, {"run_id": run["run_id"], "manifest": str(manifest), "manifest_sha256": sha256_file(manifest), "parent_source_id": entry.get("input_id"), "parent_source": item["source"], "crop_origin": item["origin"], "parent_shape": item["data_spec"]["shape"], "output_directory": entry["source"]["path"], "timestamp_source": "run_record"}]
+        return self.open(entry["source"], role="input", identifier=f"input_{SourceSpec(**entry['source']).key}", display_name=f"派生 · {entry.get('display_name', entry['meta']['name'])}", result_kind=entry.get("result_kind", "image"), lineage=lineage, parent_result_id=identifier)
+
+    def remove(self, identifier):
+        with self.lock:
+            self.get_source(identifier)
+            if any(identifier in job["source_ids"] and job["status"] in {"queued", "running", "cancelling"} for job in self.jobs.values()):
+                raise ValueError("该来源仍有待处理任务，请等待或取消任务")
+            if any(entry.get("input_id") == identifier or entry.get("parent_result_id") == identifier for entry in self.sources.values()):
+                raise ValueError("该来源仍关联处理结果，请先移除对应结果引用")
+            del self.sources[identifier]
 
     def get_source(self, identifier):
         with self.lock:
@@ -252,8 +309,9 @@ class Workbench:
                 selection.roi.validate(tuple(entry["meta"]["shape"]))
         self.validate_steps(value["steps"])
         identifier = uuid.uuid4().hex[:12]
-        payload = {"id": identifier, "mode": mode, "sources": [entry["source"] for entry in entries], "revisions": [entry["meta"]["revision"] for entry in entries], "steps": value["steps"], "selection": value["selection"], "output_dir": str(Path(value.get("output_dir") or self.workspace / "outputs").resolve()), "seed": 0, "config_revision": value.get("config_revision"), "display": value.get("display", {})}
+        payload = {"id": identifier, "mode": mode, "sources": [entry["source"] for entry in entries], "revisions": [entry["meta"]["revision"] for entry in entries], "steps": value["steps"], "selection": value["selection"], "output_dir": str(Path(value.get("output_dir") or self.workspace / "outputs").resolve()), "seed": 0, "config_revision": value.get("config_revision"), "display": value.get("result_display", value.get("display", {})), "provenance": [{"source_id": entry["id"], "lineage": entry.get("lineage", [])} for entry in entries]}
         payload = json.loads(json.dumps(payload, allow_nan=False))
+        payload["input_kinds"] = [entry.get("result_kind", "image") for entry in entries]
         with self.lock:
             if len(self.pending) >= 32:
                 raise ValueError("任务队列已满")
@@ -348,13 +406,13 @@ class Workbench:
             elif kind == "completed":
                 job.update(status=event["run"]["status"], run=event["run"], directory=event["directory"], result_available=False)
                 active["terminal"] = True
-                for item in event["run"]["results"]:
+                for position, item in enumerate(event["run"]["results"]):
                     if item["status"] != "succeeded":
                         continue
                     path = Path(event["directory"]) / item["output_directory"]
                     # Result readers retain CSV timestamp mappings.
                     try:
-                        self.open(asdict(SourceSpec(str(path), "sequence")), role="result", input_id=SourceSpec(**item["source"]).key, origin=item["origin"], base_shape=item["data_spec"]["shape"][:2], result_kind=item["result_kind"], run_id=job["id"])
+                        self.open(asdict(SourceSpec(str(path), "sequence")), role="result", input_id=job["source_ids"][position], origin=item["origin"], base_shape=item["data_spec"]["shape"][:2], result_kind=item["result_kind"], run_id=job["id"])
                     except Exception as error:
                         job["logs"].append(f"输出已保存，但自动预览失败：{error}")
 
@@ -362,7 +420,7 @@ class Workbench:
         path = Path(path or self.workspace).resolve()
         if not path.is_dir():
             raise ValueError("目录不存在或无访问权限")
-        extensions = IMAGE_EXTENSIONS | VIDEO_EXTENSIONS if mode == "data" else {".json"}
+        extensions = IMAGE_EXTENSIONS | VIDEO_EXTENSIONS if mode == "data" else set() if mode == "directory" else {".json"}
         entries = []
         for item in path.iterdir():
             try:
@@ -376,9 +434,18 @@ class Workbench:
         entries.sort(key=lambda item: (not item["directory"], item["name"].lower()))
         return {"path": str(path), "parent": str(path.parent), "entries": entries[:1000], "truncated": len(entries) > 1000, "drives": [f"{letter}:/" for letter in "CDEFGHIJKLMNOPQRSTUVWXYZ" if Path(f"{letter}:/").exists()]}
 
+    def inspect_path(self, path):
+        resolved = Path(path).expanduser().resolve()
+        if not resolved.exists():
+            raise ValueError("路径不存在，请检查文件或目录名称")
+        if not resolved.is_file() and not resolved.is_dir():
+            raise ValueError("路径不是可读取的文件或目录")
+        return {"path": str(resolved), "directory": resolved.is_dir(), "suffix": resolved.suffix.lower(), "size": resolved.stat().st_size if resolved.is_file() else None, "supported_data": resolved.is_dir() or resolved.suffix.lower() in IMAGE_EXTENSIONS | VIDEO_EXTENSIONS}
+
     def save_project(self, path, view):
         self.validate_steps(view.get("steps", []))
-        value = {**view, "schema_version": 1, "sources": [entry["source"] for entry in self.sources.values() if entry["role"] == "input"], "results": [{"source": entry["source"], "result": True, "input_key": entry.get("input_id"), "origin": entry.get("origin", [0, 0]), "base_shape": entry.get("base_shape"), "result_kind": entry.get("result_kind", "image")} for entry in self.sources.values() if entry["role"] == "result"]}
+        value = {**view, "schema_version": 1, "sources": [entry["source"] for entry in self.sources.values() if entry["role"] == "input"], "results": [{"source": entry["source"], "id": entry["id"], "run_id": entry.get("run_id"), "display_name": entry.get("display_name"), "result": True, "input_key": entry.get("input_id"), "origin": entry.get("origin", [0, 0]), "base_shape": entry.get("base_shape"), "result_kind": entry.get("result_kind", "image")} for entry in self.sources.values() if entry["role"] == "result"]}
+        value["source_entries"] = [{key: entry[key] for key in ["source", "id", "lineage", "parent_result_id", "display_name", "result_kind"] if key in entry} for entry in self.sources.values() if entry["role"] == "input"]
         target = Path(path).resolve()
         if target.suffix != ".json":
             raise ValueError("项目文件请使用 .json 后缀")
@@ -406,13 +473,23 @@ class Workbench:
         previous = self.sources.copy()
         self.sources.clear()
         try:
-            for source in value["sources"]:
-                self.open(source)
+            for position, source in enumerate(value["sources"]):
+                details = value.get("source_entries", [])
+                detail = details[position] if position < len(details) else {}
+                if detail and detail["source"] != source:
+                    raise ValueError("项目来源与来源详情顺序不一致")
+                extra = {key: detail[key] for key in ["lineage", "parent_result_id", "display_name", "result_kind"] if key in detail}
+                if detail.get("id"):
+                    extra["identifier"] = detail["id"]
+                self.open(source, **extra)
             for result in value.get("results", []):
                 if Path(result["source"]["path"]).exists():
                     original = self.sources.get(result.get("input_key"))
                     base_shape = result.get("base_shape") or (original["meta"]["shape"][:2] if original else None)
-                    self.open(result["source"], role="result", input_id=result.get("input_key"), origin=result.get("origin", [0, 0]), **({"base_shape": base_shape} if base_shape else {}), result_kind=result.get("result_kind", "image"))
+                    extra = {key: result[key] for key in ["run_id", "display_name"] if result.get(key)}
+                    if result.get("id"):
+                        extra["identifier"] = result["id"]
+                    self.open(result["source"], role="result", input_id=result.get("input_key"), origin=result.get("origin", [0, 0]), **({"base_shape": base_shape} if base_shape else {}), result_kind=result.get("result_kind", "image"), **extra)
         except Exception:
             self.sources = previous
             raise

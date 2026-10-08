@@ -28,6 +28,9 @@ def process_job(payload: dict, emit, cancelled):
     steps = [StepSpec(**value) for value in payload["steps"]]
     context = RunContext(cancelled, lambda text: emit({"type": "log", "message": text}), payload.get("seed", 0))
     pipeline = Pipeline(steps, context)
+    passthrough = not any(step.enabled for step in steps)
+    if passthrough:
+        pipeline.output_kind = payload.get("input_kinds", ["image"])[0]
     if payload["mode"] == "trial":
         reader = None
         try:
@@ -63,6 +66,8 @@ def process_job(payload: dict, emit, cancelled):
     try:
         for position, source_value in enumerate(payload["sources"]):
             context.check_cancelled()
+            if passthrough:
+                pipeline.output_kind = payload.get("input_kinds", ["image"] * len(payload["sources"]))[position]
             reader = None
             item = {"source": source_value, "status": "running", "completed_frames": 0, "output_directory": f"source_{position + 1:03d}", "artifacts": [], "origin": [selection.roi.x, selection.roi.y] if selection.roi else [0, 0]}
             run["results"].append(item)
