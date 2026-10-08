@@ -798,7 +798,7 @@ const statusText = {
   cancelled: "已取消",
   completed_with_errors: "部分失败",
 };
-async function pollJobs() {
+async function pollJobs(initial = false) {
   const list = await api("jobs");
   jobs = list;
   $("job-count").textContent = list.length;
@@ -833,6 +833,7 @@ async function pollJobs() {
       !fetchedJobs.has(j.id)
     ) {
       fetchedJobs.add(j.id);
+      if (initial) continue;
       const full = await api(`jobs/${j.id}`);
       if (j.mode === "trial" && full.result) {
         const expected = trialSignatures.get(j.id);
@@ -860,6 +861,10 @@ async function pollJobs() {
         );
       } else if (full.error) toast(full.error, true);
     }
+  }
+  if (initial) {
+    sources = (await api("state")).sources;
+    updateSources();
   }
 }
 async function jobDetail(id) {
@@ -1474,7 +1479,7 @@ async function bootstrap() {
   if (initial) await selectSource(initial.id);
   if (draft) restoreProjectOptions(draft);
   restoringDraft = false;
-  await pollJobs();
+  await pollJobs(true);
   let polling = false;
   setInterval(async () => {
     if (polling) return;

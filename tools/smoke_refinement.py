@@ -156,6 +156,11 @@ def main():
                 page.screenshot(path=str(output / "focused-preview-1024.png"))
                 page.locator("#focus-preview").click()
                 expect(page.locator("#run")).to_be_visible()
+                page.reload()
+                expect(page.locator("#job-count")).to_have_text("2")
+                page.wait_for_timeout(1100)
+                assert "试算已完成" not in page.locator("#toast").text_content()
+                assert "处理完成" not in page.locator("#toast").text_content()
                 assert not errors, errors
                 print(json.dumps({"status":"passed", "browser_errors":errors,"screenshots":str(output),"checks":["mixed import", "missing path", "sequence interval and EOF", "ROI move/resize/numeric/undo/statistics", "per-source ROI", "refresh draft and layout", "separate display", "promoted result", "lineage", "small viewport and focus"]},ensure_ascii=False))
                 browser.close()
