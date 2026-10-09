@@ -25,6 +25,8 @@ from eip.persistence import read_project, write_json
 from eip.preview_worker import preview_entry
 from eip.processing import job_entry, statistics
 from eip.readers import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
+from eip.modes.split_correlation.runner import split_job_entry
+from eip.web.split import SplitService
 
 
 class PreviewBroker:
@@ -104,6 +106,8 @@ class FrameStore:
         low, high = display_range(pixels) if display.low is None or display.high is None else (display.low, display.high)
         display = DisplaySettings(low, high, display.gamma, display.colormap)
         rgb = labels_to_display(pixels) if record["kind"] == "label" else to_display(pixels, display)
+        if record["kind"] == "coefficient" and pixels.ndim == 2:
+            rgb[~np.isfinite(pixels)] = [128,64,148]
         image = Image.fromarray(rgb)
         image.thumbnail((maximum, maximum), Image.Resampling.NEAREST)
         buffer = io.BytesIO()
@@ -153,6 +157,7 @@ class Workbench:
         if restored:
             self.restore_session(restored)
         self.preview = PreviewBroker()
+        self.split = SplitService(self)
         self.monitor = threading.Thread(target=self._monitor, name="EIP-job-monitor", daemon=True)
         self.monitor.start()
 
@@ -176,7 +181,7 @@ class Workbench:
 
     def state(self):
         with self.lock:
-            return {"workspace": str(self.workspace), "output_dir": str(self.workspace / "outputs"), "project_path": self.project_path, "sources": list(self.sources.values()), "algorithms": [asdict(spec) for spec in self.algorithms.values()]}
+            return {"workspace": str(self.workspace), "output_dir": str(self.workspace / "outputs"), "project_path": self.project_path, "sources": list(self.sources.values()), "algorithms": [asdict(spec) for spec in self.algorithms.values()], "modes": ["general","split_correlation"], "split_devices": self.split.devices}
 
     def open(self, value: dict, role="input", **extra):
         source = SourceSpec(**value)
@@ -321,6 +326,11 @@ class Workbench:
         payload = {"id": identifier, "mode": mode, "sources": [entry["source"] for entry in entries], "revisions": [entry["meta"]["revision"] for entry in entries], "steps": value["steps"], "selection": value["selection"], "output_dir": str(Path(value.get("output_dir") or self.workspace / "outputs").resolve()), "seed": 0, "config_revision": value.get("config_revision"), "display": value.get("result_display", value.get("display", {})), "provenance": [{"source_id": entry["id"], "lineage": entry.get("lineage", [])} for entry in entries]}
         payload = json.loads(json.dumps(payload, allow_nan=False))
         payload["input_kinds"] = [entry.get("result_kind", "image") for entry in entries]
+        job = {"id": identifier, "mode": mode, "name": entries[0]["meta"]["name"], "source_ids": identifiers, "source_count": len(entries), "status": "queued", "completed": 0, "total": None, "logs": [], "payload": payload, "base_shape": entries[0]["meta"]["shape"][:2], "created": time.time()}
+        self.enqueue(identifier,job)
+        return {"id": identifier}
+
+    def enqueue(self,identifier,job,*,queue_job=True):
         with self.lock:
             if len(self.pending) >= 32:
                 raise ValueError("任务队列已满")
@@ -329,9 +339,9 @@ class Workbench:
                 if oldest is None:
                     raise ValueError("任务记录已满")
                 self.jobs.pop(oldest)
-            self.jobs[identifier] = {"id": identifier, "mode": mode, "name": entries[0]["meta"]["name"], "source_ids": identifiers, "source_count": len(entries), "status": "queued", "completed": 0, "total": None, "logs": [], "payload": payload, "base_shape": entries[0]["meta"]["shape"][:2], "created": time.time()}
-            self.pending.append(identifier)
-        return {"id": identifier}
+            self.jobs[identifier] = job
+            if queue_job:
+                self.pending.append(identifier)
 
     def job_list(self):
         with self.lock:
@@ -360,7 +370,8 @@ class Workbench:
                     identifier = self.pending.popleft()
                     results = self.context.Queue(maxsize=64)
                     cancel = self.context.Event()
-                    process = self.context.Process(target=job_entry, args=(self.jobs[identifier]["payload"], results, cancel), name="EIP-web-compute")
+                    target = split_job_entry if self.jobs[identifier]["mode"] == "split" else job_entry
+                    process = self.context.Process(target=target, args=(self.jobs[identifier]["payload"], results, cancel), name="EIP-web-compute")
                     try:
                         process.start()
                     except Exception as error:
@@ -406,6 +417,9 @@ class Workbench:
                 job["logs"] = (job["logs"] + [event["message"]])[-100:]
             elif kind in {"cancelled", "failed"}:
                 job.update(status=kind, error=event.get("message"), directory=event.get("directory"))
+                active["terminal"] = True
+            elif kind == "split_completed":
+                job.update(status="succeeded",run=event["run"],directory=event["directory"],result_available=True)
                 active["terminal"] = True
             elif kind == "trial":
                 token = self.frames.add(event["pixels"], event["frame"], event["origin"], job["base_shape"], event["kind"])
@@ -453,7 +467,7 @@ class Workbench:
 
     def save_project(self, path, view):
         self.validate_steps(view.get("steps", []))
-        value = {**view, "schema_version": 1, "sources": [entry["source"] for entry in self.sources.values() if entry["role"] == "input"], "results": [{"source": entry["source"], "id": entry["id"], "run_id": entry.get("run_id"), "display_name": entry.get("display_name"), "result": True, "input_key": entry.get("input_id"), "origin": entry.get("origin", [0, 0]), "base_shape": entry.get("base_shape"), "result_kind": entry.get("result_kind", "image")} for entry in self.sources.values() if entry["role"] == "result"]}
+        value = {**view, "schema_version": 1, "sources": [entry["source"] for entry in self.sources.values() if entry["role"] == "input"], "results": [{"source": entry["source"], "id": entry["id"], "run_id": entry.get("run_id"), "display_name": entry.get("display_name"), "result": True, "input_key": entry.get("input_id"), "origin": entry.get("origin", [0, 0]), "base_shape": entry.get("base_shape"), "result_kind": entry.get("result_kind", "image")} for entry in self.sources.values() if entry["role"] == "result"], "split_result_paths": [str(Path(job["directory"])/"run.json") for job in self.jobs.values() if job["mode"]=="split" and job["status"]=="succeeded"]}
         value["source_entries"] = [{key: entry[key] for key in ["source", "id", "lineage", "parent_result_id", "display_name", "result_kind"] if key in entry} for entry in self.sources.values() if entry["role"] == "input"]
         target = Path(path).resolve()
         if target.suffix != ".json":
@@ -503,6 +517,9 @@ class Workbench:
             self.sources = previous
             raise
         self.project_path = str(Path(path).resolve())
+        for result_path in value.get("split_result_paths",[]):
+            if Path(result_path).is_file():
+                self.split.restore(result_path)
         return {"state": self.state(), "view": value}
 
     def close(self):

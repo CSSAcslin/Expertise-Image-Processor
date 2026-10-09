@@ -7,6 +7,7 @@
     <title>Expertise · 图像工作台</title>
     <link rel="icon" href="/static/logo.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/static/style.css" />
+    <link rel="stylesheet" href="/static/split.css" />
     <script type="module" src="/static/app.js"></script>
   </head>
   <body>
@@ -22,6 +23,7 @@
         ><span class="version" id="version"></span>
       </div>
       <div class="top-actions">
+        <label class="mode-selector">模式<select id="analysis-mode" aria-label="工作模式"><option value="general">通用图像处理</option><option value="split_correlation">分幅强度关联</option></select></label>
         <div class="layout-tools">
           <button id="toggle-library" class="quiet small" aria-pressed="false">
             来源</button
@@ -411,6 +413,68 @@
           </div>
         </div>
       </aside>
+      <section id="split-workspace" class="split-workspace" hidden aria-label="分幅强度关联工作台">
+        <div class="split-heading">
+          <div><span class="eyebrow">SPLIT INTENSITY CORRELATION</span><h1>分幅强度关联</h1><span id="split-source-name" class="hint">请选择灰度 CINE 或图像序列</span></div>
+          <nav class="split-stages" aria-label="关联步骤"><button data-split-stage="geometry" class="selected">1 分幅与配准</button><button data-split-stage="preprocess">2 预处理检查</button><button data-split-stage="trial">3 关联试算</button><button data-split-stage="result">4 结果</button></nav>
+        </div>
+        <div class="split-main">
+          <div class="split-view-toolbar">
+            <select id="split-view" aria-label="分幅预览内容"><option value="raw">原始双幅</option><option value="left">左幅参考</option><option value="right">对齐右幅</option><option value="overlay">配准叠加</option><option value="statistics" disabled>预处理检查图</option><option value="result" disabled>关联系数图</option><option value="curve" disabled>固定帧延迟曲线</option></select>
+            <select id="split-tool" aria-label="分幅画布工具"><option value="pan">平移 / 缩放</option><option value="midline">绘制 / 调整中线</option><option value="left">左幅有效区</option><option value="right">右幅有效区</option><option value="point">选点（Shift 加点）</option><option value="roi">分析 ROI</option></select>
+            <button id="split-fit" class="quiet small">适应窗口</button><span id="split-view-caption" class="hint">显示与计算数值分开</span>
+          </div>
+          <div class="split-canvas-pane"><canvas id="split-canvas" aria-label="分幅及关联图像"></canvas><div id="split-empty" class="split-empty">导入灰度序列，开始分幅与配准</div><div id="split-curve" class="split-curve" hidden aria-label="固定中心帧延迟曲线"></div></div>
+          <div id="split-pixel" class="pixel-bar mono">滚轮缩放 · 拖动有效区边角调整</div>
+          <div class="split-input-timeline"><button id="split-prev" class="quiet small" aria-label="分幅上一帧">‹</button><button id="split-play" class="quiet small">播放</button><button id="split-next" class="quiet small" aria-label="分幅下一帧">›</button><input id="split-scrubber" type="range" min="1" max="1" value="1" aria-label="分幅原始帧位置"/><label>中心帧<input id="split-center" type="number" min="1" value="1" step="1" aria-label="关联中心帧号"/></label><button id="split-seek" class="quiet small">定位</button></div>
+          <div id="split-window-note" class="split-window-note">统计窗口以左路中心帧为基准，正负延迟移动右路窗口。</div>
+          <div id="split-result-nav" class="split-result-nav" hidden>
+            <label>结果时间<input id="split-result-time" type="range" min="0" max="0" value="0" aria-label="关联结果时间"/></label><button id="split-result-play" class="quiet small">播放结果</button><label>τ<select id="split-result-lag" aria-label="关联结果延迟"></select></label><button id="split-show-map" class="quiet small">系数图</button><button id="split-show-curve" class="quiet small">延迟曲线</button>
+            <label>色标下限<input id="split-display-low" type="number" step="any" value="0.8"/></label><label>上限<input id="split-display-high" type="number" step="any" value="1.2"/></label><span class="hint">g²=1 基准 · 紫色为无效像素</span>
+          </div>
+        </div>
+        <aside class="split-parameters">
+          <div id="split-stale" class="split-stale" hidden>配置已变更，已有结果保留其原始参数。</div>
+          <section data-split-panel="geometry">
+            <h3>划分左右幅</h3><p class="hint small-copy">原图中绘制中线，然后分别调整有效区。黑边建议需要人工检查。</p>
+            <div class="two-fields"><label>中线顶部 X<input id="split-line-top" type="number" step="any"/></label><label>底部 X<input id="split-line-bottom" type="number" step="any"/></label></div>
+            <label class="split-field">黑边建议阈值<input id="split-black-threshold" type="number" value="0" step="any"/></label><button id="split-suggest" class="quiet">按中线建议分幅 / 裁黑边</button>
+            <h4 class="split-left-label">左幅有效区</h4><div class="split-rect-fields" data-split-rect="left"><label>X<input data-key="x" type="number" step="1" min="0"/></label><label>Y<input data-key="y" type="number" step="1" min="0"/></label><label>宽<input data-key="width" type="number" step="1" min="1"/></label><label>高<input data-key="height" type="number" step="1" min="1"/></label></div>
+            <h4 class="split-right-label">右幅有效区</h4><div class="split-rect-fields" data-split-rect="right"><label>X<input data-key="x" type="number" step="1" min="0"/></label><label>Y<input data-key="y" type="number" step="1" min="0"/></label><label>宽<input data-key="width" type="number" step="1" min="1"/></label><label>高<input data-key="height" type="number" step="1" min="1"/></label></div>
+            <h3>整段固定匹配</h3><div class="two-fields"><label>右路采样偏移 X<input id="split-dx" type="number" value="0" step="0.1"/></label><label>Y<input id="split-dy" type="number" value="0" step="0.1"/></label></div>
+            <div class="split-checks"><label><input id="split-mirror-x" type="checkbox"/>右路水平镜像</label><label><input id="split-mirror-y" type="checkbox"/>垂直镜像</label></div>
+            <label class="split-field">空间采样<select id="split-interpolation"><option value="nearest">最近邻（单传感器像素）</option><option value="bilinear">双线性亚像素插值</option></select></label>
+            <div class="split-buttons"><button id="split-calibrate" class="quiet">自动平移建议</button><button id="split-apply-proposal" class="quiet" disabled>应用建议</button></div><p id="split-quality" class="hint small-copy">通过结构叠加检查匹配，建议值需人工接受。</p>
+            <div class="split-buttons"><button id="split-preview" class="quiet">更新配准预览</button><button id="split-accept" class="primary">接受当前标定</button></div>
+          </section>
+          <section data-split-panel="preprocess" hidden>
+            <h3>强度数值与校准</h3><label class="split-field">输入含义<select id="split-semantics"><option value="sensor_codes">保存码值（线性关系待确认）</option><option value="linear_intensity">已确认的线性强度</option></select></label>
+            <label class="split-field">线性化 LUT 路径<input id="split-lut" placeholder="可选：一维 .npy / JSON"/></label><p class="hint small-copy">LUT 在传感器空间应用后再插值。CINE 显示伽马不会自动用于计算。</p>
+            <div class="two-fields"><label>左路暗场偏置<input id="split-black-left" type="number" value="0" step="any"/></label><label>右路暗场偏置<input id="split-black-right" type="number" value="0" step="any"/></label></div>
+            <label class="split-field">饱和 / 坏点码值阈值<input id="split-saturation" type="number" step="any" placeholder="留空：不排除"/></label>
+            <label class="split-field">固定尺度<select id="split-normalization"><option value="fixed_rms">各路全源时间涨落 RMS</option><option value="none">保留校准强度尺度</option></select></label><p class="hint small-copy">每路一个固定乘性尺度，标准 g² 中会约去；保留全源均值与正负涨落。</p>
+            <button id="split-statistics" class="primary">计算 / 复用全源统计</button><label class="split-field">检查图<select id="split-stat-view"><option value="mean_left">左幅全帧均值</option><option value="mean_right">右幅全帧均值</option><option value="variance_left">左幅时间方差</option><option value="variance_right">右幅时间方差</option><option value="fluctuation_left">当前左幅涨落</option><option value="fluctuation_right">当前右幅涨落</option></select></label><button id="split-check-stats" class="quiet">显示检查图</button><p id="split-stat-status" class="hint small-copy">统计范围为整个输入来源，分析区间不缩短背景范围。</p>
+          </section>
+          <section data-split-panel="trial" hidden>
+            <h3>窗口与双向延迟</h3><div class="two-fields"><label>平均窗口 W（奇数）<input id="split-window" type="number" min="3" step="2" value="101"/></label><label>输出时间步长 S<input id="split-stride" type="number" min="1" step="1" value="100"/></label></div>
+            <div class="split-lag-fields"><label>τ 下限（帧）<input id="split-lag-min" type="number" step="1" value="-10"/></label><label>上限<input id="split-lag-max" type="number" step="1" value="10"/></label><label>延迟步长<input id="split-lag-step" type="number" min="1" step="1" value="1"/></label></div><p class="hint small-copy">负：右路较早 · 正：右路较晚。时间来自实际帧记录。</p>
+            <details><summary>范围与稀疏延迟</summary><div class="two-fields"><label>分析起始帧<input id="split-range-start" type="number" min="1" step="1" value="1"/></label><label>终点帧（不含）<input id="split-range-end" type="number" min="2" step="1"/></label></div><label class="split-field">延迟列表（覆盖上述范围）<input id="split-lag-list" placeholder="例如：-100,-20,0,20,100"/></label></details>
+            <h3>固定中心：点 / ROI 曲线</h3><div class="two-fields"><label>点 X<input id="split-point-x" type="number" min="0" step="1"/></label><label>Y<input id="split-point-y" type="number" min="0" step="1"/></label></div><div class="split-buttons"><button id="split-set-point" class="quiet small">设置点</button><button id="split-clear-points" class="quiet small">清除点</button></div><div id="split-point-list" class="split-point-list"></div>
+            <p id="split-roi-status" class="hint small-copy">分析区域：全幅共同有效区</p><label class="split-field">ROI 曲线估计<select id="split-roi-estimator"><option value="pixel_mean">逐像素 g² 的空间平均</option><option value="intensity_sum">区域总强度的 g²</option></select></label><button id="split-clear-analysis-roi" class="text-button">清除分析 ROI</button>
+            <details><summary>精确分析 ROI 坐标</summary><div class="split-rect-fields"><label>X<input id="split-roi-x" type="number" min="0" step="1"/></label><label>Y<input id="split-roi-y" type="number" min="0" step="1"/></label><label>宽<input id="split-roi-width" type="number" min="1" step="1"/></label><label>高<input id="split-roi-height" type="number" min="1" step="1"/></label></div><button id="split-apply-roi" class="quiet small">应用分析 ROI</button></details>
+            <h3>数值与资源</h3><div class="two-fields"><label>最小均值（固定缩放后）<input id="split-min-mean" type="number" min="0" step="any" value="0.000000001"/></label><label>最少有效样本<input id="split-min-samples" type="number" min="1" step="1" value="2"/></label></div><label class="split-field">系数图保存精度<select id="split-output-dtype"><option value="float64">float64（保留微弱关联差值）</option><option value="float32">float32（较小文件）</option></select></label><div class="two-fields"><label>计算设备<select id="split-backend"><option value="cpu">CPU</option><option value="auto">Auto</option><option value="gpu" disabled>GPU（不可用）</option></select></label><label>工作内存预算 MiB<input id="split-memory" type="number" min="64" max="4096" step="64" value="256"/></label></div><p id="split-device-note" class="hint small-copy">CPU 保留完整计算功能。</p>
+            <button id="split-budget" class="quiet">检查整段范围与容量</button><div id="split-budget-info" class="split-budget-info">运行前显示有效中心、延迟数和输出空间。</div>
+          </section>
+          <section data-split-panel="result" hidden>
+            <h3>已保存结果</h3><select id="split-result-select" aria-label="分幅结果记录"><option value="">暂无结果</option></select><p id="split-result-summary" class="hint small-copy">选择已完成的系数图、曲线或统计记录。</p>
+            <label class="split-field">曲线横轴<select id="split-curve-axis"><option value="frame">有符号帧延迟</option><option value="time">实际时间延迟</option></select></label><p id="split-curve-readout" class="mono split-curve-readout">固定中心帧 · 多帧平均</p>
+            <div class="split-export-buttons"><button data-split-export="csv" class="quiet">曲线 CSV</button><button data-split-export="png" class="quiet">曲线 PNG</button><button data-split-export="svg" class="quiet">曲线 SVG</button><button data-split-export="curve_json" class="quiet">曲线与配置 JSON</button><button data-split-export="image" class="quiet">当前系数图 TIFF</button><button data-split-export="windows" class="quiet">窗口 / 时差 CSV</button><button data-split-export="manifest" class="quiet">运行记录 JSON</button></div>
+            <button id="split-promote" class="primary">当前 τ 序列作为下一阶段输入</button><p class="hint small-copy">保留窗口、配对帧、原始坐标映射和完整来源链。</p>
+            <label class="split-field">重开已有运行<input id="split-restore-path" placeholder="已完成结果的 run.json 路径"/></label><button id="split-restore" class="quiet">打开关联结果</button>
+          </section>
+        </aside>
+        <div class="split-run-bar"><span id="split-status" class="hint">先划分双幅并接受标定</span><div><button id="split-curve-run" class="quiet" disabled>固定帧曲线</button><button id="split-trial" class="quiet" disabled>当前窗口试算</button><button id="split-run" class="primary" disabled>运行时间序列</button></div></div>
+      </section>
       <section class="tasks">
         <div class="task-heading">
           <div>

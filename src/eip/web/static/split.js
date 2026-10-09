@@ -1,0 +1,574 @@
+import { api, downloadSplit } from "./api.js";
+import { Viewer } from "./viewer.js";
+
+const $ = (id) => document.getElementById(id);
+const esc = (value) => String(value ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+const clone = (v) => structuredClone(v);
+const label = {statistics:"全源统计",trial:"窗口试算",curve:"固定帧曲线",run:"时间序列关联"};
+const bytes = (n) => n >= 1024**3 ? `${(n/1024**3).toFixed(2)} GiB` : `${(n/1024**2).toFixed(2)} MiB`;
+const number = (n) => n == null ? "未知" : (Math.abs(n)>0 && (Math.abs(n)<.001||Math.abs(n)>1e5) ? Number(n).toExponential(3) : Number(n).toPrecision(5));
+const coefficient = n => n==null?"无效":Number(n).toPrecision(10);
+
+export class SplitController {
+  constructor(bridge) {
+    this.bridge=bridge;
+    this.records={};
+    this.sourceId=null;
+    this.mode="general";
+    this.jobs=[];
+    this.requested=new Map();
+    this.stage="geometry";
+    this.view="raw";
+    this.generation=0;
+    this.autoFit=true;
+    this.scene={width:640,height:480,zoom:1,panX:0,panY:0,tool:"pan",roi:null};
+    this.viewer=new Viewer($("split-canvas"),this.scene,{redraw:()=>this.draw(),fit:()=>this.fit(),roi:()=>this.commitROI(),roiPreview:()=>this.draw(),pixel:(frame,x,y)=>this.pixel(frame,x,y)});
+    this.bind();
+  }
+  wrap(fn) {
+    return async (...args)=>{try{await fn(...args);}catch(error){this.stop();this.bridge.report(error.message,true);$("split-status").textContent=error.message;}};
+  }
+  get context() {return this.bridge.context();}
+  get cfg() {return this.sourceId ? this.records[this.sourceId]?.config : null;}
+  get record() {return this.sourceId ? this.records[this.sourceId] : null;}
+  pixel(frame,x,y) {
+    clearTimeout(this.pixelTimer);
+    const key=`${frame.token}:${x}:${y}`;this.pixelKey=key;
+    $("split-pixel").textContent=`${this.view==="raw"?"传感器":"参考"}坐标 x ${x} · y ${y}`;
+    if(x<frame.origin[0]||y<frame.origin[1]||x>=frame.origin[0]+frame.shape[1]||y>=frame.origin[1]+frame.shape[0]) return;
+    this.pixelTimer=setTimeout(async()=>{
+      try {
+        const data=await api(`frames/${frame.token}/pixel?x=${x}&y=${y}`);
+        if(this.pixelKey!==key||this.viewer.snapshot?.token!==frame.token) return;
+        $("split-pixel").textContent+=` · ${this.view==="result"?"g²":"数值"} ${Array.isArray(data.value)?data.value.map(coefficient).join(", "):coefficient(data.value)}`;
+      }catch(error){if(this.pixelKey===key)$("split-pixel").textContent+=` · ${error.message}`;}
+    },100);
+  }
+  bind() {
+    document.querySelectorAll("[data-split-stage]").forEach(b=>b.onclick=this.wrap(()=>this.setStage(b.dataset.splitStage)));
+    $("split-view").onchange=this.wrap(()=>this.showView($("split-view").value));
+    $("split-tool").onchange=()=>this.setTool($("split-tool").value);
+    $("split-fit").onclick=()=>this.fit();
+    for(const id of ["split-prev","split-next"]) $(id).onclick=this.wrap(()=>this.seek(this.cfg.center+(id==="split-prev"?-1:1)));
+    $("split-seek").onclick=this.wrap(()=>this.seek(Number($("split-center").value)-1));
+    $("split-center").onchange=()=>{if(this.cfg){this.cfg.center=Number($("split-center").value)-1;this.changed();}};
+    $("split-scrubber").onchange=this.wrap(()=>this.seek(Number($("split-scrubber").value)-1));
+    $("split-play").onclick=this.wrap(()=>this.play(false));
+    $("split-result-play").onclick=this.wrap(()=>this.play(true));
+    $("split-suggest").onclick=this.wrap(()=>this.updateGeometry(true));
+    $("split-preview").onclick=this.wrap(()=>this.updateGeometry());
+    $("split-calibrate").onclick=this.wrap(()=>this.updateGeometry(false,true));
+    $("split-apply-proposal").onclick=this.wrap(async()=>{
+      if(!this.proposal) return;
+      this.cfg.geometry.dx=this.cfg.geometry.interpolation==="nearest"?Math.round(this.proposal.dx):this.proposal.dx;
+      this.cfg.geometry.dy=this.cfg.geometry.interpolation==="nearest"?Math.round(this.proposal.dy):this.proposal.dy;
+      this.fill();this.changed(true);await this.updateGeometry();await this.showView("overlay");
+    });
+    $("split-accept").onclick=this.wrap(async()=>{
+      await this.updateGeometry();
+      this.record.accepted=JSON.stringify(this.cfg.geometry);
+      this.record.calibrationIndex=this.snapshots.raw.ref.index;
+      this.changed();
+      await this.setStage("preprocess");
+      this.bridge.report("固定标定已接受；正式任务将复用该映射");
+    });
+    $("split-statistics").onclick=this.wrap(()=>this.submit("statistics"));
+    $("split-check-stats").onclick=this.wrap(()=>this.showStatistics());
+    $("split-stat-view").onchange=this.wrap(()=>this.record?.statisticsJob?this.showStatistics():null);
+    $("split-budget").onclick=this.wrap(()=>this.budget("run"));
+    $("split-trial").onclick=this.wrap(()=>this.submit("trial"));
+    $("split-run").onclick=this.wrap(()=>this.submit("run"));
+    $("split-curve-run").onclick=this.wrap(()=>this.submit("curve"));
+    $("split-set-point").onclick=()=>{
+      if(!this.cfg) return;
+      this.cfg.points=[[Number($("split-point-x").value),Number($("split-point-y").value)]];
+      this.record.pointsAuto=false;this.changed();this.draw();
+    };
+    $("split-clear-points").onclick=()=>{if(this.cfg){this.cfg.points=[];this.record.pointsAuto=false;this.changed();this.draw();}};
+    $("split-clear-analysis-roi").onclick=()=>{if(this.cfg){this.cfg.roi=null;this.scene.roi=null;this.changed();this.draw();}};
+    $("split-apply-roi").onclick=this.wrap(()=>{
+      if(!this.cfg||!this.snapshots) throw Error("请先完成分幅预览");
+      const q=Object.fromEntries(["x","y","width","height"].map(key=>[key,Number($("split-roi-"+key).value)]));
+      const [h,w]=this.snapshots.mapping.shape;
+      if(Object.values(q).some(v=>!Number.isInteger(v))||q.x<0||q.y<0||q.width<1||q.height<1||q.x+q.width>w||q.y+q.height>h) throw Error(`ROI 需为 ${w}×${h} 参考幅面内的整数矩形`);
+      this.cfg.roi=q;if(this.record.pointsAuto)this.cfg.points=[];
+      this.scene.roi=$("split-tool").value==="roi"?clone(q):null;
+      this.changed();this.draw();
+    });
+    $("split-result-select").onchange=this.wrap(()=>this.loadResult($("split-result-select").value));
+    $("split-result-time").onchange=this.wrap(()=>{this.timeIndex=Number($("split-result-time").value);return this.showSlice();});
+    $("split-result-lag").onchange=this.wrap(()=>{this.lagIndex=Number($("split-result-lag").value);return this.resultData?.run.array_shape?this.showSlice():this.showCurve();});
+    $("split-show-map").onclick=this.wrap(()=>this.showSlice());
+    $("split-show-curve").onclick=()=>this.showCurve();
+    $("split-curve-axis").onchange=()=>this.showCurve();
+    for(const id of ["split-display-low","split-display-high"]) $(id).onchange=this.wrap(()=>this.resultData?.run.array_shape?this.showSlice():null);
+    document.querySelectorAll("[data-split-export]").forEach(b=>b.onclick=this.wrap(async()=>{
+      if(!this.resultId) throw Error("请选择完成的关联结果");
+      await downloadSplit(this.resultId,b.dataset.splitExport,this.timeIndex||0,this.lagIndex||0);
+    }));
+    $("split-promote").onclick=this.wrap(async()=>{
+      if(!this.resultId) throw Error("请选择系数图结果");
+      const opened=await api(`split/jobs/${this.resultId}/promote`,{lag_index:this.lagIndex||0});
+      await this.bridge.promote(opened);
+      this.bridge.report("选定延迟序列已作为下一阶段输入，来源与窗口记录保留");
+    });
+    $("split-restore").onclick=this.wrap(async()=>{
+      const response=await api("split/restore",{path:$("split-restore-path").value.trim()});
+      await this.bridge.poll();await this.loadResult(response.id);
+    });
+    const excluded=new Set(["split-center","split-point-x","split-point-y","split-black-threshold","split-result-time","split-display-low","split-display-high","split-roi-x","split-roi-y","split-roi-width","split-roi-height"]);
+    document.querySelectorAll(".split-parameters input,.split-parameters select").forEach(el=>{
+      if(excluded.has(el.id)||["split-result-select","split-stat-view","split-restore-path","split-curve-axis"].includes(el.id)) return;
+      el.addEventListener("change",()=>{if(this.cfg){this.readFields();this.changed(el.closest('[data-split-panel="geometry"]')!=null);}});
+    });
+    const canvas=$("split-canvas");
+    canvas.addEventListener("wheel",()=>{this.autoFit=false;},{capture:true,passive:true});
+    canvas.addEventListener("pointerdown",()=>{this.autoFit=false;},true);
+    canvas.addEventListener("pointerdown",e=>{
+      if(!this.cfg||!this.viewer.snapshot||e.button!==0) return;
+      const tool=$("split-tool").value;
+      if(tool!=="point"&&tool!=="midline") return;
+      e.stopImmediatePropagation();canvas.setPointerCapture(e.pointerId);
+      const p=this.viewer.native(this.viewer.point(e));
+      if(tool==="point") {
+        if(this.view==="raw") {this.bridge.report("请先切到左幅参考或系数图，再选点",true);return;}
+        const point=[Math.floor(p.x),Math.floor(p.y)];
+        if(point.some((v,i)=>v<0||v>=(i===0?this.scene.width:this.scene.height))) return;
+        this.cfg.points=e.shiftKey?[...this.cfg.points,point].slice(0,32):[point];
+        this.record.pointsAuto=false;this.fillPoints();this.changed();this.draw();
+      } else if(this.view==="raw") {
+        const line=this.cfg.geometry.midline,h=this.scene.height;
+        const ends=[{x:line[0],y:0},{x:line[1],y:h-1}];
+        const near=ends.findIndex(v=>Math.hypot(v.x-p.x,v.y-p.y)<12/this.viewer.scale());
+        this.lineDrag={start:p,end:near,old:[...line]};
+      }
+    },true);
+    canvas.addEventListener("pointermove",e=>{
+      if(!this.lineDrag||!this.cfg) return;
+      e.stopImmediatePropagation();
+      const p=this.viewer.native(this.viewer.point(e)),d=this.lineDrag,w=this.scene.width,h=this.scene.height;
+      const clamp=x=>Math.max(1,Math.min(w-1,x));
+      if(d.end>=0) this.cfg.geometry.midline[d.end]=clamp(p.x);
+      else if(Math.abs(p.y-d.start.y)>2) {
+        const slope=(p.x-d.start.x)/(p.y-d.start.y);
+        this.cfg.geometry.midline=[clamp(d.start.x-slope*d.start.y),clamp(d.start.x+slope*(h-1-d.start.y))];
+      }
+      $("split-line-top").value=this.cfg.geometry.midline[0].toFixed(2);
+      $("split-line-bottom").value=this.cfg.geometry.midline[1].toFixed(2);
+      this.changed(true);this.draw();
+    },true);
+    canvas.addEventListener("pointerup",e=>{if(this.lineDrag){e.stopImmediatePropagation();this.lineDrag=null;this.changed(true);}},true);
+    canvas.addEventListener("pointercancel",()=>{if(this.lineDrag){this.cfg.geometry.midline=this.lineDrag.old;this.lineDrag=null;this.fill();this.draw();}});
+  }
+  defaults(source,input) {
+    const n=source.meta.frame_count||1,lag=Math.min(10,Math.max(0,Math.floor((n-3)/4)));
+    let window=Math.min(101,n-2*lag);if(window%2===0) window--;window=Math.max(3,window);
+    const center=Math.max(0,Math.min(n-1,Math.max(Math.floor(window/2)+lag,Math.min(n-1-Math.floor(window/2)-lag,input?.ref.index||0))));
+    return {geometry:null,photometry:{lut_path:null,black_left:0,black_right:0,saturation_code:null,normalization:"fixed_rms",input_semantics:"sensor_codes"},window,stride:100,lag_min:-lag,lag_max:lag,lag_step:1,lag_list:null,start:0,end:n,center,roi:null,points:[],roi_estimator:"pixel_mean",min_mean:1e-9,min_samples:2,memory_mb:256,backend:"cpu",output_dtype:"float64"};
+  }
+  async contextChanged() {
+    const {source,input}=this.context;
+    if(!source||source.role!=="input") return;
+    if(this.sourceId===source.id) return;
+    this.stop();this.generation++;
+    this.sourceId=source.id;
+    if(!this.records[source.id]||this.records[source.id].revision!==source.meta.revision) this.records[source.id]={config:this.defaults(source,input),revision:source.meta.revision,accepted:null,pointsAuto:true,stage:"geometry"};
+    this.snapshots=null;this.proposal=null;
+    this.resultData=null;this.resultId=this.record.resultId||null;
+    this.stage=this.record.stage||"geometry";
+    this.view="raw";this.scene.roi=null;this.fit();
+    this.fill();this.updateJobs(this.jobs);
+    if(this.mode==="split_correlation") {
+      await this.ensureGeometry();await this.setStage(this.stage);
+    }
+  }
+  async setMode(mode) {
+    this.mode=mode;this.stop();
+    $("split-workspace").hidden=mode!=="split_correlation";
+    document.querySelector(".workspace").dataset.analysis=mode;
+    if(mode==="split_correlation") {
+      await this.contextChanged();
+      if(this.cfg) {await this.ensureGeometry();await this.setStage(this.record.stage||"geometry");}
+      else this.updateStatus();
+    }
+  }
+  serialize() {return {records:clone(this.records),resultId:this.resultId||null};}
+  restore(value) {
+    if(value?.records&&typeof value.records==="object") {
+      const fingerprint=JSON.stringify(value);
+      if(this.restoredFingerprint===fingerprint) return;
+      this.restoredFingerprint=fingerprint;
+      this.records=clone(value.records);this.sourceId=null;
+      this.resultId=value.resultId||null;
+    }
+  }
+  signature() {return JSON.stringify({source:this.sourceId,config:this.cfg});}
+  accepted() {return !!this.cfg?.geometry&&this.record.accepted===JSON.stringify(this.cfg.geometry);}
+  changed(geometry=false) {
+    if(geometry&&this.record) {this.record.accepted=null;this.record.calibrationIndex=null;}
+    this.fillPoints();this.updateStatus();this.windowNote();this.bridge.changed();
+  }
+  updateStatus() {
+    const source=this.context.source;
+    $("split-source-name").textContent=source?.display_name||source?.meta.name||"请选择灰度 CINE 或图像序列";
+    const valid=this.accepted()&&source?.meta.shape.length===2&&source.meta.frame_count>=3;
+    for(const id of ["split-trial","split-run","split-curve-run","split-statistics"]) $(id).disabled=!valid;
+    $("split-status").textContent=valid?`${this.cfg.photometry.input_semantics==="sensor_codes"&&!this.cfg.photometry.lut_path?"码值关联 · ":""}固定标定已接受 · 全源统计自动复用`:"先划分左右有效区并接受标定；关联需至少 3 帧";
+    let stale=false;
+    if(this.resultData&&this.cfg) {
+      const saved=clone(this.resultData.run.config),current=clone(this.cfg);
+      if(this.resultData.run.task==="run") {delete saved.center;delete current.center;delete saved.points;delete current.points;delete saved.roi_estimator;delete current.roi_estimator;}
+      if(this.resultData.run.task==="statistics") {
+        stale=JSON.stringify([saved.geometry,saved.photometry])!==JSON.stringify([current.geometry,current.photometry]);
+      } else stale=JSON.stringify(saved)!==JSON.stringify(current);
+      stale ||= this.resultData.run.provenance?.source_id!==this.sourceId;
+    }
+    $("split-stale").hidden=!stale;
+    for(const [view,enabled] of [["result",!!this.resultData?.run.array_shape],["curve",!!this.resultData?.curve_result],["statistics",!!this.record?.statisticsJob]])$("split-view").querySelector(`option[value="${view}"]`).disabled=!enabled;
+    const devices=this.context.devices;
+    const gpu=$("split-backend").querySelector('option[value="gpu"]');
+    gpu.disabled=!devices?.gpu;gpu.textContent=devices?.gpu?`GPU · ${devices.gpu_name}`:"GPU（不可用）";
+    $("split-device-note").textContent=devices?.gpu?`可用设备：${devices.gpu_name}；GPU 使用与 CPU 相同的统计定义。`:"CPU 完整可用；未检测到可用 CuPy / CUDA 环境。";
+  }
+  fill() {
+    if(!this.cfg) {this.updateStatus();return;}
+    const c=this.cfg,g=c.geometry,p=c.photometry,n=this.context.source.meta.frame_count||1;
+    $("split-center").value=c.center+1;$("split-center").max=n;
+    $("split-scrubber").max=n;$("split-scrubber").value=c.center+1;
+    if(g) {
+      $("split-line-top").value=g.midline[0];$("split-line-bottom").value=g.midline[1];
+      $("split-dx").value=g.dx;$("split-dy").value=g.dy;
+      $("split-mirror-x").checked=g.mirror_x;$("split-mirror-y").checked=g.mirror_y;$("split-interpolation").value=g.interpolation;
+      for(const role of ["left","right"]) document.querySelectorAll(`[data-split-rect="${role}"] input`).forEach(el=>el.value=g[role][el.dataset.key]);
+    }
+    for(const [id,key] of [["split-window","window"],["split-stride","stride"],["split-lag-min","lag_min"],["split-lag-max","lag_max"],["split-lag-step","lag_step"],["split-min-mean","min_mean"],["split-min-samples","min_samples"],["split-memory","memory_mb"],["split-backend","backend"],["split-roi-estimator","roi_estimator"]]) $(id).value=c[key];
+    $("split-range-start").value=c.start+1;$("split-range-end").value=(c.end??n)+1;$("split-lag-list").value=c.lag_list?.join(",")||"";
+    $("split-output-dtype").value=c.output_dtype||"float32";
+    $("split-semantics").value=p.input_semantics||"sensor_codes";$("split-lut").value=p.lut_path||"";
+    $("split-black-left").value=p.black_left;$("split-black-right").value=p.black_right;
+    $("split-saturation").value=p.saturation_code??"";$("split-normalization").value=p.normalization;
+    this.fillPoints();this.updateStatus();this.windowNote();
+  }
+  fillPoints() {
+    if(!this.cfg) return;
+    const p=this.cfg.points[0];
+    if(p) {$("split-point-x").value=p[0];$("split-point-y").value=p[1];}
+    $("split-point-list").innerHTML=this.cfg.points.map((p,i)=>`<span>点 ${i+1} (${p[0]}, ${p[1]})</span>`).join("");
+    const q=this.cfg.roi;
+    $("split-roi-status").textContent=q?`分析 ROI：(${q.x}, ${q.y}) · ${q.width} × ${q.height}`:"分析区域：全幅共同有效区";
+    for(const key of ["x","y","width","height"]) $("split-roi-"+key).value=q?.[key]??"";
+  }
+  readFields() {
+    if(!this.cfg) return;
+    const c=this.cfg,g=c.geometry,p=c.photometry;
+    if(g) {
+      g.midline=[Number($("split-line-top").value),Number($("split-line-bottom").value)];
+      g.dx=Number($("split-dx").value);g.dy=Number($("split-dy").value);
+      g.mirror_x=$("split-mirror-x").checked;g.mirror_y=$("split-mirror-y").checked;g.interpolation=$("split-interpolation").value;
+      for(const role of ["left","right"]) document.querySelectorAll(`[data-split-rect="${role}"] input`).forEach(el=>g[role][el.dataset.key]=Number(el.value));
+    }
+    for(const [id,key] of [["split-window","window"],["split-stride","stride"],["split-lag-min","lag_min"],["split-lag-max","lag_max"],["split-lag-step","lag_step"],["split-min-mean","min_mean"],["split-min-samples","min_samples"],["split-memory","memory_mb"]]) c[key]=Number($(id).value);
+    c.backend=$("split-backend").value;c.roi_estimator=$("split-roi-estimator").value;
+    c.output_dtype=$("split-output-dtype").value;
+    c.start=Number($("split-range-start").value)-1;c.end=Number($("split-range-end").value)-1;c.center=Number($("split-center").value)-1;
+    const text=$("split-lag-list").value.trim();c.lag_list=text?text.split(/[,，;\s]+/).map(Number):null;
+    p.input_semantics=$("split-semantics").value;p.lut_path=$("split-lut").value.trim()||null;
+    p.black_left=Number($("split-black-left").value);p.black_right=Number($("split-black-right").value);
+    p.saturation_code=$("split-saturation").value===""?null:Number($("split-saturation").value);p.normalization=$("split-normalization").value;
+  }
+  windowNote() {
+    if(!this.cfg) return;
+    const c=this.cfg,h=Math.floor(c.window/2),lo=c.lag_list?Math.min(...c.lag_list):c.lag_min,hi=c.lag_list?Math.max(...c.lag_list):c.lag_max;
+    const first=c.start+h+Math.max(0,-lo),last=(c.end??this.context.source.meta.frame_count)-1-h-Math.max(0,hi);
+    $("split-window-note").textContent=`左路窗口：帧 ${c.center-h+1}～${c.center+h+1} · 右路覆盖：${c.center-h+lo+1}～${c.center+h+hi+1} · 公共有效中心：${first+1}～${last+1}`;
+  }
+  async ensureGeometry() {
+    if(!this.cfg||this.snapshots) return;
+    await this.updateGeometry(!this.cfg.geometry);
+  }
+  async updateGeometry(suggest=false,calibrate=false) {
+    if(!this.cfg) throw Error("请先导入并选择灰度序列");
+    this.readFields();
+    const generation=++this.generation;
+    const g=this.cfg.geometry;
+    const response=await api("split/geometry",{source_id:this.sourceId,index:Math.max(0,Math.min(this.context.source.meta.frame_count-1,this.cfg.center)),...(suggest?{midline:g?.midline||[this.context.source.meta.shape[1]/2,this.context.source.meta.shape[1]/2],threshold:Number($("split-black-threshold").value)}:{geometry:g}),photometry:this.cfg.photometry,calibrate});
+    if(generation!==this.generation) return;
+    const changed=JSON.stringify(this.cfg.geometry)!==JSON.stringify(response.geometry);
+    this.cfg.geometry=response.geometry;
+    if(changed) {this.record.accepted=null;this.cfg.roi=null;this.cfg.points=[];this.record.pointsAuto=true;}
+    this.snapshots=response;
+    if(this.record.pointsAuto&&!this.cfg.points.length) this.cfg.points=[[Math.floor(response.mapping.shape[1]/2),Math.floor(response.mapping.shape[0]/2)]];
+    if(response.proposal) {
+      this.proposal=response.proposal;
+      $("split-apply-proposal").disabled=false;
+      $("split-quality").textContent=`建议偏移 X ${number(this.proposal.dx)}，Y ${number(this.proposal.dy)} · 峰值/RMS ${number(this.proposal.peak_to_rms)}。应用后检查叠加，再接受标定。`;
+    }
+    this.fill();this.changed();
+    if(!["result","curve"].includes(this.view)) await this.showView(this.view);
+    return response;
+  }
+  async setStage(stage) {
+    if(!["geometry","preprocess","trial","result"].includes(stage)) return;
+    this.stage=stage;if(this.record) this.record.stage=stage;
+    $("split-tool").value="pan";this.scene.tool="pan";this.scene.roi=null;
+    document.querySelectorAll("[data-split-panel]").forEach(el=>el.hidden=el.dataset.splitPanel!==stage);
+    document.querySelectorAll("[data-split-stage]").forEach(b=>b.classList.toggle("selected",b.dataset.splitStage===stage));
+    $("split-stride").closest("label").hidden=stage==="result"&&this.resultData?.run.task==="curve";
+    this.changed();
+    if(stage==="geometry"&&this.snapshots) await this.showView("raw");
+    if(this.snapshots&&(stage==="trial"||(stage==="preprocess"&&!this.resultData))) await this.showView("left");
+    if(stage==="result"&&this.resultId) {
+      if(!this.resultData) await this.loadResult(this.resultId,false);
+      else if(this.resultData.curve_result)this.showCurve();
+      else if(this.resultData.run.array_shape)await this.showSlice();
+      else await this.showStatistics();
+    }
+  }
+  async showView(view) {
+    if(view==="result") return this.showSlice();
+    if(view==="curve") return this.showCurve();
+    if(view==="statistics") return this.showStatistics();
+    if(!this.snapshots?.[view]) return;
+    this.view=view;$("split-view").value=view;$("split-curve").hidden=true;$("split-empty").hidden=true;
+    const snapshot=this.snapshots[view];
+    this.scene.width=snapshot.base_shape[1];this.scene.height=snapshot.base_shape[0];
+    this.scene.roi=null;this.autoFit=true;this.scene.zoom=1;this.scene.panX=this.scene.panY=0;
+    await this.viewer.set(snapshot);this.setTool($("split-tool").value);this.draw();
+    $("split-view-caption").textContent=`${snapshot.shape[1]} × ${snapshot.shape[0]} · ${view==="raw"?"传感器坐标":"左幅参考坐标"}`;
+  }
+  setTool(tool) {
+    if(!this.cfg?.geometry) return;
+    this.scene.tool=["left","right","roi"].includes(tool)?"roi":"pan";
+    if(["left","right"].includes(tool)) {
+      if(this.view!=="raw") {this.showView("raw").catch(e=>this.bridge.report(e.message,true));return;}
+      this.scene.roi=clone(this.cfg.geometry[tool]);
+    } else if(tool==="roi") {
+      if(["raw","curve","statistics"].includes(this.view)) {this.showView("left").catch(e=>this.bridge.report(e.message,true));return;}
+      this.scene.roi=clone(this.cfg.roi);
+    } else {
+      this.scene.roi=null;
+      if(tool==="midline"&&this.view!=="raw") {this.showView("raw").catch(e=>this.bridge.report(e.message,true));return;}
+      if(tool==="point"&&["raw","curve","statistics"].includes(this.view)) {this.showView("left").catch(e=>this.bridge.report(e.message,true));return;}
+    }
+    this.draw();
+  }
+  commitROI() {
+    if(!this.cfg||!this.scene.roi) return;
+    const role=$("split-tool").value;
+    if(["left","right"].includes(role)) {this.cfg.geometry[role]=clone(this.scene.roi);this.fill();this.changed(true);}
+    else if(role==="roi") {
+      this.cfg.roi=clone(this.scene.roi);
+      if(this.record.pointsAuto) this.cfg.points=[];
+      this.fillPoints();this.changed();
+    }
+  }
+  draw() {
+    if(this.autoFit)this.fitTransform();
+    this.viewer.draw();
+    if(!this.viewer.snapshot||!this.cfg?.geometry) return;
+    const ctx=$("split-canvas").getContext("2d"),s=this.viewer.scale();
+    ctx.lineWidth=1.5/s;ctx.font=`${11/s}px Segoe UI`;
+    if(this.view==="raw") {
+      for(const [role,color] of [["left","#f1a3a0"],["right","#8bddbd"]]) {
+        const q=this.cfg.geometry[role];ctx.strokeStyle=color;ctx.fillStyle=color;
+        ctx.strokeRect(q.x,q.y,q.width,q.height);ctx.fillText(role==="left"?"L":"R",q.x+4/s,q.y+14/s);
+      }
+      const line=this.cfg.geometry.midline;ctx.strokeStyle="#d9c483";ctx.fillStyle="#d9c483";ctx.setLineDash([5/s,4/s]);
+      ctx.beginPath();ctx.moveTo(line[0],0);ctx.lineTo(line[1],this.scene.height-1);ctx.stroke();ctx.setLineDash([]);
+      for(const [x,y] of [[line[0],0],[line[1],this.scene.height-1]]) ctx.fillRect(x-4/s,y-4/s,8/s,8/s);
+    } else if(this.view!=="curve") {
+      ctx.strokeStyle="#9edfe9";ctx.fillStyle="#9edfe9";
+      for(const [i,[x,y]] of this.cfg.points.entries()) {ctx.beginPath();ctx.moveTo(x-4/s,y+.5);ctx.lineTo(x+4/s,y+.5);ctx.moveTo(x+.5,y-4/s);ctx.lineTo(x+.5,y+4/s);ctx.stroke();ctx.fillText(String(i+1),x+5/s,y-5/s);}
+    }
+  }
+  fitTransform() {
+    this.scene.zoom=1;this.scene.panX=this.scene.panY=0;
+    if(this.view==="result"&&this.viewer.snapshot) {
+      const frame=this.viewer.snapshot,r=$("split-canvas").getBoundingClientRect();
+      const target=Math.min((r.width-40)/frame.shape[1],(r.height-50)/frame.shape[0]);
+      this.scene.zoom=Math.min(30,target/this.viewer.scale());
+      const scale=this.viewer.scale(),[x,y]=frame.origin;
+      this.scene.panX=(this.scene.width/2-x-frame.shape[1]/2)*scale;
+      this.scene.panY=(this.scene.height/2-y-frame.shape[0]/2)*scale;
+    }
+  }
+  fit() {this.autoFit=true;this.draw();}
+  async seek(index) {
+    if(!this.cfg) return;
+    if(!Number.isInteger(index)||index<0||index>=this.context.source.meta.frame_count) throw Error("帧号超出来源范围");
+    this.cfg.center=index;$("split-center").value=index+1;$("split-scrubber").value=index+1;
+    await this.updateGeometry();this.windowNote();this.changed();
+  }
+  stop() {clearTimeout(this.playTimer);this.playing=null;$("split-play").textContent="播放";$("split-result-play").textContent="播放结果";}
+  async play(result) {
+    if(this.playing) {this.stop();return;}
+    if(result&&!this.resultData?.run.array_shape) throw Error("请选择时间序列系数图");
+    this.playing=result?"result":"input";
+    const button=$(result?"split-result-play":"split-play");button.textContent="暂停";
+    const mode=this.playing;
+    const next=async()=>{
+      if(this.playing!==mode) return;
+      try {
+        if(result) {if((this.timeIndex||0)+1>=this.resultData.run.array_shape[0]){this.stop();return;}this.timeIndex=(this.timeIndex||0)+1;$("split-result-time").value=this.timeIndex;await this.showSlice();}
+        else {if(this.cfg.center+1>=this.context.source.meta.frame_count){this.stop();return;}await this.seek(this.cfg.center+1);}
+      } catch(e){this.stop();this.bridge.report(e.message,true);return;}
+      if(this.playing===mode) this.playTimer=setTimeout(next,90);
+    };
+    await next();
+  }
+  async budget(task) {
+    this.readFields();
+    const estimate=await api("split/preflight",{source_id:this.sourceId,config:this.cfg,task});
+    $("split-budget-info").textContent=`公共中心帧 ${estimate.first_center+1}～${estimate.last_center+1}\n${estimate.window_count} 个窗口 × ${estimate.lags.length} 个延迟\n输出系数与计数：${bytes(estimate.output_bytes)}\n工作数组估算：${bytes(estimate.working_array_bytes)}\n完整背景：${estimate.full_source_frames.toLocaleString()} 帧（缓存可复用）`;
+    return estimate;
+  }
+  async submit(task) {
+    if(!this.accepted()) throw Error("请先检查分幅与配准，并接受当前固定标定");
+    this.readFields();
+    if(!this.accepted()) throw Error("标定参数已变更，请更新预览并重新接受");
+    if(task!=="statistics") await this.budget(task);
+    const signature=this.signature();
+    const response=await api("split/jobs",{source_id:this.sourceId,config:this.cfg,task,output_dir:this.context.output,config_revision:signature,calibration_index:this.record.calibrationIndex??null});
+    this.requested.set(response.id,signature);
+    this.bridge.report(`${label[task]}已加入后台任务；可继续预览或取消`);
+    await this.bridge.poll();
+  }
+  updateJobs(jobs) {
+    this.jobs=jobs;
+    const records=jobs.filter(j=>j.mode==="split"&&j.status==="succeeded");
+    const selected=this.resultId||$("split-result-select").value;
+    $("split-result-select").innerHTML='<option value="">选择已保存结果</option>'+records.map(j=>`<option value="${esc(j.id)}">${esc(label[j.task]||"关联")} · ${esc(j.name)} · ${esc(j.id.slice(0,6))}</option>`).join("");
+    if(records.some(j=>j.id===selected)) $("split-result-select").value=selected;
+  }
+  async completed(job) {
+    this.updateJobs(this.jobs);
+    if(job.status!=="succeeded") {if(job.error)this.bridge.report(job.error,true);return;}
+    if(this.sourceId!==job.source_ids[0]||this.mode!=="split_correlation") {this.bridge.report(`${label[job.task]}完成，结果保存在任务记录`);return;}
+    if(this.requested.get(job.id)!==this.signature()) {this.bridge.report("关联完成；当前配置已变更，原结果保留在结果列表");return;}
+    if(job.task==="statistics") {
+      this.record.statisticsJob=job.id;
+      $("split-stat-status").textContent=`完整全源统计已保存：${job.run.statistics.frames.toLocaleString()} 帧 · 固定尺度 ${job.run.statistics.scales.map(number).join(" / ")}`;
+      await this.setStage("preprocess");await this.showStatistics();
+    } else await this.loadResult(job.id);
+    this.bridge.report(`${label[job.task]}已完成`);
+  }
+  async showStatistics() {
+    if(!this.record?.statisticsJob) {
+      const compatible=this.jobs.find(j=>j.mode==="split"&&j.status==="succeeded"&&j.source_ids[0]===this.sourceId&&JSON.stringify([j.run?.config.geometry,j.run?.config.photometry])===JSON.stringify([this.cfg.geometry,this.cfg.photometry]));
+      if(compatible) this.record.statisticsJob=compatible.id;
+    }
+    if(!this.record?.statisticsJob) throw Error("请先计算完整全源统计，或完成一次关联任务");
+    const data=await api(`split/jobs/${this.record.statisticsJob}/statistics`,{view:$("split-stat-view").value,index:this.cfg.center});
+    this.view="statistics";$("split-view").value="statistics";this.autoFit=true;$("split-curve").hidden=true;$("split-empty").hidden=true;
+    this.scene.width=data.frame.base_shape[1];this.scene.height=data.frame.base_shape[0];this.scene.roi=null;
+    await this.viewer.set(data.frame);this.draw();
+    const compatible=data.source_id===this.sourceId&&JSON.stringify([data.config.geometry,data.config.photometry])===JSON.stringify([this.cfg.geometry,this.cfg.photometry]);
+    $("split-stat-status").textContent=`${compatible?"完整全源统计已保存":"历史全源统计（当前标定或预处理已改变）"}：${data.frames.toLocaleString()} 帧 · 固定尺度 L ${number(data.scales[0])} / R ${number(data.scales[1])}`;
+    $("split-view-caption").textContent=$("split-stat-view").selectedOptions[0].textContent;
+  }
+  async loadResult(id,switchStage=true) {
+    if(!id) return;
+    this.stop();this.resultId=id;
+    if(this.record) this.record.resultId=id;
+    const data=await api(`split/jobs/${id}`);
+    if(this.resultId!==id) return;
+    const saved=this.record?.resultViews?.[id];
+    this.resultData=data;this.timeIndex=Math.max(0,Math.min((data.run.array_shape?.[0]||1)-1,saved?.timeIndex||0));
+    this.lagIndex=Math.max(0,Math.min(data.run.lags.length-1,saved?.lagIndex??Math.max(0,data.run.lags.indexOf(0))));
+    if(["time","frame"].includes(saved?.axis))$("split-curve-axis").value=saved.axis;
+    if(this.record) this.record.statisticsJob=id;
+    $("split-result-select").value=id;
+    $("split-result-summary").textContent=`${label[data.run.task]} · ${data.run.numeric_semantics==="sensor_codes"?"码值关联":"校准 / 确认强度"} · W=${data.run.config.window} · τ ${data.run.lags[0]}～${data.run.lags.at(-1)} 帧\n${data.directory}`;
+    const nav=$("split-result-nav");nav.hidden=data.run.task==="statistics";
+    $("split-result-time").max=(data.run.array_shape?.[0]||1)-1;$("split-result-time").value=this.timeIndex;
+    $("split-result-time").disabled=!data.run.array_shape;
+    $("split-result-play").disabled=!data.run.array_shape||data.run.array_shape[0]<2;
+    $("split-result-lag").innerHTML=data.run.lags.map((q,i)=>`<option value="${i}">${q>=0?"+":""}${q} 帧</option>`).join("");
+    $("split-result-lag").value=this.lagIndex;
+    $("split-promote").disabled=!data.run.array_shape;
+    $("split-show-map").disabled=!data.run.array_shape;
+    $("split-show-curve").disabled=!data.curve_result;
+    document.querySelectorAll("[data-split-export]").forEach(b=>{const format=b.dataset.splitExport;b.disabled=["csv","png","svg","curve_json"].includes(format)?!data.curve_result:["image","windows"].includes(format)?!data.run.array_shape:false;});
+    if(switchStage) await this.setStage("result");
+    else if(data.curve_result) this.showCurve();
+    else if(data.run.array_shape) await this.showSlice();
+    else await this.showStatistics();
+    this.updateStatus();this.bridge.changed();
+  }
+  saveResultView() {
+    if(!this.record||!this.resultId) return;
+    this.record.resultViews??={};
+    this.record.resultViews[this.resultId]={timeIndex:this.timeIndex||0,lagIndex:this.lagIndex||0,axis:$("split-curve-axis").value};
+    const keys=Object.keys(this.record.resultViews);
+    if(keys.length>64)delete this.record.resultViews[keys[0]];
+    this.bridge.changed();
+  }
+  async showSlice() {
+    if(!this.resultId||!this.resultData?.run.array_shape) throw Error("该结果没有系数图；曲线任务可单独运行");
+    const id=this.resultId,ti=this.timeIndex||0,qi=this.lagIndex||0;
+    const data=await api(`split/jobs/${id}/slice`,{time_index:ti,lag_index:qi,display:{low:Number($("split-display-low").value),high:Number($("split-display-high").value),gamma:1,colormap:"heat"}});
+    if(this.resultId!==id||ti!==(this.timeIndex||0)||qi!==(this.lagIndex||0)) return;
+    const fit=this.view!=="result"||this.displayResultId!==id;
+    this.view="result";$("split-view").value="result";$("split-curve").hidden=true;$("split-empty").hidden=true;
+    this.scene.width=data.frame.base_shape[1];this.scene.height=data.frame.base_shape[0];this.scene.roi=null;
+    await this.viewer.set(data.frame);this.displayResultId=id;if(fit)this.fit();else this.draw();
+    const ref=data.window_ref;
+    $("split-view-caption").textContent=`中心帧 ${ref.center_index+1} · τ ${ref.lag_frames>=0?"+":""}${ref.lag_frames} 帧 · ${data.valid_pixels.toLocaleString()} 有效像素`;
+    $("split-window-note").textContent=`左窗 ${ref.left_start+1}～${ref.left_end} · 右窗 ${ref.right_start+1}～${ref.right_end} · 实际时差 ${number(ref.lag_seconds)} s · 有效样本 ${data.count_min}～${data.count_max}`;
+    $("split-result-lag").value=qi;
+    if(this.cfg&&this.resultData.run.provenance?.source_id===this.sourceId&&JSON.stringify(this.cfg.geometry)===JSON.stringify(this.resultData.run.config.geometry)) {
+      this.cfg.center=ref.center_index;$("split-center").value=ref.center_index+1;$("split-scrubber").value=ref.center_index+1;
+    }
+    this.saveResultView();
+  }
+  showCurve() {
+    const data=this.resultData?.curve_result;
+    if(!data) {this.bridge.report("选定中心帧和点 / ROI，点击“固定帧曲线”计算该结果",true);return;}
+    this.view="curve";$("split-view").value="curve";$("split-curve").hidden=false;$("split-empty").hidden=true;
+    const refs=data.window_refs,curves=data.curves,time=$("split-curve-axis").value==="time";
+    const available=refs.every(r=>r.lag_seconds!=null);
+    $("split-curve-axis").querySelector('option[value="time"]').disabled=!available;
+    if(time&&!available) {$("split-curve-axis").value="frame";return this.showCurve();}
+    const rawX=refs.map(r=>time?r.lag_seconds:r.lag_frames),factor=time&&Math.max(...rawX.map(Math.abs))<.01?1e6:1;
+    const xs=rawX.map(x=>x*factor),finite=curves.flatMap(c=>c.g2.filter(v=>v!=null));
+    let lo=Math.min(1,...finite),hi=Math.max(1,...finite);if(hi-lo<1e-10){lo-=.05;hi+=.05;}else{const pad=(hi-lo)*.12;lo-=pad;hi+=pad;}
+    let xmin=Math.min(...xs),xmax=Math.max(...xs);if(xmin===xmax){xmin-=1;xmax+=1;}
+    const X=x=>72+(x-xmin)/(xmax-xmin)*620,Y=y=>350-(y-lo)/(hi-lo)*306;
+    const colors=["#87dfc5","#e6b386","#9db4f3","#dc9dd9","#82cadd"];
+    const parts=['<svg viewBox="0 0 720 425" role="img" aria-label="g² 随正负延迟变化曲线">'];
+    for(let i=0;i<=5;i++) {const x=xmin+(xmax-xmin)*i/5;parts.push(`<line x1="${X(x)}" y1="44" x2="${X(x)}" y2="350" stroke="#25384a"/><text x="${X(x)}" y="372" text-anchor="middle" fill="#9ab0c8" font-size="11">${esc(number(x))}</text>`);}
+    for(let i=0;i<=4;i++) {const y=lo+(hi-lo)*i/4;parts.push(`<line x1="72" y1="${Y(y)}" x2="692" y2="${Y(y)}" stroke="#25384a"/><text x="63" y="${Y(y)+4}" text-anchor="end" fill="#9ab0c8" font-size="11">${esc(number(y))}</text>`);}
+    if(xmin<=0&&xmax>=0) parts.push(`<line x1="${X(0)}" y1="44" x2="${X(0)}" y2="350" stroke="#7597ad" stroke-dasharray="4 5"/>`);
+    parts.push(`<line x1="72" y1="${Y(1)}" x2="692" y2="${Y(1)}" stroke="#7597ad" stroke-dasharray="4 5"/>`);
+    for(const [i,c] of curves.entries()) {
+      let path="",connected=false;
+      c.g2.forEach((v,j)=>{if(v==null){connected=false;return;}path+=`${connected?"L":"M"}${X(xs[j])},${Y(v)} `;connected=true;});
+      parts.push(`<path d="${path}" stroke="${colors[i%colors.length]}" fill="none" stroke-width="1.7"/>`);
+      if(i<7||curves.length===8&&i===7) parts.push(`<text x="${80+(i%4)*150}" y="${18+Math.floor(i/4)*15}" fill="${colors[i%colors.length]}" font-size="10">${esc(c.name)}${c.estimator==="pixel_mean"?" · 像素平均":c.estimator==="intensity_sum"?" · 总强度":""}</text>`);
+    }
+    if(curves.length>8) parts.push(`<text x="530" y="33" fill="#aac2d8" font-size="10">共 ${curves.length} 条，数值见右侧</text>`);
+    const selected=Math.max(0,Math.min(refs.length-1,this.lagIndex||0));
+    parts.push(`<text x="382" y="405" text-anchor="middle" fill="#aac2d8" font-size="12">${time?`实际延迟 τ (${factor===1e6?"μs":"s"})`:"有符号帧延迟 q（右路 i+q）"}</text><text x="22" y="198" fill="#aac2d8" font-size="13">g²</text><line id="split-curve-cursor" x1="${X(xs[selected])}" x2="${X(xs[selected])}" y1="44" y2="350" stroke="#c7ddec"/></svg>`);
+    $("split-curve").innerHTML=parts.join("");
+    const svg=$("split-curve").querySelector("svg");
+    const hover=e=>{
+      const p=new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());
+      const target=xmin+(p.x-72)/620*(xmax-xmin);
+      let idx=0;xs.forEach((v,j)=>{if(Math.abs(v-target)<Math.abs(xs[idx]-target))idx=j;});
+      const cursor=$("split-curve-cursor");cursor.setAttribute("x1",X(xs[idx]));cursor.setAttribute("x2",X(xs[idx]));cursor.setAttribute("visibility","visible");
+      $("split-curve-readout").textContent=`中心帧 ${refs[idx].center_index+1} · q=${refs[idx].lag_frames>=0?"+":""}${refs[idx].lag_frames} · τ=${number(refs[idx].lag_seconds)} s\n${curves.map(c=>`${c.name}：${coefficient(c.g2[idx])} (${c.pixel_count} 像素，有效样本 ${c.counts_min[idx]}～${c.counts_max[idx]})`).join("\n")}`;
+      return idx;
+    };
+    svg.onpointermove=hover;svg.onclick=e=>{this.lagIndex=hover(e);$("split-result-lag").value=this.lagIndex;this.saveResultView();};
+    $("split-view-caption").textContent=`固定中心帧 ${refs[0].center_index+1} · W=${data.config.window} · ${refs.length} 个有符号延迟`;
+    const ref=refs[selected];
+    $("split-window-note").textContent=`左窗 ${ref.left_start+1}～${ref.left_end} · 右窗 ${ref.right_start+1}～${ref.right_end} · 实际时差 ${number(ref.lag_seconds)} s`;
+    $("split-curve-readout").textContent=`${curves.map(c=>c.name+" · "+(c.estimator==="pixel_mean"?"逐像素 g² 空间平均":c.estimator==="intensity_sum"?"先汇总强度再算 g²":"单像素 g²")).join("\n")}\n选定 q=${ref.lag_frames}：${curves.map(c=>coefficient(c.g2[selected])).join(" / ")}\n曲线使用完整 W 帧窗口，鼠标移动查看数值。`;
+    this.saveResultView();
+  }
+  async jobDetail(job) {
+    $("job-dialog").showModal();
+    $("job-detail").innerHTML=`<p>${esc(label[job.task])} · ${esc(job.name)} · ${esc(job.status)}</p>${job.error?`<pre>${esc(job.error)}</pre>`:""}${job.directory?`<pre>${esc(job.directory)}</pre>`:""}${job.run?`<p>W=${job.run.config.window} · ${job.run.lags.length} 个延迟 · ${esc(job.run.backend||"CPU")}<br>来源、标定、全源均值、窗口与配对记录已保存。</p><button id="split-job-open" class="primary">查看关联结果</button>`:""}`;
+    if($("split-job-open")) $("split-job-open").onclick=this.wrap(async()=>{await this.bridge.activate();await this.loadResult(job.id);$("job-dialog").close();});
+  }
+}

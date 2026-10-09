@@ -6,7 +6,7 @@ import json
 import secrets
 
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -148,6 +148,56 @@ def create_app(workspace: Path | None = None, restore_session: Path | None = Non
     @app.post("/api/project/save")
     def save_project(value: dict):
         return workbench().save_project(value["path"], value["view"])
+
+    @app.post("/api/split/geometry")
+    def split_geometry(value: dict):
+        return workbench().split.geometry(value)
+
+    @app.post("/api/split/preflight")
+    def split_preflight(value: dict):
+        return workbench().split.preflight(value)
+
+    @app.post("/api/split/jobs")
+    def split_submit(value: dict):
+        return workbench().split.submit(value)
+
+    @app.post("/api/split/restore")
+    def split_restore(value: dict):
+        return workbench().split.restore(value["path"])
+
+    @app.get("/api/split/jobs/{identifier}")
+    def split_result(identifier: str):
+        return workbench().split.result(identifier)
+
+    @app.post("/api/split/jobs/{identifier}/slice")
+    def split_slice(identifier: str, value: dict):
+        return workbench().split.slice(identifier,value)
+
+    @app.post("/api/split/jobs/{identifier}/statistics")
+    def split_statistics(identifier: str, value: dict):
+        return workbench().split.statistics_view(identifier,value)
+
+    @app.post("/api/split/jobs/{identifier}/promote")
+    def split_promote(identifier: str, value: dict):
+        return workbench().split.promote(identifier,value["lag_index"])
+
+    @app.get("/api/split/jobs/{identifier}/download")
+    def split_download(identifier: str, file: str="manifest",time_index: int=0,lag_index: int=0):
+        _,directory,run = workbench().split.completed(identifier)
+        names = {"manifest":"run.json","csv":"curves.csv","png":"curves.png","svg":"curves.svg","curve_json":"curves.json","windows":"windows.csv"}
+        if file == "image":
+            import io
+            import tifffile
+            from eip.modes.split_correlation.storage import read_slice
+            if run["task"] not in {"trial","run"}:
+                raise ValueError("曲线 / 统计任务没有系数图")
+            pixels,_,ref,_ = read_slice(directory,time_index,lag_index)
+            buffer = io.BytesIO()
+            tifffile.imwrite(buffer,pixels,photometric="minisblack",metadata={"axes":"YX","window_ref":ref,"run_id":identifier,"geometry":run["geometry"],"analysis_region":run["analysis_region"]})
+            return Response(buffer.getvalue(),media_type="image/tiff",headers={"Content-Disposition":f'attachment; filename="{identifier}-t{time_index}-q{lag_index}.tif"'})
+        if file not in names or not (directory/names[file]).is_file():
+            raise ValueError("该任务没有所选导出内容")
+        return FileResponse(directory/names[file],filename=f"{identifier}-{names[file]}")
 
     @app.post("/api/project/load")
     def load_project(value: dict):

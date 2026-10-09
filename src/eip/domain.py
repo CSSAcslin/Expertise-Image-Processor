@@ -17,7 +17,7 @@ class SourceSpec:
     interval: float | None = None
 
     def __post_init__(self):
-        if self.kind not in {"auto", "image", "sequence", "video"}:
+        if self.kind not in {"auto", "image", "sequence", "video", "correlation"}:
             raise ValueError("不支持的数据源类型")
         if self.interval is not None and (not math.isfinite(self.interval) or self.interval <= 0):
             raise ValueError("序列时间间隔必须为正数")

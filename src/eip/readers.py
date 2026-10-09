@@ -256,6 +256,9 @@ def open_source(source: SourceSpec):
         else:
             raise ValueError("不支持此格式；当前支持 PNG/JPEG/BMP/TIFF、CINE 与常规视频")
     source = replace(source, kind=kind)
+    if kind == "correlation":
+        from eip.modes.split_correlation.storage import CorrelationReader
+        return CorrelationReader(source)
     if kind == "video" and path.suffix.lower() == ".cine":
         from eip.cine_reader import CineReader
         return CineReader(source)

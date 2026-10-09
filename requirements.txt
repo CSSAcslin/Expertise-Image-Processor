@@ -5,3 +5,4 @@ numpy==2.4.6
 Pillow==12.2.0
 tifffile==2026.6.1
 av==19.0.1
+matplotlib==3.11.0

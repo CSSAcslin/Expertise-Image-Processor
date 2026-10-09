@@ -2,6 +2,7 @@ import { api, session, download } from "./api.js";
 import { Viewer } from "./viewer.js";
 import { FileBrowser } from "./file-browser.js";
 import { validROI, moveROI } from "./geometry.js";
+import { SplitController } from "./split.js";
 
 const $ = (id) => document.getElementById(id);
 const escape = (value) =>
@@ -151,6 +152,20 @@ const callbacks = {
 };
 const originalViewer = new Viewer($("input-canvas"), scene, callbacks),
   resultViewer = new Viewer($("result-canvas"), scene, callbacks);
+const split = new SplitController({
+  context:()=>({source:active,input,output:$("output-dir").value,devices:state?.split_devices}),
+  changed:scheduleDraft,report:toast,poll:pollJobs,
+  activate:()=>setAnalysisMode("split_correlation"),
+  promote:async(opened)=>{
+    sources=sources.filter(s=>s.id!==opened.source.id);sources.push(opened.source);
+    updateSources();await setAnalysisMode("general");await selectSource(opened.source.id);
+  },
+});
+async function setAnalysisMode(mode) {
+  stopPlay();$("analysis-mode").value=mode;
+  await split.setMode(mode);scheduleDraft();
+}
+$("analysis-mode").onchange=safe(()=>setAnalysisMode($("analysis-mode").value));
 function redraw() {
   originalViewer.draw();
   resultViewer.draw();
@@ -324,6 +339,7 @@ function showSourceDetails(id) {
     user: "用户指定间隔",
     run_record: "上游运行时间记录",
     cine_time64: "CINE 文件逐帧时间记录",
+    correlation_window_ref: "关联窗口中心的原始时间记录",
     unavailable: "未知 / 未指定",
   };
   const rows = [
@@ -352,7 +368,7 @@ function showSourceDetails(id) {
     ],
   ];
   $("source-detail").innerHTML =
-    `<table class="metadata-table">${rows.map(([k, v]) => `<tr><td>${escape(k)}</td><td>${escape(v)}</td></tr>`).join("")}</table><p class="small-copy">${escape((entry.meta.notes || []).join("；"))}</p>${(entry.lineage || []).map((p, i) => `<div class="lineage-item"><strong>上游阶段 ${i + 1} · ${escape(p.run_id)}</strong><br>裁剪原点：${p.crop_origin.join(", ")} px<br>来源：${escape(p.parent_source.path)}<br>运行记录：${escape(p.manifest)}</div>`).join("")}`;
+    `<table class="metadata-table">${rows.map(([k, v]) => `<tr><td>${escape(k)}</td><td>${escape(v)}</td></tr>`).join("")}</table><p class="small-copy">${escape((entry.meta.notes || []).join("；"))}</p>${(entry.lineage || []).map((p, i) => `<div class="lineage-item"><strong>上游阶段 ${i + 1} · ${escape(p.run_id)}</strong>${p.crop_origin?`<br>裁剪原点：${escape(p.crop_origin.join(", "))} px`:""}${p.lag_frames!=null?`<br>延迟：${escape(p.lag_frames)} 帧 · 平均窗口：${escape(p.window)} 帧`:""}<br>来源：${escape(p.parent_source.path)}<br>运行记录：${escape(p.manifest)}</div>`).join("")}`;
   $("source-dialog").showModal();
 }
 async function removeSource(id) {
@@ -453,6 +469,7 @@ async function setInput(snapshot, reset = false) {
     $("display-target").value === "input" ? display : resultDisplay,
   );
   changed();
+  await split.contextChanged();
 }
 function indexed(entry = active) {
   return (
@@ -622,7 +639,7 @@ async function selectSource(id, request = ++selectionRequest) {
   if (entry.meta.notes?.length)
     toast(
       entry.meta.frame_indexed
-        ? `${entry.meta.frame_count} 帧 · 精确帧号定位 · 保存值 ${entry.meta.sample_bits} bit；读取说明见“属性 / 来源”`
+        ? `${entry.meta.frame_count} 帧 · 精确帧号定位 · ${entry.meta.sample_bits!=null?`保存值 ${entry.meta.sample_bits} bit`:entry.meta.dtype}；读取说明见“属性 / 来源”`
         : entry.meta.notes.join("；"),
     );
 }
@@ -874,6 +891,7 @@ const statusText = {
 async function pollJobs(initial = false) {
   const list = await api("jobs");
   jobs = list;
+  split.updateJobs(list);
   $("job-count").textContent = list.length;
   $("queue-note").textContent = list.some((j) => j.status === "running")
     ? "计算进行中 · 预览可继续"
@@ -882,7 +900,7 @@ async function pollJobs(initial = false) {
     ? list
         .map(
           (j) =>
-            `<div class="job-row"><span class="job-kind">${j.mode === "trial" ? "帧试算" : "正式运行"}</span><span class="job-name" title="${escape(j.name)}">${escape(j.name)}${j.source_count > 1 ? " · " + j.source_count + " 个来源" : ""}</span><span class="job-status ${j.status}">${statusText[j.status] || escape(j.status)}</span><span class="job-progress">${j.completed}${j.total ? " / " + j.total : " 帧"}</span>${["running", "queued", "cancelling"].includes(j.status) ? `<button data-cancel="${j.id}" class="quiet">取消</button>` : ""}<button data-detail="${j.id}" class="quiet">详情</button></div>`,
+            `<div class="job-row"><span class="job-kind">${j.mode==="split"?({statistics:"全源统计",trial:"窗口关联",curve:"τ 曲线",run:"时序关联"}[j.task]||"分幅关联"):j.mode === "trial" ? "帧试算" : "正式运行"}</span><span class="job-name" title="${escape(j.progress_name||j.name)}">${escape(j.name)}${j.source_count > 1 ? " · " + j.source_count + " 个来源" : ""}${j.mode==="split"&&j.status==="running"?" · "+escape(j.progress_name||"准备"):""}</span><span class="job-status ${j.status}">${statusText[j.status] || escape(j.status)}</span><span class="job-progress">${j.completed}${j.total ? " / " + j.total : " 帧"}</span>${["running", "queued", "cancelling"].includes(j.status) ? `<button data-cancel="${j.id}" class="quiet">取消</button>` : ""}<button data-detail="${j.id}" class="quiet">详情</button></div>`,
         )
         .join("")
     : '<div class="task-empty">试算和正式运行的进度、结果及日志会显示在这里。</div>';
@@ -908,7 +926,9 @@ async function pollJobs(initial = false) {
       fetchedJobs.add(j.id);
       if (initial) continue;
       const full = await api(`jobs/${j.id}`);
-      if (j.mode === "trial" && full.result) {
+      if (j.mode === "split") {
+        await split.completed(full);
+      } else if (j.mode === "trial" && full.result) {
         const expected = trialSignatures.get(j.id);
         if (expected === signature()) {
           formalResult = null;
@@ -942,6 +962,7 @@ async function pollJobs(initial = false) {
 }
 async function jobDetail(id) {
   const job = await api(`jobs/${id}`);
+  if(job.mode==="split") return split.jobDetail(job);
   $("job-dialog").showModal();
   const parts = [
     `<p>${escape(job.name)} · ${statusText[job.status]} · ${job.completed} 帧</p>`,
@@ -1125,7 +1146,7 @@ async function submitDialog() {
           redraw();
         }
       }
-      restoreProjectOptions(data.view);
+      await restoreProjectOptions(data.view);
       changed();
       toast("项目已恢复");
     }
@@ -1137,6 +1158,8 @@ async function submitDialog() {
 function projectView() {
   stashView();
   return {
+    analysis_mode:$("analysis-mode").value,
+    split_mode:split.serialize(),
     steps,
     output_dir: $("output-dir").value,
     active_source: active?.id,
@@ -1157,7 +1180,9 @@ function projectView() {
     },
   };
 }
-function restoreProjectOptions(view) {
+async function restoreProjectOptions(view) {
+  split.restore(view.split_mode);
+  await setAnalysisMode(view.analysis_mode==="split_correlation"?"split_correlation":"general");
   if (["current", "all", "range"].includes(view.web_scope))
     $("scope").value = view.web_scope;
   $("range-fields").hidden = $("scope").value !== "range";
@@ -1549,14 +1574,14 @@ async function bootstrap() {
     sourceViews = new Map(Object.entries(draft.web_views || {}));
     resultDisplay = draft.web_result_display || resultDisplay;
     $("output-dir").value = draft.output_dir || state.output_dir;
-    restoreProjectOptions(draft);
+    await restoreProjectOptions(draft);
     renderSteps();
   }
   const initial =
     sources.find((s) => s.role === "input" && s.id === draft?.active_source) ||
     sources.find((s) => s.role === "input");
   if (initial) await selectSource(initial.id);
-  if (draft) restoreProjectOptions(draft);
+  if (draft) await restoreProjectOptions(draft);
   restoringDraft = false;
   await pollJobs(true);
   let polling = false;
