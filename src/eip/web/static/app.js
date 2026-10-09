@@ -250,6 +250,7 @@ function stashView() {
       zoom: scene.zoom,
       panX: scene.panX,
       panY: scene.panY,
+      seek_mode: $("seek-mode").value,
     });
 }
 function updateSummary() {
@@ -257,19 +258,26 @@ function updateSummary() {
   $("run-summary").textContent = active
     ? `${$("batch").checked ? sources.filter((s) => s.role === "input").length : 1} 个来源 · ${count} 个处理步骤${scene.roi ? " · ROI" : ""}`
     : "打开数据以开始处理";
-  $("trial").disabled = $("run").disabled = !active || !input;
-  for (const id of ["previous", "next", "play", "seek", "seek-value"])
+  $("trial").disabled = $("run").disabled = !active || !input || requestBusy;
+  for (const id of [
+    "previous",
+    "next",
+    "play",
+    "seek",
+    "seek-value",
+    "seek-mode",
+  ])
     $(id).disabled = !active || !input;
-  if (active && input && active.meta.kind !== "video") {
+  for (const id of ["seek", "seek-value", "seek-mode"])
+    $(id).disabled ||= requestBusy;
+  if (active && input && indexed()) {
     $("play").disabled = (active.meta.frame_count || 1) <= 1;
     $("previous").disabled = (input.ref.index ?? 0) <= 0;
     $("next").disabled =
       (input.ref.index ?? 0) >= (active.meta.frame_count || 1) - 1;
   }
   $("scrubber").disabled =
-    !active ||
-    !input ||
-    (active.meta.kind === "video" && !active.meta.duration);
+    !active || !input || (timePosition() && !active.meta.duration);
   $("promote-result").disabled = !formalResult;
   $("flow-summary").textContent = active
     ? `${active.lineage?.length ? "阶段 " + (active.lineage.length + 1) + " · " : ""}${active.display_name || active.meta.name} → ${count} 个处理步骤 → ${formalResult ? "已保存输出" : result ? "当前帧试算" : "待处理"}`
@@ -315,6 +323,7 @@ function showSourceDetails(id) {
     stream_pts: "视频真实时间戳",
     user: "用户指定间隔",
     run_record: "上游运行时间记录",
+    cine_time64: "CINE 文件逐帧时间记录",
     unavailable: "未知 / 未指定",
   };
   const rows = [
@@ -323,6 +332,14 @@ function showSourceDetails(id) {
     ["类型", entry.meta.kind],
     ["数据尺寸", entry.meta.shape.join(" × ")],
     ["像素类型", entry.meta.dtype],
+    [
+      "有效位深",
+      entry.meta.sample_bits ? entry.meta.sample_bits + " bit" : "未声明",
+    ],
+    [
+      "按帧跳转",
+      indexed(entry) ? "支持精确帧号" : "按时间定位，已知帧号会显示",
+    ],
     ["轴 / 颜色", entry.meta.axes + " / " + entry.meta.color],
     ["帧数", entry.meta.frame_count ?? "未知"],
     [
@@ -429,27 +446,67 @@ async function setInput(snapshot, reset = false) {
   $("shape-badge").textContent = `${snapshot.shape[1]} × ${snapshot.shape[0]}`;
   const ref = snapshot.ref;
   $("frame-info").textContent =
-    `${ref.index === null ? "帧号未知" : `第 ${ref.index + 1} 帧`}  |  ${ref.time === null ? "时间未知" : `${ref.time.toFixed(4)} s`}${snapshot.downsampled ? "  |  显示降采样" : ""}`;
-  $("seek-value").value =
-    active.meta.kind === "video"
-      ? (ref.time ?? 0).toFixed(4)
-      : (ref.index ?? 0) + 1;
-  $("scrubber").value =
-    active.meta.kind === "video" ? (ref.time ?? 0) : (ref.index ?? 0);
+    `${ref.index == null ? "帧号未知" : `第 ${ref.index + 1} 帧`}${active.meta.frame_count ? " / " + active.meta.frame_count : ""}  |  ${ref.time == null ? "时间未知" : `${formatTime(ref.time)} s`}${snapshot.downsampled ? "  |  显示降采样" : ""}`;
+  updatePosition();
   fillDisplayControls(
     $("display-target").value === "input" ? snapshot : result,
     $("display-target").value === "input" ? display : resultDisplay,
   );
   changed();
 }
-function configureTimeline(entry) {
-  const video = entry.meta.kind === "video";
+function indexed(entry = active) {
+  return (
+    !!entry &&
+    (entry.meta.kind !== "video" || entry.meta.frame_indexed === true)
+  );
+}
+function timePosition() {
+  return $("seek-mode").value === "time";
+}
+function formatTime(value) {
+  return Number(value).toFixed(
+    (active?.meta.rate || 0) > 10000 ||
+      active?.meta.timestamp_source === "cine_time64"
+      ? 6
+      : 4,
+  );
+}
+function updatePosition() {
+  if (!input) return;
+  const ref = input.ref;
+  $("seek-value").value = timePosition()
+    ? active.meta.frame_indexed
+      ? String(ref.time ?? 0)
+      : formatTime(ref.time ?? 0)
+    : (ref.index ?? 0) + 1;
+  $("scrubber").value = timePosition() ? (ref.time ?? 0) : (ref.index ?? 0);
+  $("timeline-note").textContent =
+    ref.source_number != null
+      ? `采集帧 ${ref.source_number}${ref.trigger_time != null ? " · 触发 " + formatTime(ref.trigger_time) + " s" : ""}`
+      : `${ref.index == null ? "帧号未建立" : "当前第 " + (ref.index + 1) + " 帧"}${ref.time == null ? " · 时间未知" : " · " + formatTime(ref.time) + " s"}`;
+  $("frame-info").title =
+    ref.source_number != null
+      ? `文件帧号从 1 开始；采集源帧 ${ref.source_number}；文件时间相对首帧，触发时间另列`
+      : "实际返回帧与时间；未知索引不会用帧率推算";
+  $("timeline-note").title =
+    `${$("timeline-note").textContent}${ref.time == null ? "" : "；实际文件时间 " + ref.time + " s"}`;
+  $("seek-value").title = timePosition()
+    ? `实际文件时间 ${ref.time ?? "未知"} s`
+    : `文件帧号 ${(ref.index ?? 0) + 1}`;
+}
+function configurePositionControls(entry = active) {
+  if (!entry) return;
+  const video = timePosition();
   $("scrubber").max = video
     ? entry.meta.duration || 1
     : Math.max(0, (entry.meta.frame_count || 1) - 1);
-  $("scrubber").step = video ? "0.001" : "1";
+  $("scrubber").step = video
+    ? (entry.meta.rate || 0) > 10000
+      ? "0.000001"
+      : "0.001"
+    : "1";
   $("scrubber").disabled = video && !entry.meta.duration;
-  $("seek-value").step = video ? "0.001" : "1";
+  $("seek-value").step = video ? "any" : "1";
   $("seek-value").min = video ? "0" : "1";
   $("seek-value").max = video
     ? (entry.meta.duration ?? "")
@@ -461,13 +518,24 @@ function configureTimeline(entry) {
       ? `${entry.meta.duration.toFixed(2)} s`
       : "时长未知"
     : `${entry.meta.frame_count || "?"} 帧`;
-  $("timeline-note").textContent = video
-    ? "真实时间戳 · 帧号仅在可确定时显示"
-    : entry.meta.timestamp_source === "unavailable"
-      ? "序列时间未知"
-      : entry.meta.timestamp_source === "run_record"
-        ? "时间沿用上游记录"
-        : "用户指定序列间隔";
+  updatePosition();
+  updateSummary();
+}
+function configureTimeline(entry) {
+  const video = entry.meta.kind === "video";
+  const noTimeRange = video && entry.meta.timestamp_source === "unavailable";
+  $("scope").querySelector('[value="range"]').disabled = noTimeRange;
+  if (noTimeRange && $("scope").value === "range") {
+    $("scope").value = "current";
+    $("range-fields").hidden = true;
+  }
+  $("seek-mode").querySelector('[value="frame"]').disabled = !indexed(entry);
+  $("seek-mode").querySelector('[value="time"]').disabled =
+    !video || entry.meta.timestamp_source === "unavailable";
+  if (!indexed(entry)) $("seek-mode").value = "time";
+  else if (!video || entry.meta.timestamp_source === "unavailable")
+    $("seek-mode").value = "frame";
+  configurePositionControls(entry);
   $("range-unit").textContent = video
     ? "单位：秒；终点不包含"
     : "单位：从 1 开始的帧号；终点不包含";
@@ -499,6 +567,7 @@ async function selectSource(id, request = ++selectionRequest) {
   stashView();
   active = entry;
   const view = sourceViews.get(id);
+  $("seek-mode").value = view?.seek_mode || (indexed(entry) ? "frame" : "time");
   display = view?.display || {
     low: null,
     high: null,
@@ -543,14 +612,19 @@ async function selectSource(id, request = ++selectionRequest) {
   }
   if (view?.ref && (view.ref.index !== 0 || view.ref.time > 0))
     await seekFrame(
-      entry.meta.kind === "video"
+      !indexed(entry)
         ? { action: "time", time: view.ref.time ?? 0 }
         : { action: "index", index: view.ref.index ?? 0 },
     );
   updateROI();
   redraw();
   changed();
-  if (entry.meta.notes?.length) toast(entry.meta.notes.join("；"));
+  if (entry.meta.notes?.length)
+    toast(
+      entry.meta.frame_indexed
+        ? `${entry.meta.frame_count} 帧 · 精确帧号定位 · 保存值 ${entry.meta.sample_bits} bit；读取说明见“属性 / 来源”`
+        : entry.meta.notes.join("；"),
+    );
 }
 async function seekFrame(value) {
   if (!active || !input) return;
@@ -559,6 +633,7 @@ async function seekFrame(value) {
     return;
   }
   requestBusy = true;
+  updateSummary();
   const id = active.id,
     generation = sourceGeneration;
   $("timeline-note").textContent = "正在解码…";
@@ -574,10 +649,8 @@ async function seekFrame(value) {
     if (formalResult) await syncFormalResult();
   } finally {
     requestBusy = false;
-    $("timeline-note").textContent =
-      active?.meta.kind === "video"
-        ? "真实时间戳 · 帧号仅在可确定时显示"
-        : "按帧索引定位";
+    updatePosition();
+    updateSummary();
     if (pendingSeek) {
       const next = pendingSeek;
       pendingSeek = null;
@@ -618,7 +691,7 @@ function stopPlay() {
 }
 function step(direction) {
   if (!active || !input) return;
-  if (active.meta.kind !== "video") {
+  if (indexed()) {
     const next = (input.ref.index ?? 0) + direction;
     if (next < 0 || next >= (active.meta.frame_count || 1)) {
       if (direction > 0) stopPlay();
@@ -626,7 +699,7 @@ function step(direction) {
     }
   }
   return seekFrame(
-    active.meta.kind === "video"
+    !indexed()
       ? {
           action: direction > 0 ? "next" : "previous",
           time: input.ref.time ?? 0,
@@ -906,7 +979,7 @@ async function jobDetail(id) {
         await selectSource(job.source_ids[0]);
       formalResult = null;
       await seekFrame(
-        active.meta.kind === "video"
+        !indexed()
           ? { action: "time", time: job.result.ref.time }
           : { action: "index", index: job.result.ref.index },
       );
@@ -1277,7 +1350,7 @@ $("play").onclick = safe(play);
 $("scrubber").oninput = safe(() => {
   stopPlay();
   return seekFrame(
-    active?.meta.kind === "video"
+    timePosition()
       ? { action: "time", time: Number($("scrubber").value) }
       : { action: "index", index: Number($("scrubber").value) },
   );
@@ -1286,11 +1359,17 @@ $("seek").onclick = safe(() => {
   if (!$("seek-value").reportValidity()) return;
   stopPlay();
   return seekFrame(
-    active?.meta.kind === "video"
+    timePosition()
       ? { action: "time", time: Number($("seek-value").value) }
       : { action: "index", index: Number($("seek-value").value) - 1 },
   );
 });
+$("seek-mode").onchange = () => {
+  stopPlay();
+  pendingSeek = null;
+  configurePositionControls();
+  scheduleDraft();
+};
 function fillDisplayControls(snapshot, settings) {
   const label = snapshot?.kind === "label";
   $("display-low").value = snapshot?.display.low ?? settings.low ?? "";

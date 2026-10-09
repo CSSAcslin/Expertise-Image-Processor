@@ -42,6 +42,8 @@ class DataSpec:
     color: str
     revision: str
     notes: tuple[str, ...] = ()
+    frame_indexed: bool = False
+    sample_bits: int | None = None
 
 
 @dataclass(frozen=True)
@@ -49,6 +51,8 @@ class FrameRef:
     index: int | None
     time: float | None
     pts: int | None = None
+    source_number: int | None = None
+    trigger_time: float | None = None
 
 
 @dataclass

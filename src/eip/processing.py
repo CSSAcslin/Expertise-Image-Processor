@@ -83,7 +83,7 @@ def process_job(payload: dict, emit, cancelled):
                 total = 1 if selection.mode == "current" else (int(selection.end - selection.start) if selection.mode == "range" and reader.meta.kind != "video" else reader.meta.frame_count if selection.mode == "all" else None)
                 rows_path = out_dir / "measurements.csv"
                 with rows_path.open("w", encoding="utf-8-sig", newline="") as file:
-                    fields = ["output_index", "source_frame", "time_seconds", "pts", "dtype", "min", "max", "mean", "finite_count", "invalid_count"]
+                    fields = ["output_index", "source_frame", "time_seconds", "pts", "source_frame_number", "trigger_time_seconds", "dtype", "min", "max", "mean", "finite_count", "invalid_count"]
                     writer = csv.DictWriter(file, fieldnames=fields)
                     writer.writeheader()
                     for ordinal, frame in enumerate(reader.iter_frames(selection)):
@@ -93,8 +93,8 @@ def process_job(payload: dict, emit, cancelled):
                             output = selection.roi.crop(output)
                         context.check_cancelled()
                         filename = f"frame_{ordinal:08d}.tif"
-                        tifffile.imwrite(out_dir / filename, output.astype(np.uint8) if output.dtype.kind == "b" else output, photometric="rgb" if output.ndim == 3 else "minisblack", metadata={"axes": "YX" if output.ndim == 2 else "YXS", "run_id": run_id, "source_frame": frame.ref.index, "time_seconds": frame.ref.time, "origin_xy": item["origin"], "result_kind": pipeline.output_kind})
-                        writer.writerow({"output_index": ordinal, "source_frame": frame.ref.index, "time_seconds": frame.ref.time, "pts": frame.ref.pts, "dtype": str(output.dtype), **statistics(output)})
+                        tifffile.imwrite(out_dir / filename, output.astype(np.uint8) if output.dtype.kind == "b" else output, photometric="rgb" if output.ndim == 3 else "minisblack", metadata={"axes": "YX" if output.ndim == 2 else "YXS", "run_id": run_id, "source_frame": frame.ref.index, "time_seconds": frame.ref.time, "source_frame_number": frame.ref.source_number, "trigger_time_seconds": frame.ref.trigger_time, "origin_xy": item["origin"], "result_kind": pipeline.output_kind})
+                        writer.writerow({"output_index": ordinal, "source_frame": frame.ref.index, "time_seconds": frame.ref.time, "pts": frame.ref.pts, "source_frame_number": frame.ref.source_number, "trigger_time_seconds": frame.ref.trigger_time, "dtype": str(output.dtype), **statistics(output)})
                         item["completed_frames"] = ordinal + 1
                         if not item["artifacts"]:
                             item["artifacts"].append(filename)

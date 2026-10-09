@@ -747,6 +747,24 @@ h3 {
   border-top: 1px solid var(--line);
   background: #191f28;
 }
+#seek-mode {
+  width: 62px;
+  font-size: 11px;
+  padding: 6px 3px;
+}
+#timeline-note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+#frame-info {
+  flex-shrink: 0;
+}
+#pixel-info {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .transport {
   display: flex;
   gap: 4px;

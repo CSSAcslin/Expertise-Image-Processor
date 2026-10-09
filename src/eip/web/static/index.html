@@ -190,11 +190,14 @@
             />
             <div class="timeline-scale">
               <span id="time-start">0</span
-              ><span id="timeline-note">按真实时间定位</span
+              ><span id="timeline-note">尚未定位</span
               ><span id="time-end">—</span>
             </div>
           </div>
           <label class="seek-control"
+            ><select id="seek-mode" aria-label="定位方式">
+              <option value="frame">帧号</option>
+              <option value="time">时间</option></select
             ><input
               id="seek-value"
               type="number"

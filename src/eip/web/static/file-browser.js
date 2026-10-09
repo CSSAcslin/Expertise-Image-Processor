@@ -196,7 +196,7 @@ export class FileBrowser {
       this.visible()
         .map(
           (e) =>
-            `<div class="file-row ${this.selected.includes(e.path) ? "selected" : ""}" role="option" aria-selected="${this.selected.includes(e.path)}" tabindex="0" data-path="${esc(e.path)}" data-directory="${e.directory}">${this.icon(e.directory ? "folder" : e.name.match(/\.(mp4|avi|mov|mkv|webm)$/i) ? "video" : "file")}<span>${esc(e.name)}</span><small>${e.directory ? "目录" : (e.size / 1024 / 1024).toFixed(2) + " MB"}</small></div>`,
+            `<div class="file-row ${this.selected.includes(e.path) ? "selected" : ""}" role="option" aria-selected="${this.selected.includes(e.path)}" tabindex="0" data-path="${esc(e.path)}" data-directory="${e.directory}">${this.icon(e.directory ? "folder" : e.name.match(/\.(mp4|avi|mov|mkv|webm|m4v|mpg|mpeg|cine)$/i) ? "video" : "file")}<span>${esc(e.name)}</span><small>${e.directory ? "目录" : (e.size / 1024 / 1024).toFixed(2) + " MB"}</small></div>`,
         )
         .join("") ||
       '<div class="library-empty">当前目录或筛选条件下没有可用文件</div>';

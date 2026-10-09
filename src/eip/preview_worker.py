@@ -26,7 +26,7 @@ def preview_entry(commands, results):
             action = command["action"]
             if action == "open":
                 # Reopening the same video must reset the iterator as well as the displayed frame.
-                frame = reader.read_at_time(0) if reader.meta.kind == "video" else reader.read_frame(0)
+                frame = reader.read_at_time(0) if reader.meta.kind == "video" and not reader.meta.frame_indexed else reader.read_frame(0)
             elif action == "time":
                 frame = reader.read_at_time(command["time"])
             elif action == "next":

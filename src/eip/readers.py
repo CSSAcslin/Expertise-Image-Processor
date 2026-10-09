@@ -15,7 +15,7 @@ import tifffile
 from eip.domain import DataSpec, FrameData, FrameRef, Selection, SourceSpec, file_revision, validate_pixels
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
-VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".mpg", ".mpeg"}
+VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".mpg", ".mpeg", ".cine"}
 
 
 def natural_key(path: Path):
@@ -60,6 +60,7 @@ class ImageReader:
         interval = source.interval
         duration = self.count * interval if interval is not None else None
         self.timestamps = None
+        self.source_numbers = self.trigger_times = None
         notes = ["序列采用文件名自然排序；时间间隔为用户指定值" if interval is not None else "目录采用自然排序；无确认的时间间隔"] if source.kind == "sequence" else []
         fingerprint_files = list(self.files)
         if source.kind == "sequence" and (self.path / "measurements.csv").is_file() and (self.path.parent / "run.json").is_file():
@@ -71,7 +72,9 @@ class ImageReader:
                 if len(rows) != self.count or [int(row["output_index"]) for row in rows] != list(range(self.count)):
                     raise ValueError("输出序列与时间记录不匹配")
                 self.timestamps = [float(row["time_seconds"]) if row["time_seconds"] else None for row in rows]
-                if any(value is not None and not math.isfinite(value) for value in self.timestamps):
+                self.source_numbers = [int(row["source_frame_number"]) if row.get("source_frame_number") else None for row in rows]
+                self.trigger_times = [float(row["trigger_time_seconds"]) if row.get("trigger_time_seconds") else None for row in rows]
+                if any(value is not None and not math.isfinite(value) for value in [*self.timestamps, *self.trigger_times]):
                     raise ValueError("输出记录包含非法时间值")
                 notes = ["输出帧序号为序列索引；源时间来自运行记录，来源映射见 measurements.csv"]
                 fingerprint_files += [self.path / "measurements.csv", self.path.parent / "run.json"]
@@ -97,7 +100,7 @@ class ImageReader:
             pixels = self._cache[index]
             self._cache.move_to_end(index)
         time = self.timestamps[index] if self.timestamps is not None else index * self.source.interval if self.source.interval else None
-        return FrameData(pixels, FrameRef(index, time))
+        return FrameData(pixels, FrameRef(index, time, source_number=self.source_numbers[index] if self.source_numbers else None, trigger_time=self.trigger_times[index] if self.trigger_times else None))
 
     def iter_frames(self, selection: Selection):
         if selection.mode == "current":
@@ -251,6 +254,9 @@ def open_source(source: SourceSpec):
         elif path.suffix.lower() in VIDEO_EXTENSIONS:
             kind = "video"
         else:
-            raise ValueError("不支持此格式；当前支持 PNG/JPEG/BMP/TIFF 与常规视频")
+            raise ValueError("不支持此格式；当前支持 PNG/JPEG/BMP/TIFF、CINE 与常规视频")
     source = replace(source, kind=kind)
+    if kind == "video" and path.suffix.lower() == ".cine":
+        from eip.cine_reader import CineReader
+        return CineReader(source)
     return VideoReader(source) if kind == "video" else ImageReader(source)

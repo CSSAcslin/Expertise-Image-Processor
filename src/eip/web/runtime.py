@@ -242,7 +242,12 @@ class Workbench:
             index = None
             with (Path(source["source"]["path"]) / "measurements.csv").open(encoding="utf-8-sig", newline="") as file:
                 for row in csv.DictReader(file):
-                    matches = (row["time_seconds"] and abs(float(row["time_seconds"]) - reference["time"]) < 1e-6) if reference.get("time") is not None else (row["source_frame"] and int(row["source_frame"]) == reference.get("index"))
+                    if reference.get("index") is not None and row["source_frame"]:
+                        matches = int(row["source_frame"]) == reference["index"]
+                    elif reference.get("pts") is not None and row.get("pts"):
+                        matches = int(row["pts"]) == reference["pts"]
+                    else:
+                        matches = bool(row["time_seconds"] and reference.get("time") is not None and abs(float(row["time_seconds"]) - reference["time"]) < 1e-9)
                     if matches:
                         index = int(row["output_index"])
                         break
@@ -254,6 +259,8 @@ class Workbench:
             raise ValueError("未知定位方式")
         if action == "index" and (type(value.get("index")) is not int or value["index"] < 0):
             raise ValueError("帧索引必须为非负整数")
+        if action == "index" and source["meta"]["kind"] == "video" and not source["meta"].get("frame_indexed"):
+            raise ValueError("该视频没有精确帧索引，请使用时间定位")
         args = {key: value[key] for key in ["time", "index"] if key in value}
         event = self.preview.request(source["source"], action, **args)
         if event["type"] == "eof":
@@ -301,6 +308,8 @@ class Workbench:
             raise ValueError("批量处理请使用全部数据或指定范围")
         if selection.mode == "range" and len({entry["meta"]["kind"] == "video" for entry in entries}) > 1:
             raise ValueError("帧范围与时间范围不能混用")
+        if selection.mode == "range" and any(entry["meta"]["kind"] == "video" and entry["meta"]["timestamp_source"] == "unavailable" for entry in entries):
+            raise ValueError("视频缺少逐帧时间记录，请选择当前帧或全部数据处理")
         if selection.mode == "range" and entries[0]["meta"]["kind"] != "video":
             if int(selection.start) != selection.start or int(selection.end) != selection.end:
                 raise ValueError("帧范围必须使用整数，不能将小数默认为帧号")

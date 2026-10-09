@@ -352,7 +352,7 @@ class MainWindow(QMainWindow):
         QMessageBox.warning(self, "操作未完成", str(message))
 
     def _open_files(self):
-        files, _ = QFileDialog.getOpenFileNames(self, "打开图像或视频", "", "数据 (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.mp4 *.mov *.avi *.mkv *.webm *.m4v *.mpg *.mpeg);;所有文件 (*)")
+        files, _ = QFileDialog.getOpenFileNames(self, "打开图像或视频", "", "数据 (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.mp4 *.mov *.avi *.mkv *.webm *.m4v *.mpg *.mpeg *.cine);;所有文件 (*)")
         for path in files[:32]:
             self._request("open", SourceSpec(str(Path(path).resolve())))
         if len(files) > 32:
@@ -529,7 +529,7 @@ class MainWindow(QMainWindow):
     def _set_range_limits(self):
         video = self.meta["kind"] == "video"
         for spin in [self.range_start, self.range_end]:
-            spin.setDecimals(3 if video else 0)
+            spin.setDecimals((6 if self.meta.get("frame_indexed") else 3) if video else 0)
             spin.setRange(0 if video else 1, self.meta["duration"] or 1e9 if video else (self.meta["frame_count"] or 1) + 1)
         self.range_start.setValue(0 if video else 1)
         self.range_end.setValue(self.meta["duration"] or 1 if video else (self.meta["frame_count"] or 1) + 1)
@@ -552,7 +552,7 @@ class MainWindow(QMainWindow):
         stamp = f"{ref.time:.6f} s" if ref.time is not None else "无时间信息"
         self.position_label.setText(f"帧 {ordinal} / {count or '未知'}   ·   {stamp}")
         self.timeline_updating = True
-        if self.meta["kind"] == "video":
+        if self.meta["kind"] == "video" and not self.meta.get("frame_indexed"):
             duration = self.meta["duration"]
             self.timeline.setRange(0, 10000)
             self.timeline.setEnabled(bool(duration))
@@ -572,7 +572,7 @@ class MainWindow(QMainWindow):
         if self.source is None:
             return
         self._pause()
-        if self.meta["kind"] == "video":
+        if self.meta["kind"] == "video" and not self.meta.get("frame_indexed"):
             self._request("time", time=self.timeline.value() / 10000 * self.meta["duration"])
         else:
             self._request("index", index=self.timeline.value())
@@ -580,14 +580,14 @@ class MainWindow(QMainWindow):
     def _first_frame(self):
         self._pause()
         if self.source:
-            self._request("time", time=0) if self.meta["kind"] == "video" else self._request("index", index=0)
+            self._request("time", time=0) if self.meta["kind"] == "video" and not self.meta.get("frame_indexed") else self._request("index", index=0)
 
     def _step_frame(self, direction, playback=False):
         if not playback:
             self._pause()
         if not self.ready or self.frame is None:
             return
-        if self.meta["kind"] == "video":
+        if self.meta["kind"] == "video" and not self.meta.get("frame_indexed"):
             self._request("next" if direction > 0 else "previous", time=self.frame.ref.time or 0)
         else:
             index = self.frame.ref.index + direction
