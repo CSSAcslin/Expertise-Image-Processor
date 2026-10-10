@@ -83,7 +83,7 @@ class PairCache:
         return record
 
 
-def correlate_stream(cache,baseline,config,plan,backend,check,emit):
+def correlate_stream(cache,baseline,config,plan,backend,check,emit,*,inner_progress=None):
     """Lag batches share transformed frames. Rolling windows reread outgoing pairs.
 
     This bounds RAM even for windows larger than the cache. Non-overlapping windows
@@ -109,14 +109,21 @@ def correlate_stream(cache,baseline,config,plan,backend,check,emit):
                 operations = [(range(start,end),1)]
             else:
                 operations = [(range(previous-half,start),-1),(range(previous+half+1,end),1)]
+            pair_frames = 0
+            total_pairs = sum(len(indices) for indices,_ in operations)*len(batch)
             for indices,sign in operations:
                 for index in indices:
                     left = cache.get(index)[0][0]
                     for m,(_,lag) in zip(moments,batch):
                         right = cache.get(index+lag)[0][1]
                         m.add(left,right,sign)
+                    pair_frames += 1
+                    if inner_progress and (pair_frames == 1 or pair_frames%64 == 0):
+                        inner_progress(f"窗口 {ordinal+1}/{len(centers)} · 延迟批 {batch_start//batch_size+1}/{(len(lags)+batch_size-1)//batch_size} · 配对累加",pair_frames*len(batch),total_pairs)
             for m,(lag_index,lag) in zip(moments,batch):
                 result,count = m.result()
+                if hasattr(cache.geometry, "postprocess"):
+                    result = cache.geometry.postprocess(result)
                 completed += 1
                 emit(completed,total)
                 yield ordinal,lag_index,center,lag,result,count

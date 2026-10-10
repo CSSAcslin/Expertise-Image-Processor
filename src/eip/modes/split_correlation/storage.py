@@ -100,15 +100,17 @@ def read_slice(directory,center_index,lag_index):
 
 
 def write_curves(directory,curves,refs,config):
+    from .workflow import output_semantics
     value = {"schema_version": 1,"config": config,"window_refs": refs,"curves": curves}
+    value.update(output_semantics(config.get("workflow", [])))
     write_json(Path(directory)/"curves.json",value)
-    columns = ["curve_id","name","estimator","point_x","point_y","center_index","center_time","source_number","left_start","left_end","right_start","right_end","lag_frames","lag_seconds","lag_seconds_min","lag_seconds_max","g2","valid_samples_min","valid_samples_max","pixel_count"]
+    columns = ["curve_id","name","estimator","point_x","point_y","center_index","center_time","source_number","left_start","left_end","right_start","right_end","lag_frames","lag_seconds","lag_seconds_min","lag_seconds_max","g2","valid_samples_min","valid_samples_max","pixel_count","result_semantics"]
     with (Path(directory)/"curves.csv").open("w",encoding="utf-8-sig",newline="") as file:
         writer = csv.DictWriter(file,fieldnames=columns)
         writer.writeheader()
         for curve in curves:
             for index,ref in enumerate(refs):
-                writer.writerow({"curve_id":curve["id"],"name":curve["name"],"estimator":curve["estimator"],"point_x":curve.get("point",[None,None])[0],"point_y":curve.get("point",[None,None])[1],**{key:ref[key] for key in columns if key in ref},"g2":curve["g2"][index],"valid_samples_min":curve["counts_min"][index],"valid_samples_max":curve["counts_max"][index],"pixel_count":curve["pixel_count"]})
+                writer.writerow({"curve_id":curve["id"],"name":curve["name"],"estimator":curve["estimator"],"point_x":curve.get("point",[None,None])[0],"point_y":curve.get("point",[None,None])[1],**{key:ref[key] for key in columns if key in ref},"g2":curve["g2"][index],"valid_samples_min":curve["counts_min"][index],"valid_samples_max":curve["counts_max"][index],"pixel_count":curve["pixel_count"],"result_semantics":value["result_semantics"]})
     # Scientific exports use a plotting library; neither browser smoothing nor display LUTs.
     import matplotlib
     matplotlib.use("Agg")
@@ -119,8 +121,11 @@ def write_curves(directory,curves,refs,config):
         values = [np.nan if v is None else v for v in curve["g2"]]
         ax.plot(lags,values,label=curve["id"]+" · "+curve["estimator"],linewidth=1.5)
     ax.axvline(0,color="#8794a7",linestyle="--",linewidth=.8)
-    ax.axhline(1,color="#8794a7",linestyle="--",linewidth=.8)
+    if value["coefficient_reference"] is not None:
+        ax.axhline(value["coefficient_reference"],color="#8794a7",linestyle="--",linewidth=.8)
     ax.set(xlabel="Signed frame lag q (right i+q)",ylabel=r"$g^{(2)}$",title=f"Center frame {refs[0]['center_index']+1} · window {config['window']}")
+    if value["result_semantics"] == "processed_g2":
+        ax.set_ylabel("Processed g2")
     ax.grid(alpha=.15)
     if curves:
         ax.legend(fontsize=8)

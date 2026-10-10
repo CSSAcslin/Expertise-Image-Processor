@@ -42,6 +42,9 @@ class Photometry:
             values = self.lut[safe].copy()
         else:
             values = codes.astype(np.float64)
+            if self.config.curve != "identity":
+                from .workflow import intensity_curve
+                values = intensity_curve(values, self.config.curve, self.config.input_max, self.config.gamma)
         values -= self.config.black_left if side == "left" else self.config.black_right
         values[~valid] = np.nan
         return values

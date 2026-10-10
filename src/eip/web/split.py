@@ -17,6 +17,8 @@ from eip.modes.split_correlation.photometry import Photometry
 from eip.modes.split_correlation.runner import preflight,validate_source
 from eip.modes.split_correlation.storage import close_mapping,read_slice
 from eip.persistence import write_json
+from eip.web.records import display_name, automatic_name, split_summary, saved_split_summary
+from eip.modes.split_correlation.workflow import MODULES, build_geometry
 
 
 class SplitService:
@@ -53,8 +55,15 @@ class SplitService:
                 raise ValueError("中线需有两个位于图内的 X 坐标")
             threshold = finite(value.get("threshold",0),"黑边识别阈值")
             config = GeometryConfig.from_dict(propose_rectangles(event["pixels"],line,threshold))
-        mapping = Geometry(config,event["pixels"].shape)
-        photo = Photometry(PhotometryConfig.from_dict(value.get("photometry")))
+        if value.get("workflow_config"):
+            workflow = CorrelationConfig.from_dict(value["workflow_config"])
+            if workflow.geometry != config:
+                raise ValueError("预览流程与分幅参数不一致，请更新预览")
+            mapping = build_geometry(workflow,event["pixels"].shape)
+            photo = Photometry(workflow.photometry)
+        else:
+            mapping = Geometry(config,event["pixels"].shape)
+            photo = Photometry(PhotometryConfig.from_dict(value.get("photometry")))
         left,right = mapping.apply(event["pixels"],photo)
         common = np.concatenate((left[np.isfinite(left)],right[np.isfinite(right)]))
         low,high = (float(np.percentile(common,1)),float(np.percentile(common,99))) if common.size else (0,1)
@@ -89,11 +98,14 @@ class SplitService:
         if config.backend == "gpu" and not self.devices["gpu"]:
             raise ValueError(self.devices["reason"])
         identifier = uuid.uuid4().hex[:12]
+        name = display_name(value.get("name"), automatic_name(entry["meta"]["name"], {"statistics":"全源统计", "trial":"空间图试算", "run":"空间系数图", "curve":"τ 扫描曲线"}[task]))
         payload = {"id":identifier,"source":entry["source"],"revision":entry["meta"]["revision"],"config":config.to_dict(),"task":task,"output_dir":str(Path(value.get("output_dir") or self.workbench.workspace/"outputs").resolve()),"cache_root":str(self.workbench.workspace/".eip-cache"/"split"),"lut_sha256":estimate["lut_sha256"],"provenance":{"source_id":entry["id"],"lineage":entry.get("lineage",[])}}
+        payload["display_name"] = name
         if value.get("calibration_index") is not None:
             payload["provenance"]["calibration_reference"] = self._frame(entry,value["calibration_index"])["frame"]
         payload = json.loads(json.dumps(payload,allow_nan=False))
         job = {"id":identifier,"mode":"split","task":task,"name":entry["meta"]["name"],"source_ids":[entry["id"]],"source_count":1,"status":"queued","completed":0,"total":None,"logs":[],"payload":payload,"base_shape":entry["meta"]["shape"],"created":time.time(),"config_revision":value.get("config_revision")}
+        job.update(name=name, source_name=entry["meta"]["name"], summary=split_summary(config,task))
         self.workbench.enqueue(identifier,job)
         return {"id":identifier,"estimate":estimate}
 
@@ -108,7 +120,8 @@ class SplitService:
         return job,directory,run
 
     def result(self,identifier):
-        _,directory,run = self.completed(identifier)
+        job,directory,run = self.completed(identifier)
+        run.setdefault("display_name",job["name"])
         curves = json.loads((directory/"curves.json").read_text(encoding="utf-8")) if (directory/"curves.json").is_file() else None
         return {"id":identifier,"directory":str(directory),"run":run,"curve_result":curves}
 
@@ -129,7 +142,8 @@ class SplitService:
             raise ValueError("未知预处理检查图")
         channel = 0 if mode.endswith("left") else 1
         if mode.startswith("fluctuation"):
-            config = CorrelationConfig.from_dict(run["config"])
+            view_config = {**run["config"],"lag_list":[0],"lag_min":0,"lag_max":0,"lag_step":1}
+            config = CorrelationConfig.from_dict(view_config)
             if run.get("lut_snapshot"):
                 photo = Photometry(replace(config.photometry,lut_path=str(directory/"linearization_lut.npy")))
                 expected = run["lut_snapshot_sha256"]
@@ -140,7 +154,7 @@ class SplitService:
                 raise ValueError("线性化 LUT 已改变，无法用旧统计重建涨落；请重新计算")
             entry = {"source":run["source"],"meta":run["data_spec"]}
             event = self._frame(entry,value.get("index",0))
-            pair = Geometry(config.geometry,event["pixels"].shape).apply(event["pixels"],photo)
+            pair = build_geometry(config,event["pixels"].shape).apply(event["pixels"],photo)
             mean = np.load(directory/"mean.npy",allow_pickle=False)[channel]
             pixels = (pair[channel]-mean)/run["statistics"]["scales"][channel]
             finite_pixels = pixels[np.isfinite(pixels)]
@@ -182,5 +196,7 @@ class SplitService:
                     raise ValueError("运行标识与已有输出冲突")
                 return {"id":identifier}
         job = {"id":identifier,"mode":"split","task":run["task"],"name":Path(run["source"]["path"]).name,"source_ids":[run.get("provenance",{}).get("source_id")],"source_count":1,"status":"succeeded","completed":1,"total":1,"logs":[],"directory":str(path.parent),"run":run,"created":path.stat().st_mtime,"payload":{}}
+        kind = {"statistics":"全源统计","curve":"τ 扫描曲线","trial":"空间图试算","run":"空间系数图"}[run["task"]]
+        job.update(name=run.get("display_name") or automatic_name(job["name"],kind,job["created"]),source_name=Path(run["source"]["path"]).name,summary=saved_split_summary(run["config"],run["task"]))
         self.workbench.enqueue(identifier,job,queue_job=False)
         return {"id":identifier}

@@ -27,6 +27,7 @@ from eip.processing import job_entry, statistics
 from eip.readers import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 from eip.modes.split_correlation.runner import split_job_entry
 from eip.web.split import SplitService
+from eip.web.records import display_name, automatic_name, saved_split_summary
 
 
 class PreviewBroker:
@@ -177,6 +178,25 @@ class Workbench:
                 self.register(spec["manifest"])
         self.sources = OrderedDict((entry["id"], entry) for entry in entries)
         self.jobs = OrderedDict((job["id"], job) for job in reversed(jobs))
+        # Old maintenance snapshots predate editable result names / summaries.
+        for job in self.jobs.values():
+            run = job.get("run",{})
+            source = run.get("source") or next(iter(run.get("spec",{}).get("sources",[])),{})
+            source_name = Path(source["path"]).name if source.get("path") else job["name"]
+            job.setdefault("source_name",source_name)
+            if not run.get("display_name") and job["name"] == source_name:
+                kind = {"statistics":"全源统计","curve":"τ 扫描曲线","trial":"空间图试算","run":"空间系数图"}.get(job.get("task"),"试算" if job["mode"]=="trial" else "处理结果")
+                job["name"] = automatic_name(source_name,kind,job["created"])
+            if run:
+                run.setdefault("display_name",job["name"])
+            if job["mode"] == "split" and run.get("config"):
+                job.setdefault("summary",saved_split_summary(run["config"],job["task"]))
+            elif run.get("spec"):
+                spec = run["spec"]
+                job.setdefault("summary",f"{len(spec.get('steps',[]))} 个步骤 · {spec.get('selection',{}).get('mode','全部')}")
+        for entry in self.sources.values():
+            if entry.get("run_id") in self.jobs and not entry.get("display_name"):
+                entry["display_name"] = self.jobs[entry["run_id"]]["name"]
         self.project_path = value["state"].get("project_path")
 
     def state(self):
@@ -323,10 +343,13 @@ class Workbench:
                 selection.roi.validate(tuple(entry["meta"]["shape"]))
         self.validate_steps(value["steps"])
         identifier = uuid.uuid4().hex[:12]
+        name = display_name(value.get("name"), automatic_name(entries[0]["meta"]["name"], "试算" if mode == "trial" else "处理结果"))
         payload = {"id": identifier, "mode": mode, "sources": [entry["source"] for entry in entries], "revisions": [entry["meta"]["revision"] for entry in entries], "steps": value["steps"], "selection": value["selection"], "output_dir": str(Path(value.get("output_dir") or self.workspace / "outputs").resolve()), "seed": 0, "config_revision": value.get("config_revision"), "display": value.get("result_display", value.get("display", {})), "provenance": [{"source_id": entry["id"], "lineage": entry.get("lineage", [])} for entry in entries]}
         payload = json.loads(json.dumps(payload, allow_nan=False))
         payload["input_kinds"] = [entry.get("result_kind", "image") for entry in entries]
         job = {"id": identifier, "mode": mode, "name": entries[0]["meta"]["name"], "source_ids": identifiers, "source_count": len(entries), "status": "queued", "completed": 0, "total": None, "logs": [], "payload": payload, "base_shape": entries[0]["meta"]["shape"][:2], "created": time.time()}
+        payload["display_name"] = name
+        job.update(name=name,source_name=entries[0]["meta"]["name"],summary=f"{sum(bool(s.get('enabled',True)) for s in value['steps'])} 个步骤 · {selection.mode}" )
         self.enqueue(identifier,job)
         return {"id": identifier}
 
@@ -352,6 +375,27 @@ class Workbench:
             if identifier not in self.jobs:
                 raise ValueError("任务记录不存在")
             return dict(self.jobs[identifier])
+
+    def rename_job(self, identifier, name):
+        name = display_name(name)
+        with self.lock:
+            if identifier not in self.jobs:
+                raise ValueError("任务记录不存在")
+            job = self.jobs[identifier]
+            job["name"] = name
+            job.setdefault("payload",{})["display_name"] = name
+            if job.get("run"):
+                job["run"]["display_name"] = name
+            if job.get("directory"):
+                path = Path(job["directory"])/"run.json"
+                if path.is_file():
+                    run = json.loads(path.read_text(encoding="utf-8"))
+                    run["display_name"] = name
+                    write_json(path,run)
+            for entry in self.sources.values():
+                if entry.get("run_id") == identifier:
+                    entry["display_name"] = name
+            return {"id":identifier,"name":name}
 
     def cancel(self, identifier):
         with self.lock:
@@ -419,6 +463,8 @@ class Workbench:
                 job.update(status=kind, error=event.get("message"), directory=event.get("directory"))
                 active["terminal"] = True
             elif kind == "split_completed":
+                event["run"]["display_name"] = job["name"]
+                write_json(Path(event["directory"])/"run.json",event["run"])
                 job.update(status="succeeded",run=event["run"],directory=event["directory"],result_available=True)
                 active["terminal"] = True
             elif kind == "trial":
@@ -427,6 +473,8 @@ class Workbench:
                 job.update(status="succeeded", completed=1, total=1, result_available=True)
                 active["terminal"] = True
             elif kind == "completed":
+                event["run"]["display_name"] = job["name"]
+                write_json(Path(event["directory"])/"run.json",event["run"])
                 job.update(status=event["run"]["status"], run=event["run"], directory=event["directory"], result_available=False)
                 active["terminal"] = True
                 for position, item in enumerate(event["run"]["results"]):
@@ -435,7 +483,7 @@ class Workbench:
                     path = Path(event["directory"]) / item["output_directory"]
                     # Result readers retain CSV timestamp mappings.
                     try:
-                        self.open(asdict(SourceSpec(str(path), "sequence")), role="result", input_id=job["source_ids"][position], origin=item["origin"], base_shape=item["data_spec"]["shape"][:2], result_kind=item["result_kind"], run_id=job["id"])
+                        self.open(asdict(SourceSpec(str(path), "sequence")), role="result", input_id=job["source_ids"][position], origin=item["origin"], base_shape=item["data_spec"]["shape"][:2], result_kind=item["result_kind"], run_id=job["id"],display_name=job["name"])
                     except Exception as error:
                         job["logs"].append(f"输出已保存，但自动预览失败：{error}")
 

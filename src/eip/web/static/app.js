@@ -3,6 +3,7 @@ import { Viewer } from "./viewer.js";
 import { FileBrowser } from "./file-browser.js";
 import { validROI, moveROI } from "./geometry.js";
 import { SplitController } from "./split.js";
+import { detailHTML, bindRename } from "./job-detail.js";
 
 const $ = (id) => document.getElementById(id);
 const escape = (value) =>
@@ -302,13 +303,15 @@ function updateSources() {
   const inputs = sources.filter((s) => s.role === "input"),
     results = sources.filter((s) => s.role === "result");
   $("source-count").textContent = inputs.length;
-  $("result-count").textContent = results.length;
+  const splitResults=jobs.filter(j=>j.mode==="split"&&j.status==="succeeded");
+  $("result-count").textContent = results.length+splitResults.length;
   const card = (s) =>
     `<div class="source-card ${s.id === active?.id || s.id === formalResult?.id ? "selected" : ""}" tabindex="0" role="button" data-source="${s.id}" aria-label="预览 ${escape(s.display_name || s.meta.name)}"><img src="${s.thumbnail}" alt=""><div class="source-copy"><strong title="${escape(s.source.path)}">${escape(s.display_name || s.meta.name)}</strong><span class="source-kind">${s.role === "result" ? "处理结果" : s.lineage?.length ? "派生输入 · 阶段 " + (s.lineage.length + 1) : s.meta.kind === "video" ? "视频" : s.meta.kind === "sequence" ? "图像序列" : "图像"}</span><small>${s.meta.shape[1]} × ${s.meta.shape[0]} · ${escape(s.meta.dtype)}</small><button class="text-button source-info" data-info="${s.id}">属性 / 来源</button></div><button class="icon-button source-remove" data-remove="${s.id}" aria-label="移除 ${escape(s.display_name || s.meta.name)}">${icon("close")}</button></div>`;
   $("source-list").innerHTML = inputs.length
     ? inputs.map(card).join("")
     : '<div class="library-empty">导入图像、视频<br>或图像序列目录</div>';
-  $("result-list").innerHTML = results.map(card).join("");
+  $("result-list").innerHTML = results.map(card).join("")+splitResults.map(j=>`<div class="split-result-card ${split.resultId===j.id?"selected":""}" data-split-result="${j.id}" tabindex="0" role="button" aria-label="打开处理结果 ${escape(j.name)}"><strong>${escape(j.name)}</strong><span class="source-kind">${({statistics:"全源统计",trial:"空间图试算",curve:"τ 扫描曲线",run:"空间系数图"}[j.task])}</span><small>${escape(j.summary||j.source_name||"")}</small><small>${new Date(j.created*1000).toLocaleString()} · ${escape(j.id.slice(0,6))}</small></div>`).join("");
+  document.querySelectorAll("[data-split-result]").forEach(el=>{el.onclick=safe(async()=>{await setAnalysisMode("split_correlation");await split.loadResult(el.dataset.splitResult);});el.onkeydown=e=>{if(e.key==="Enter")el.click();};});
   document.querySelectorAll("[data-source]").forEach((el) => {
     el.onclick = safe(() => selectSource(el.dataset.source));
     el.onkeydown = (e) => {
@@ -863,6 +866,7 @@ async function submit(mode) {
   const currentSignature = signature(),
     response = await api("jobs", {
       mode,
+      name:$("job-name").value.trim()||null,
       source_ids:
         !current && $("batch").checked
           ? sources.filter((s) => s.role === "input").map((s) => s.id)
@@ -891,6 +895,7 @@ const statusText = {
 async function pollJobs(initial = false) {
   const list = await api("jobs");
   jobs = list;
+  updateSources();
   split.updateJobs(list);
   $("job-count").textContent = list.length;
   $("queue-note").textContent = list.some((j) => j.status === "running")
@@ -900,7 +905,7 @@ async function pollJobs(initial = false) {
     ? list
         .map(
           (j) =>
-            `<div class="job-row"><span class="job-kind">${j.mode==="split"?({statistics:"全源统计",trial:"窗口关联",curve:"τ 曲线",run:"时序关联"}[j.task]||"分幅关联"):j.mode === "trial" ? "帧试算" : "正式运行"}</span><span class="job-name" title="${escape(j.progress_name||j.name)}">${escape(j.name)}${j.source_count > 1 ? " · " + j.source_count + " 个来源" : ""}${j.mode==="split"&&j.status==="running"?" · "+escape(j.progress_name||"准备"):""}</span><span class="job-status ${j.status}">${statusText[j.status] || escape(j.status)}</span><span class="job-progress">${j.completed}${j.total ? " / " + j.total : " 帧"}</span>${["running", "queued", "cancelling"].includes(j.status) ? `<button data-cancel="${j.id}" class="quiet">取消</button>` : ""}<button data-detail="${j.id}" class="quiet">详情</button></div>`,
+            `<div class="job-row"><span class="job-kind">${j.mode==="split"?({statistics:"全源统计",trial:"窗口关联",curve:"τ 曲线",run:"时序关联"}[j.task]||"分幅关联"):j.mode === "trial" ? "帧试算" : "正式运行"}</span><span class="job-name" title="${escape(j.progress_name||j.name)}">${escape(j.name)}<small>${escape(j.summary||j.source_name||"")}</small>${j.source_count > 1 ? " · " + j.source_count + " 个来源" : ""}${j.mode==="split"&&j.status==="running"?" · "+escape(j.progress_name||"准备"):""}</span><span class="job-status ${j.status}">${statusText[j.status] || escape(j.status)}</span><span class="job-progress">${j.completed}${j.total ? " / " + j.total : " 帧"}</span>${["running", "queued", "cancelling"].includes(j.status) ? `<button data-cancel="${j.id}" class="quiet">取消</button>` : ""}<button data-detail="${j.id}" class="quiet">详情</button></div>`,
         )
         .join("")
     : '<div class="task-empty">试算和正式运行的进度、结果及日志会显示在这里。</div>';
@@ -965,7 +970,7 @@ async function jobDetail(id) {
   if(job.mode==="split") return split.jobDetail(job);
   $("job-dialog").showModal();
   const parts = [
-    `<p>${escape(job.name)} · ${statusText[job.status]} · ${job.completed} 帧</p>`,
+    detailHTML(job),
   ];
   if (job.error) parts.push(`<pre>${escape(job.error)}</pre>`);
   if (job.result)
@@ -986,6 +991,7 @@ async function jobDetail(id) {
       `<div class="downloads"><button data-download="manifest" class="quiet">运行记录 JSON</button>${(job.run?.results || []).map((r, i) => (r.status === "succeeded" ? `<button data-download="csv" data-index="${i}" class="quiet">来源 ${i + 1} CSV</button><button data-download="image" data-index="${i}" class="quiet">来源 ${i + 1} 首帧 TIFF</button>` : "")).join("")}</div>`,
     );
   $("job-detail").innerHTML = parts.join("");
+  bindRename(job,async()=>{await pollJobs();await jobDetail(id);},toast);
   $("job-detail")
     .querySelectorAll("[data-download]")
     .forEach(
@@ -1160,6 +1166,7 @@ function projectView() {
   return {
     analysis_mode:$("analysis-mode").value,
     split_mode:split.serialize(),
+    web_job_name:$("job-name").value,
     steps,
     output_dir: $("output-dir").value,
     active_source: active?.id,
@@ -1182,6 +1189,7 @@ function projectView() {
 }
 async function restoreProjectOptions(view) {
   split.restore(view.split_mode);
+  $("job-name").value=view.web_job_name||"";
   await setAnalysisMode(view.analysis_mode==="split_correlation"?"split_correlation":"general");
   if (["current", "all", "range"].includes(view.web_scope))
     $("scope").value = view.web_scope;
@@ -1275,6 +1283,7 @@ $("save-project").onclick = safe(() => openDialog("save"));
 $("plugin").onclick = safe(() => openDialog("plugin"));
 $("choose-output").onclick = safe(() => openDialog("output"));
 $("dialog-close").onclick = () => $("file-dialog").close();
+$("job-name").oninput=scheduleDraft;
 $("job-close").onclick = () => $("job-dialog").close();
 $("source-close").onclick = () => $("source-dialog").close();
 $("promote-result").onclick = safe(promoteResult);

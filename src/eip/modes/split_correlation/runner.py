@@ -19,6 +19,7 @@ from eip.modes.split_correlation.backend import Backend
 from eip.modes.split_correlation.config import CorrelationConfig
 from eip.modes.split_correlation.correlation import PairCache, RollingMoments, correlate_stream
 from eip.modes.split_correlation.geometry import Geometry
+from eip.modes.split_correlation.workflow import build_geometry, output_semantics
 from eip.modes.split_correlation.photometry import GlobalStatistics, Photometry
 from eip.modes.split_correlation.storage import ResultStore, clean_number, close_mapping, window_ref, write_curves
 from eip.persistence import write_json
@@ -58,9 +59,16 @@ def preflight(meta,config,task):
     if task not in {"trial","curve","run","statistics"}:
         raise ValueError("未知分幅任务类型")
     validate_source(meta)
-    geometry = Geometry(config.geometry,tuple(meta["shape"]))
+    geometry = build_geometry(config,tuple(meta["shape"]))
     region = target_region(config,geometry,task)
     photo = Photometry(config.photometry)
+    if task == "curve" and config.workflow:
+        after = False
+        for node in config.workflow:
+            if node.get("enabled", True):
+                if after and node["algorithm"] == "gaussian":
+                    raise ValueError("τ 曲线任务的空间平滑需放在关联模块之前；系数图允许关联后的空间平滑")
+                after |= node["algorithm"] == "correlation"
     plan = config.plan(meta["frame_count"],single=task in {"trial","curve"}) if task != "statistics" else None
     pixels = region.width*region.height
     working = int(np.prod(geometry.shape))*160+int(np.prod(meta["shape"]))*16+pixels*64
@@ -155,7 +163,7 @@ def curve_analysis(cache,baseline,config,plan,backend,check,progress):
     point_values = {c["id"]:{} for c in curves}
     def report(done,total):
         progress("固定中心：点 / ROI 延迟扫描",done,total)
-    for _,qi,_,_,values,n in correlate_stream(cache,baseline,config,plan,backend,check,report):
+    for _,qi,_,_,values,n in correlate_stream(cache,baseline,config,plan,backend,check,report,inner_progress=progress):
         common &= np.isfinite(values)
         for c in curves:
             x,y = c["point"]
@@ -168,7 +176,7 @@ def curve_analysis(cache,baseline,config,plan,backend,check,progress):
         area = _new_curve("roi","ROI 逐像素平均","pixel_mean",pixel_count=int(common.sum()),roi=asdict(config.roi),original_pixel_count=region.width*region.height)
         by_lag = {}
         # A second bounded pass uses the same spatial mask at every signed lag.
-        for _,qi,_,_,values,n in correlate_stream(cache,baseline,config,plan,backend,check,lambda d,t:progress("ROI 共同有效像素聚合",d,t)):
+        for _,qi,_,_,values,n in correlate_stream(cache,baseline,config,plan,backend,check,lambda d,t:progress("ROI 共同有效像素聚合",d,t),inner_progress=progress):
             by_lag[qi] = (float(np.mean(values[common])) if common.any() else None,int(n[common].min()) if common.any() else 0,int(n[common].max()) if common.any() else 0)
         for qi in range(len(plan["lags"])):
             _append(area,*by_lag[qi])
@@ -198,6 +206,8 @@ def curve_analysis(cache,baseline,config,plan,backend,check,progress):
                     right = cache.get(i+q)[0][1][mask].sum()
                     m.add(left,right)
                 value,n = m.result()
+                if hasattr(cache.geometry, "postprocess"):
+                    value = cache.geometry.postprocess(value)
                 _append(area,value,n,n)
             else:
                 _append(area,None,0,0)
@@ -222,9 +232,11 @@ def split_job_entry(payload,events,cancel):
             emit({"type":"progress","name":name,"completed":done,"total":total,"source":0})
             last_progress[0] = now
     run = {"schema_version":1,"mode":"split_correlation","mode_version":MODE_VERSION,"app_version":__version__,"run_id":payload["id"],"task":payload["task"],"status":"running","created_at":datetime.now(timezone.utc).isoformat(),"results":[],"source":payload["source"],"source_revision":payload["revision"],"provenance":payload.get("provenance",{}),"config":payload["config"]}
+    run["display_name"] = payload.get("display_name",payload["id"])
     try:
         check()
         config = CorrelationConfig.from_dict(payload["config"])
+        run.update(output_semantics(config.workflow))
         source = SourceSpec(**payload["source"])
         reader = open_source(source)
         if reader.meta.revision != payload["revision"]:
@@ -232,7 +244,7 @@ def split_job_entry(payload,events,cancel):
         if hasattr(reader,"_budget"):
             reader._budget = max(1,config.memory_mb*1024**2//10)
         estimate = preflight(asdict(reader.meta),config,payload["task"])
-        geometry,photo = Geometry(config.geometry,reader.meta.shape),Photometry(config.photometry)
+        geometry,photo = build_geometry(config,reader.meta.shape),Photometry(config.photometry)
         if photo.record["lut_sha256"] != payload.get("lut_sha256"):
             raise ValueError("线性化 LUT 在排队期间发生变化，请重新提交")
         region = target_region(config,geometry,payload["task"])
@@ -281,7 +293,7 @@ def split_job_entry(payload,events,cancel):
                 with csv_path.open("w",encoding="utf-8-sig",newline="") as file:
                     writer = csv.DictWriter(file,fieldnames=["output_time_index","lag_index",*columns])
                     writer.writeheader()
-                    for ti,qi,center,lag,values,n in correlate_stream(cache,baseline,config,plan,backend,check,lambda d,t:progress("逐像素正负延迟关联",d,t)):
+                    for ti,qi,center,lag,values,n in correlate_stream(cache,baseline,config,plan,backend,check,lambda d,t:progress("逐像素正负延迟关联",d,t),inner_progress=progress):
                         store.write(ti,qi,values,n)
                         writer.writerow({"output_time_index":ti,"lag_index":qi,**window_ref(center,lag,config.window,timestamps,numbers)})
                 store.close()

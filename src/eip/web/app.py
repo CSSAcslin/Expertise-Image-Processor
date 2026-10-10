@@ -116,8 +116,21 @@ def create_app(workspace: Path | None = None, restore_session: Path | None = Non
     @app.get("/api/jobs/{identifier}")
     def job(identifier: str):
         result = workbench().job(identifier)
-        result.pop("payload", None)
+        run = result.get("run",{})
+        payload = result.pop("payload", {}) or run.get("spec",{})
+        result["parameters"] = run.get("config") or payload.get("config") or {key: payload[key] for key in ("steps", "selection", "seed", "input_kinds") if key in payload}
+        source = payload.get("source") or run.get("source")
+        result["source_specs"] = [source] if source else payload.get("sources", [])
         return result
+
+    @app.post("/api/jobs/{identifier}/rename")
+    def rename_job(identifier: str, value: dict):
+        return workbench().rename_job(identifier,value.get("name"))
+
+    @app.get("/api/split/modules")
+    def split_modules():
+        from eip.modes.split_correlation.workflow import MODULES
+        return MODULES
 
     @app.post("/api/jobs/{identifier}/cancel")
     def cancel(identifier: str):
@@ -193,7 +206,7 @@ def create_app(workspace: Path | None = None, restore_session: Path | None = Non
                 raise ValueError("曲线 / 统计任务没有系数图")
             pixels,_,ref,_ = read_slice(directory,time_index,lag_index)
             buffer = io.BytesIO()
-            tifffile.imwrite(buffer,pixels,photometric="minisblack",metadata={"axes":"YX","window_ref":ref,"run_id":identifier,"geometry":run["geometry"],"analysis_region":run["analysis_region"]})
+            tifffile.imwrite(buffer,pixels,photometric="minisblack",metadata={"axes":"YX","window_ref":ref,"run_id":identifier,"display_name":run.get("display_name",identifier),"geometry":run["geometry"],"analysis_region":run["analysis_region"],"result_semantics":run.get("result_semantics","g2"),"workflow":run["config"].get("workflow",[])})
             return Response(buffer.getvalue(),media_type="image/tiff",headers={"Content-Disposition":f'attachment; filename="{identifier}-t{time_index}-q{lag_index}.tif"'})
         if file not in names or not (directory/names[file]).is_file():
             raise ValueError("该任务没有所选导出内容")

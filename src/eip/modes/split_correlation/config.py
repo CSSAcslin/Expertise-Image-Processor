@@ -56,6 +56,9 @@ class PhotometryConfig:
     saturation_code: float | None = None
     normalization: str = "fixed_rms"
     input_semantics: str = "sensor_codes"
+    curve: str = "identity"
+    input_max: float = 1023.0
+    gamma: float = 1.0
 
     @classmethod
     def from_dict(cls, value):
@@ -70,6 +73,12 @@ class PhotometryConfig:
             raise ValueError("仅支持全源固定 RMS 尺度或保留校准强度")
         if result.input_semantics not in {"sensor_codes","linear_intensity"}:
             raise ValueError("需明确输入是保存码值还是已确认的线性强度")
+        if result.curve not in {"identity", "linear", "sqrt", "square", "gamma", "log"}:
+            raise ValueError("未知强度预设曲线")
+        if finite(result.input_max, "固定输入尺度") <= 0 or finite(result.gamma, "曲线指数") <= 0:
+            raise ValueError("固定输入尺度和曲线指数需大于 0")
+        if result.lut_path and result.curve != "identity":
+            raise ValueError("自定义 LUT 与内置曲线只选择一种")
         return result
 
 
@@ -94,10 +103,16 @@ class CorrelationConfig:
     memory_mb: int = 256
     backend: str = "cpu"
     output_dtype: str = "float32"
+    workflow: tuple[dict, ...] = ()
 
     @classmethod
     def from_dict(cls, value):
         value = dict(value)
+        if value.get("workflow"):
+            from .workflow import resolve_workflow
+            resolve_workflow(value)
+        else:
+            value["workflow"] = ()
         value["geometry"] = GeometryConfig.from_dict(value["geometry"])
         value["photometry"] = PhotometryConfig.from_dict(value.get("photometry"))
         if value.get("roi") is not None:
@@ -157,7 +172,10 @@ class CorrelationConfig:
                 raise ValueError("帧延迟超出支持范围")
         if self.lag_list is None and self.lag_min <= 0 <= self.lag_max:
             values.append(0)
-        return tuple(sorted(set(values)))
+        values = tuple(sorted(set(values)))
+        if len(values)>4096:
+            raise ValueError("包含零延迟后的列表超过 4096 个值，请增大延迟扫描步长")
+        return values
 
     def plan(self, count, *, single=False):
         integer(count, "来源帧数", 1)
