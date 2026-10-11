@@ -46,6 +46,8 @@ def create_app(workspace: Path | None = None, restore_session: Path | None = Non
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; frame-ancestors 'none'"
+        if request.url.path == "/" or request.url.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "no-cache"
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
         return response
@@ -129,8 +131,13 @@ def create_app(workspace: Path | None = None, restore_session: Path | None = Non
 
     @app.get("/api/split/modules")
     def split_modules():
-        from eip.modes.split_correlation.workflow import MODULES
-        return MODULES
+        from eip.module_registry import catalog
+        return catalog(workbench().algorithms.values())
+
+    @app.get("/api/modules")
+    def modules():
+        from eip.module_registry import catalog
+        return catalog(workbench().algorithms.values())
 
     @app.post("/api/jobs/{identifier}/cancel")
     def cancel(identifier: str):

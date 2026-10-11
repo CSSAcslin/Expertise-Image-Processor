@@ -103,16 +103,17 @@ class CorrelationConfig:
     memory_mb: int = 256
     backend: str = "cpu"
     output_dtype: str = "float32"
-    workflow: tuple[dict, ...] = ()
+    workflow: tuple[dict, ...] | None = None
+    workflow_version: int = 1
 
     @classmethod
     def from_dict(cls, value):
         value = dict(value)
-        if value.get("workflow"):
+        if value.get("workflow") or (value.get("workflow_version",1)>=2 and value.get("workflow") is not None):
             from .workflow import resolve_workflow
             resolve_workflow(value)
         else:
-            value["workflow"] = ()
+            value["workflow"] = None
         value["geometry"] = GeometryConfig.from_dict(value["geometry"])
         value["photometry"] = PhotometryConfig.from_dict(value.get("photometry"))
         if value.get("roi") is not None:

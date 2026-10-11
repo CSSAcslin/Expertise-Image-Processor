@@ -12,7 +12,8 @@ import numpy as np
 import tifffile
 
 from eip import __version__
-from eip.algorithms import Cancelled, Pipeline, RunContext, sha256_file
+from eip.algorithms import Cancelled, RunContext, sha256_file
+from eip.module_engine import ModulePipeline as Pipeline
 from eip.domain import StepSpec, selection_from_dict, source_from_dict
 from eip.persistence import write_json
 from eip.readers import open_source
@@ -42,7 +43,7 @@ def process_job(payload: dict, emit, cancelled):
             output = pipeline.execute(frame.pixels)
             if selection.roi:
                 output = selection.roi.crop(output)
-            emit({"type": "trial", "pixels": output, "frame": asdict(frame.ref), "origin": [selection.roi.x, selection.roi.y] if selection.roi else [0, 0], "kind": pipeline.output_kind, "statistics": statistics(output), "revision": payload.get("config_revision")})
+            emit({"type": "trial", "pixels": output, "frame": asdict(frame.ref), "origin": [selection.roi.x, selection.roi.y] if selection.roi else [0, 0], "base_shape":pipeline.engine.output_shape[:2], "kind": pipeline.output_kind, "statistics": statistics(output), "revision": payload.get("config_revision"), "modules":pipeline.record})
         finally:
             if reader:
                 reader.close()
@@ -62,6 +63,7 @@ def process_job(payload: dict, emit, cancelled):
         pipeline.close()
         raise
     run = {"schema_version": 1, "run_id": run_id, "status": "running", "started_at": datetime.now(timezone.utc).isoformat(), "app_version": __version__, "python": platform.python_version(), "numpy": np.__version__, "tifffile": tifffile.__version__, "execution_backend": "local_python_process", "builtin_device": "CPU", "external_plugin_device": "not_reported" if any(step.manifest for step in steps if step.enabled) else None, "seed": context.seed, "fingerprint_kind": "path_size_mtime_ns", "content_sha256": None, "builtin_code_sha256": sha256_file(Path(__file__).with_name("algorithms.py")), "spec": payload, "results": [], "warnings": ["来源记录为文件属性指纹，不是完整内容哈希", "ROI 采用全帧处理后裁剪输出；非有限值统计只计入有限像素", "外部插件的额外依赖、设备及随机行为由插件声明；当前运行记录不推断这些信息"]}
+    run["module_code_sha256"] = {name:sha256_file(Path(__file__).with_name(name)) for name in ("algorithms.py","module_ops.py","module_engine.py","module_registry.py")}
     write_json(staging / "run.json", run)
     try:
         for position, source_value in enumerate(payload["sources"]):
@@ -78,17 +80,19 @@ def process_job(payload: dict, emit, cancelled):
                 if reader.meta.revision != payload["revisions"][position]:
                     raise ValueError("来源发生变化，请重新打开后运行")
                 item["data_spec"] = asdict(reader.meta)
-                if selection.roi:
-                    selection.roi.validate(reader.meta.shape)
                 total = 1 if selection.mode == "current" else (int(selection.end - selection.start) if selection.mode == "range" and reader.meta.kind != "video" else reader.meta.frame_count if selection.mode == "all" else None)
+                if payload.get("index_selection"):
+                    total = payload["index_selection"][1]-payload["index_selection"][0]
                 rows_path = out_dir / "measurements.csv"
                 with rows_path.open("w", encoding="utf-8-sig", newline="") as file:
                     fields = ["output_index", "source_frame", "time_seconds", "pts", "source_frame_number", "trigger_time_seconds", "dtype", "min", "max", "mean", "finite_count", "invalid_count"]
                     writer = csv.DictWriter(file, fieldnames=fields)
                     writer.writeheader()
-                    for ordinal, frame in enumerate(reader.iter_frames(selection)):
+                    frames = (reader.read_frame(i) for i in range(*payload["index_selection"])) if payload.get("index_selection") else reader.iter_frames(selection)
+                    for ordinal, frame in enumerate(frames):
                         context.check_cancelled()
                         output = pipeline.execute(frame.pixels)
+                        item.update(base_shape=list(pipeline.engine.output_shape[:2]),modules=pipeline.record)
                         if selection.roi:
                             output = selection.roi.crop(output)
                         context.check_cancelled()

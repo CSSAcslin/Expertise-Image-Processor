@@ -12,14 +12,14 @@ import uuid
 import numpy as np
 
 from eip import __version__
-from eip.algorithms import sha256_file
+from eip.algorithms import sha256_file, RunContext, Cancelled
 from eip.domain import ROI, SourceSpec
 from eip.modes.split_correlation import MODE_VERSION
 from eip.modes.split_correlation.backend import Backend
 from eip.modes.split_correlation.config import CorrelationConfig
 from eip.modes.split_correlation.correlation import PairCache, RollingMoments, correlate_stream
 from eip.modes.split_correlation.geometry import Geometry
-from eip.modes.split_correlation.workflow import build_geometry, output_semantics
+from eip.modes.split_correlation.workflow import build_geometry, output_semantics, has_module
 from eip.modes.split_correlation.photometry import GlobalStatistics, Photometry
 from eip.modes.split_correlation.storage import ResultStore, clean_number, close_mapping, window_ref, write_curves
 from eip.persistence import write_json
@@ -59,6 +59,8 @@ def preflight(meta,config,task):
     if task not in {"trial","curve","run","statistics"}:
         raise ValueError("未知分幅任务类型")
     validate_source(meta)
+    if not has_module(config,"statistics" if task=="statistics" else "correlation"):
+        raise ValueError("当前流程没有全源统计模块" if task=="statistics" else "当前流程没有二阶关联模块")
     geometry = build_geometry(config,tuple(meta["shape"]))
     region = target_region(config,geometry,task)
     photo = Photometry(config.photometry)
@@ -66,7 +68,7 @@ def preflight(meta,config,task):
         after = False
         for node in config.workflow:
             if node.get("enabled", True):
-                if after and node["algorithm"] == "gaussian":
+                if after and (node["algorithm"] in {"gaussian","box_blur"} or node.get("manifest")):
                     raise ValueError("τ 曲线任务的空间平滑需放在关联模块之前；系数图允许关联后的空间平滑")
                 after |= node["algorithm"] == "correlation"
     plan = config.plan(meta["frame_count"],single=task in {"trial","curve"}) if task != "statistics" else None
@@ -80,6 +82,7 @@ def preflight(meta,config,task):
     output_bytes = 0 if task in {"curve","statistics"} else plan["window_count"]*plan["lag_count"]*pixels*(np.dtype(config.output_dtype).itemsize+4)
     estimate = {"task":task,"reference_shape":list(geometry.shape),"region":asdict(region),"output_shape":None if task in {"curve","statistics"} else [plan["window_count"],plan["lag_count"],region.height,region.width],"output_bytes":output_bytes,"working_array_bytes":working,"memory_budget_bytes":config.memory_mb*1024**2,"full_source_frames":meta["frame_count"],"background_scope":"all_source_frames","numeric_semantics":photo.record["numeric_semantics"],"lut_sha256":photo.record["lut_sha256"],"geometry":geometry.record,"lags":list(config.lags()),"notes":["固定 RMS 是每路一个全源时间涨落尺度，仅作乘性缩放；标准 g² 不因此改变", "保存码值的物理线性关系需单独确认；不自动套用 CINE 显示伽马", "负延迟取较早右路帧，正延迟取较晚右路帧"]}
     estimate.update(frame_cache_budget_bytes=frame_budget,moment_budget_bytes=moment_budget,reader_cache_budget_bytes=config.memory_mb*1024**2//10)
+    estimate.update(module_fingerprints=getattr(geometry,"calibrations",{}),full_source_frames=meta["frame_count"] if has_module(config,"statistics") else 0,background_scope="all_source_frames" if has_module(config,"statistics") else "none")
     if plan:
         estimate["window_count"] = plan["window_count"]
         estimate["first_center"] = plan["first_center"]
@@ -217,7 +220,7 @@ def curve_analysis(cache,baseline,config,plan,backend,check,progress):
 
 
 def split_job_entry(payload,events,cancel):
-    reader,store,backend,timestamps,numbers = None,None,None,None,None
+    reader,store,backend,timestamps,numbers,geometry = None,None,None,None,None,None
     destination = Path(payload["output_dir"])/f"split_{payload['id']}"
     staging = destination.with_name(destination.name+".partial")
     last_progress = [0.0]
@@ -245,6 +248,9 @@ def split_job_entry(payload,events,cancel):
             reader._budget = max(1,config.memory_mb*1024**2//10)
         estimate = preflight(asdict(reader.meta),config,payload["task"])
         geometry,photo = build_geometry(config,reader.meta.shape),Photometry(config.photometry)
+        geometry.context = RunContext(cancel.is_set, lambda message:emit({"type":"log","message":message}))
+        if "module_fingerprints" in payload and payload["module_fingerprints"]!=estimate["module_fingerprints"]:
+            raise ValueError("模块校准文件在排队期间已变化，请重新提交")
         if photo.record["lut_sha256"] != payload.get("lut_sha256"):
             raise ValueError("线性化 LUT 在排队期间发生变化，请重新提交")
         region = target_region(config,geometry,payload["task"])
@@ -258,15 +264,34 @@ def split_job_entry(payload,events,cancel):
         if photo.lut is not None:
             np.save(staging/"linearization_lut.npy",photo.lut)
             run.update(lut_snapshot="linearization_lut.npy",lut_snapshot_sha256=sha256_file(staging/"linearization_lut.npy"))
+        run["module_lut_snapshots"] = {}
+        for index,node in enumerate(config.workflow or ()):
+            path = node["parameters"].get("lut_path") if node["enabled"] and node["algorithm"]=="calibration" else None
+            if path:
+                name = f"module_lut_{index:02d}{Path(path).suffix.lower()}"
+                shutil.copyfile(path,staging/name)
+                expected = geometry.calibrations[node["id"]]["lut_sha256"]
+                if sha256_file(staging/name)!=expected:
+                    raise ValueError("模块 LUT 在保存快照期间已变化，请重新提交")
+                run["module_lut_snapshots"][node["id"]] = {"file":name,"sha256":expected}
         write_json(staging/"run.json",run)
         started = time.monotonic()
-        stats,cache_path,fit_record = fit_statistics(reader,source,geometry,photo,payload["cache_root"],check,progress)
-        run.update(statistics_cache=str(cache_path),statistics=fit_record)
-        for name in ("timestamps.npy","source_numbers.npy"):
-            shutil.copyfile(cache_path/name,staging/name)
-        np.save(staging/"mean.npy",stats["mean"])
-        np.save(staging/"variance.npy",stats["variance"])
-        np.save(staging/"mean_counts.npy",stats["count"])
+        if has_module(config,"statistics"):
+            stats,cache_path,fit_record = fit_statistics(reader,source,geometry,photo,payload["cache_root"],check,progress)
+            run.update(statistics_cache=str(cache_path),statistics=fit_record)
+            for name in ("timestamps.npy","source_numbers.npy"):
+                shutil.copyfile(cache_path/name,staging/name)
+            np.save(staging/"mean.npy",stats["mean"])
+            np.save(staging/"variance.npy",stats["variance"])
+            np.save(staging/"mean_counts.npy",stats["count"])
+        else:
+            # No hidden background computation after the statistics node is removed.
+            stats = {"mean":np.zeros((2,*geometry.shape)),"scales":np.ones(2)}
+            run["statistics"] = {"scope":"none","frames":0,"scales":[1.,1.],"normalization":"none"}
+            timestamps = np.lib.format.open_memmap(staging/"timestamps.npy",mode="w+",dtype=np.float64,shape=(reader.meta.frame_count,2))
+            numbers = np.lib.format.open_memmap(staging/"source_numbers.npy",mode="w+",dtype=np.int64,shape=(reader.meta.frame_count,))
+            timestamps[:] = np.nan
+            numbers[:] = np.iinfo(np.int64).min
         if payload["task"] != "statistics":
             backend = Backend(config.backend,config.memory_mb*1024**2)
             run.update(backend=backend.name,backend_fallback_reason=backend.reason)
@@ -275,8 +300,14 @@ def split_job_entry(payload,events,cancel):
             cache = PairCache(reader,geometry,photo,stats["scales"],region,estimate["frame_cache_budget_bytes"],check,moment_budget=estimate["moment_budget_bytes"])
             plan = config.plan(reader.meta.frame_count,single=payload["task"] in {"trial","curve"})
             run["centers"] = {"first":plan["first_center"],"last":plan["last_center"],"count":plan["window_count"],"stride":config.stride if payload["task"]=="run" else 1}
-            timestamps = np.load(staging/"timestamps.npy",mmap_mode="r",allow_pickle=False)
-            numbers = np.load(staging/"source_numbers.npy",mmap_mode="r",allow_pickle=False)
+            if timestamps is None:
+                timestamps = np.load(staging/"timestamps.npy",mmap_mode="r",allow_pickle=False)
+                numbers = np.load(staging/"source_numbers.npy",mmap_mode="r",allow_pickle=False)
+            else:
+                def record_ref(index,ref):
+                    timestamps[index] = [np.nan if ref.time is None else ref.time,np.nan if ref.trigger_time is None else ref.trigger_time]
+                    numbers[index] = np.iinfo(np.int64).min if ref.source_number is None else ref.source_number
+                cache.record_ref = record_ref
             if payload["task"] == "curve":
                 curves = curve_analysis(cache,baseline,config,plan,backend,check,progress)
                 refs = [window_ref(plan["centers"][0],lag,config.window,timestamps,numbers) for lag in plan["lags"]]
@@ -311,7 +342,7 @@ def split_job_entry(payload,events,cancel):
         write_json(staging/"run.json",run)
         staging.rename(destination)
         emit({"type":"split_completed","run":run,"directory":str(destination)})
-    except SplitCancelled:
+    except (SplitCancelled, Cancelled):
         run["status"] = "cancelled"
         if staging.is_dir():
             write_json(staging/"run.json",run)
@@ -330,3 +361,5 @@ def split_job_entry(payload,events,cancel):
             reader.close()
         if backend:
             backend.close()
+        if geometry and hasattr(geometry,"close"):
+            geometry.close()

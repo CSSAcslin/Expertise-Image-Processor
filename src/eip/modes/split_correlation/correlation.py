@@ -65,6 +65,8 @@ class PairCache:
             self.entries.move_to_end(index)
             return self.entries[index]
         frame = self.reader.read_frame(int(index))
+        if hasattr(self,"record_ref"):
+            self.record_ref(index,frame.ref)
         arrays = self.geometry.apply(frame.pixels,self.photometry)
         if self.roi:
             q = self.roi

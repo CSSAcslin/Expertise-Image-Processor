@@ -28,6 +28,7 @@ from eip.readers import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 from eip.modes.split_correlation.runner import split_job_entry
 from eip.web.split import SplitService
 from eip.web.records import display_name, automatic_name, saved_split_summary
+from eip.module_registry import catalog, normalize_nodes, temporal, output_shape
 
 
 class PreviewBroker:
@@ -201,7 +202,7 @@ class Workbench:
 
     def state(self):
         with self.lock:
-            return {"workspace": str(self.workspace), "output_dir": str(self.workspace / "outputs"), "project_path": self.project_path, "sources": list(self.sources.values()), "algorithms": [asdict(spec) for spec in self.algorithms.values()], "modes": ["general","split_correlation"], "split_devices": self.split.devices}
+            return {"workspace": str(self.workspace), "output_dir": str(self.workspace / "outputs"), "project_path": self.project_path, "sources": list(self.sources.values()), "algorithms": [asdict(spec) for spec in self.algorithms.values()], "modules":catalog(self.algorithms.values()), "modes": ["general","split_correlation"], "split_devices": self.split.devices}
 
     def open(self, value: dict, role="input", **extra):
         source = SourceSpec(**value)
@@ -242,6 +243,9 @@ class Workbench:
         if len(previous) >= 32:
             raise ValueError("当前来源链最多支持 32 个阶段")
         lineage = [*previous, {"run_id": run["run_id"], "manifest": str(manifest), "manifest_sha256": sha256_file(manifest), "parent_source_id": entry.get("input_id"), "parent_source": item["source"], "crop_origin": item["origin"], "parent_shape": item["data_spec"]["shape"], "output_directory": entry["source"]["path"], "timestamp_source": "run_record"}]
+        mappings = item.get("modules",{}).get("mappings",[])
+        if mappings:
+            lineage[-1].update(coordinate_space="module_output_grid",mappings=mappings,modules=item["modules"]["modules"])
         return self.open(entry["source"], role="input", identifier=f"input_{SourceSpec(**entry['source']).key}", display_name=f"派生 · {entry.get('display_name', entry['meta']['name'])}", result_kind=entry.get("result_kind", "image"), lineage=lineage, parent_result_id=identifier)
 
     def remove(self, identifier):
@@ -297,24 +301,19 @@ class Workbench:
 
     def register(self, path):
         spec = load_manifest(path)
-        if spec.id in {item.id for item in BUILTINS}:
+        if spec.id in catalog():
             raise ValueError("外部算法不能覆盖内置算法")
         with self.lock:
             self.algorithms[spec.id] = spec
         return asdict(spec)
 
     def validate_steps(self, values):
-        if len(values) > 32:
-            raise ValueError("处理链最多 32 步")
-        steps = [StepSpec(**item) for item in values]
-        for step in steps:
-            spec = self.algorithms.get(step.algorithm)
-            if spec is None:
-                raise ValueError("请先注册处理链中的算法")
-            if spec.manifest != step.manifest or spec.code_hash != step.code_hash or spec.version != step.version:
-                raise ValueError("算法版本已变化，请重新添加该步骤")
-            validate_parameters(spec, step.parameters)
-        return steps
+        nodes, state, kind = normalize_nodes(values)
+        registered = catalog(self.algorithms.values())
+        for node in nodes:
+            if node["algorithm"] not in registered or node.get("code_hash") != registered[node["algorithm"]]["code_hash"]:
+                raise ValueError("请先注册流程中的算法版本")
+        return [StepSpec(**item) for item in nodes]
 
     def submit(self, value):
         mode = value.get("mode", "trial")
@@ -326,6 +325,13 @@ class Workbench:
         entries = [self.get_source(identifier) for identifier in identifiers]
         if any(entry["role"] != "input" for entry in entries):
             raise ValueError("请明确选择输入数据，结果浏览不会替换输入")
+        steps = self.validate_steps(value["steps"])
+        for entry in entries:
+            normalize_nodes(value["steps"],input_kind=entry.get("result_kind","image"))
+        if temporal(value["steps"]):
+            if len(entries)!=1:
+                raise ValueError("时序关联流程目前需要单个来源")
+            return self.split.submit_modules(value,entries[0])
         selection = selection_from_dict(value["selection"])
         if mode == "trial" and (len(entries) != 1 or selection.mode != "current"):
             raise ValueError("精确试算需要单个来源的当前帧")
@@ -340,15 +346,24 @@ class Workbench:
                 raise ValueError("帧范围必须使用整数，不能将小数默认为帧号")
         if selection.roi:
             for entry in entries:
-                selection.roi.validate(tuple(entry["meta"]["shape"]))
-        self.validate_steps(value["steps"])
+                selection.roi.validate(output_shape(value["steps"],entry["meta"]["shape"]))
+        _, output_type, _ = normalize_nodes(value["steps"])
+        if output_type == "pair":
+            raise ValueError("流程输出为双路数据；请添加「选择幅面」或二阶关联模块")
         identifier = uuid.uuid4().hex[:12]
         name = display_name(value.get("name"), automatic_name(entries[0]["meta"]["name"], "试算" if mode == "trial" else "处理结果"))
         payload = {"id": identifier, "mode": mode, "sources": [entry["source"] for entry in entries], "revisions": [entry["meta"]["revision"] for entry in entries], "steps": value["steps"], "selection": value["selection"], "output_dir": str(Path(value.get("output_dir") or self.workspace / "outputs").resolve()), "seed": 0, "config_revision": value.get("config_revision"), "display": value.get("result_display", value.get("display", {})), "provenance": [{"source_id": entry["id"], "lineage": entry.get("lineage", [])} for entry in entries]}
+        payload["steps"] = [asdict(step) for step in steps]
         payload = json.loads(json.dumps(payload, allow_nan=False))
         payload["input_kinds"] = [entry.get("result_kind", "image") for entry in entries]
+        if value.get("index_selection") is not None:
+            bounds = value["index_selection"]
+            if not isinstance(bounds,list) or len(bounds)!=2 or any(type(i) is not int for i in bounds) or not 0<=bounds[0]<bounds[1] or any(bounds[1]>entry["meta"]["frame_count"] or (entry["meta"]["kind"]=="video" and not entry["meta"].get("frame_indexed")) for entry in entries):
+                raise ValueError("帧范围需为可精确定位来源内的整数半开区间")
+            payload["index_selection"] = bounds
         job = {"id": identifier, "mode": mode, "name": entries[0]["meta"]["name"], "source_ids": identifiers, "source_count": len(entries), "status": "queued", "completed": 0, "total": None, "logs": [], "payload": payload, "base_shape": entries[0]["meta"]["shape"][:2], "created": time.time()}
         payload["display_name"] = name
+        job["base_shape"] = output_shape(value["steps"],entries[0]["meta"]["shape"])
         job.update(name=name,source_name=entries[0]["meta"]["name"],summary=f"{sum(bool(s.get('enabled',True)) for s in value['steps'])} 个步骤 · {selection.mode}" )
         self.enqueue(identifier,job)
         return {"id": identifier}
@@ -468,7 +483,7 @@ class Workbench:
                 job.update(status="succeeded",run=event["run"],directory=event["directory"],result_available=True)
                 active["terminal"] = True
             elif kind == "trial":
-                token = self.frames.add(event["pixels"], event["frame"], event["origin"], job["base_shape"], event["kind"])
+                token = self.frames.add(event["pixels"], event["frame"], event["origin"], event.get("base_shape",job["base_shape"]), event["kind"])
                 job["result"] = self.frames.render(token, job["payload"].get("display"))
                 job.update(status="succeeded", completed=1, total=1, result_available=True)
                 active["terminal"] = True
@@ -483,7 +498,7 @@ class Workbench:
                     path = Path(event["directory"]) / item["output_directory"]
                     # Result readers retain CSV timestamp mappings.
                     try:
-                        self.open(asdict(SourceSpec(str(path), "sequence")), role="result", input_id=job["source_ids"][position], origin=item["origin"], base_shape=item["data_spec"]["shape"][:2], result_kind=item["result_kind"], run_id=job["id"],display_name=job["name"])
+                        self.open(asdict(SourceSpec(str(path), "sequence")), role="result", input_id=job["source_ids"][position], origin=item["origin"], base_shape=item.get("base_shape",item["data_spec"]["shape"][:2]), result_kind=item["result_kind"], run_id=job["id"],display_name=job["name"])
                     except Exception as error:
                         job["logs"].append(f"输出已保存，但自动预览失败：{error}")
 

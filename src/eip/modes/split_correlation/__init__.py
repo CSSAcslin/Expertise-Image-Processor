@@ -1,3 +1,3 @@
 """Split-frame intensity correlation, independent of single-frame plugins."""
 
-MODE_VERSION = "1.1"
+MODE_VERSION = "2.0"

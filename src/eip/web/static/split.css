@@ -1,4 +1,20 @@
 .mode-selector {display:flex;align-items:center;gap:7px;font-size:11px;color:var(--dim)}
+.split-layout-tools {display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.split-layout-tools select {width:116px;font-size:11px}
+.split-preview-error {padding:7px 10px;background:#453221;color:#efc79d;border-bottom:1px solid #6e5437;font-size:11px;line-height:1.5}
+.module-library {border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:10px}
+.module-library h2 {font-size:15px;margin:0}.module-inspector {border-top:1px solid var(--line);margin-top:14px;padding-top:12px}
+.module-inspector section {padding:0!important;border:0!important}
+.module-inspector>h3 {color:var(--mint);margin:0 0 5px}
+.flow-type {color:#839eb4;font-size:10px;margin:4px 0 8px}
+.flow-node.selected {border-color:#629f90;background:#172b28}
+.flow-node-title strong {flex:1;min-width:0}.flow-node-title .text-button {padding:2px 5px}
+.flow-actions {flex-wrap:wrap}.flow-actions .flow-target {display:flex;align-items:center;gap:4px;margin-right:auto;font-size:10px}
+.flow-target select {font-size:10px;width:105px;padding:3px}
+.flow-actions button {font-size:10px}.flow-fields input,.flow-fields select {min-width:0;width:100%}
+.flow-fields label {min-width:0}.processing .flow-node {margin-bottom:8px}
+.split-parameters>details {margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+.split-parameters>details>summary {font-size:12px;color:#bbd5e2;margin-bottom:8px;cursor:pointer}
 .mode-selector select {width:148px;font-size:12px;padding:6px 9px}
 .workspace[data-analysis="split_correlation"] > .preview-workspace,
 .workspace[data-analysis="split_correlation"] > .processing {display:none}

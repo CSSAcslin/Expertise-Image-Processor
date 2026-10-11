@@ -38,7 +38,15 @@ def preview_entry(commands, results):
             else:
                 frame = reader.read_frame(command["index"])
             last_ref = frame.ref
-            results.put({"id": command["id"], "type": "frame", "action": action, "source": command["source"], "meta": asdict(reader.meta), "pixels": frame.pixels, "frame": asdict(frame.ref)})
+            event = {"id": command["id"], "type": "frame", "action": action, "source": command["source"], "meta": asdict(reader.meta), "pixels": frame.pixels, "frame": asdict(frame.ref)}
+            if "modules" in command:
+                from eip.module_engine import FrameModules
+                engine = FrameModules(command["modules"], frame.pixels.shape)
+                try:
+                    event.update(processed=engine.execute(frame.pixels), module_record=engine.record, output_kind=engine.output_kind)
+                finally:
+                    engine.close()
+            results.put(event)
         except StopIteration:
             results.put({"id": command["id"], "type": "eof"})
         except Exception as error:

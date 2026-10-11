@@ -41,8 +41,10 @@ def to_display(array: np.ndarray, settings: DisplaySettings) -> np.ndarray:
 
 def labels_to_display(array: np.ndarray) -> np.ndarray:
     """Discrete palette; IDs remain intact and do not pass through intensity LUTs."""
-    labels = array.astype(np.uint64)
+    invalid = ~np.isfinite(array)
+    labels = np.where(invalid,0,array).astype(np.uint64)
     channels = [((labels * factor + offset) % 191 + 64).astype(np.uint8) for factor, offset in [(53, 7), (97, 31), (131, 67)]]
     rgb = np.stack(channels, axis=-1)
     rgb[labels == 0] = 0
+    rgb[invalid] = [128,64,148]
     return np.ascontiguousarray(rgb)

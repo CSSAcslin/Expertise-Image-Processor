@@ -172,6 +172,27 @@ def main():
                     bounds = [page.locator(selector).bounding_box() for selector in ['#previous', '#timeline-note', '.seek-control', '#seek']]
                     assert all(b and b['x'] >= 0 and b['x'] + b['width'] <= width and b['y'] + b['height'] <= height for b in bounds), bounds
                     assert page.locator('#run').bounding_box()['y'] < height
+                page.set_viewport_size({'width':1440,'height':960})
+                page.locator('#analysis-mode').select_option('split_correlation')
+                expect(page.locator('#split-empty')).to_be_hidden()
+                page.locator('#split-flow-list [data-algorithm="correlation"] [data-edit]').click()
+                page.locator('#split-window').fill('4');page.locator('#split-window').dispatch_event('change')
+                expect(page.locator('#split-trial')).to_be_disabled()
+                page.locator('#split-view').select_option('raw')
+                index=min(len(times)-1,trigger_index+10)
+                page.locator('#split-center').fill(str(index+1));page.locator('#split-center').dispatch_event('change')
+                page.locator('#split-seek').click()
+                expect(page.locator('#split-view-caption')).to_contain_text(f'原始帧 {index+1}')
+                actual=frames[-1]
+                assert actual['ref']['index']==index and actual['ref']['time']==times[index]
+                expected_raw=decode(index)
+                assert api.get(f'/api/frames/{actual["token"]}/pixel?x=17&y=31').json()['value']==int(expected_raw[31,17])
+                page.wait_for_timeout(500)
+                page.reload()
+                expect(page.locator('#analysis-mode')).to_have_value('split_correlation')
+                expect(page.locator('#split-view-caption')).to_contain_text(f'原始帧 {index+1}')
+                expect(page.locator('#split-empty')).to_be_hidden()
+                page.screenshot(path=str(output/'cine-split-invalid-window.png'))
                 assert not errors, errors
                 assert (path.stat().st_size, path.stat().st_mtime_ns) == before
                 report = {'status': 'passed', 'source': str(path), 'file_bytes': before[0], 'frames': len(times), 'shape': list(shape), 'screenshots': str(output), 'browser_errors': errors, 'checks': ['independent Packed10 values', 'exact frame/trigger/time', 'next/previous and EOF', 'time round trip', 'ROI trial and TIFF export', 'CSV provenance', 'formal matching', 'refresh position', '1440/1024 layout', 'original unchanged']}

@@ -109,6 +109,9 @@ class StepSpec:
     manifest: str | None = None
     code_hash: str | None = None
     version: str = "1.0"
+    id: str | None = None
+    target: str = "both"
+    name: str | None = None
 
 
 def validate_pixels(array: np.ndarray) -> None:

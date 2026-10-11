@@ -12,6 +12,7 @@ import sys
 import numpy as np
 
 from eip.domain import StepSpec, validate_pixels
+from eip.module_ops import gaussian, intensity_curve
 
 
 class Cancelled(Exception):
@@ -38,6 +39,7 @@ class Parameter:
     minimum: float | None = None
     maximum: float | None = None
     unit: str = ""
+    choices: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -60,6 +62,9 @@ BUILTINS = [
     AlgorithmSpec("intensity", "强度线性变换", "输出 = 输入 × 增益 + 偏置；整数结果裁剪到原类型范围。", (Parameter("gain", "增益", "float", 1.0, -1000, 1000), Parameter("offset", "偏置", "float", 0.0, -1e9, 1e9))),
     AlgorithmSpec("box_blur", "均值滤波", "使用反射边界，逐帧处理；保留原类型。ROI 在完整处理后裁剪。", (Parameter("radius", "半径", "int", 1, 1, 32, "px"),)),
     AlgorithmSpec("threshold", "阈值分割", "多颜色样本先取算术平均；输出 0/1 的 uint8 标签图。", (Parameter("threshold", "阈值", "float", 128.0, -1e12, 1e12),), output_kind="label"),
+    AlgorithmSpec("affine", "线性缩放与偏置", "y = gain × x + offset；浮点输出，不裁剪或量化。", (Parameter("gain", "倍率", "float", 1., -1e12, 1e12), Parameter("offset", "偏置", "float", 0., -1e12, 1e12))),
+    AlgorithmSpec("gaussian", "空间高斯平滑", "可分离高斯核，边界复制、有效权重归一；原无效位置保持无效。", (Parameter("sigma", "σ", "float", 1., 1e-12, 1e12, "px"), Parameter("radius", "半径", "int", 2, 1, 32, "px"))),
+    AlgorithmSpec("curve", "强度曲线", "整段固定尺度；非线性预设会改变强度涨落及关联，不隐式截断。", (Parameter("curve", "曲线", "str", "linear", choices=("identity", "linear", "sqrt", "square", "gamma", "log")), Parameter("input_max", "固定输入尺度", "float", 1023., 1e-12, 1e15), Parameter("gamma", "指数 γ", "float", 1., 1e-12, 1e6))),
 ]
 
 
@@ -105,13 +110,15 @@ def validate_parameters(spec: AlgorithmSpec, values: dict) -> dict:
             if parameter.kind == "int" and int(value) != value:
                 raise ValueError(f"{parameter.label} 必须是整数")
             if parameter.minimum is not None and value < parameter.minimum or parameter.maximum is not None and value > parameter.maximum:
-                raise ValueError(f"{parameter.label} 超出允许范围")
+                raise ValueError(f"{parameter.label}（{parameter.key}）超出允许范围")
             value = int(value) if parameter.kind == "int" else float(value)
         elif parameter.kind == "str":
             if not isinstance(value, str):
                 raise ValueError(f"{parameter.label} 必须是文本")
         else:
             raise ValueError(f"不支持参数类型 {parameter.kind}")
+        if parameter.choices and value not in parameter.choices:
+            raise ValueError(f"{parameter.label} 不在允许选项中")
         result[parameter.key] = value
     return result
 
@@ -139,6 +146,14 @@ class BuiltinAlgorithm:
             raise ValueError("内置算法暂不处理 64 位整数；请接入声明精度策略的专业插件")
         if self.identifier == "intensity":
             return preserve_dtype(pixels.astype(np.float64) * parameters["gain"] + parameters["offset"], pixels.dtype)
+        if self.identifier == "affine":
+            with np.errstate(over="ignore", invalid="ignore"):
+                result = pixels.astype(np.float64)*parameters["gain"] + parameters["offset"]
+            return np.where(np.isfinite(result), result, np.nan)
+        if self.identifier == "gaussian":
+            return gaussian(pixels, parameters["sigma"], parameters["radius"])
+        if self.identifier == "curve":
+            return intensity_curve(pixels, parameters["curve"], parameters["input_max"], parameters["gamma"])
         if self.identifier == "threshold":
             value = pixels.astype(np.float64)
             if value.ndim == 3:

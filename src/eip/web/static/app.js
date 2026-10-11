@@ -3,6 +3,7 @@ import { Viewer } from "./viewer.js";
 import { FileBrowser } from "./file-browser.js";
 import { validROI, moveROI } from "./geometry.js";
 import { SplitController } from "./split.js";
+import { ModuleEditor } from "./flow.js";
 import { detailHTML, bindRename } from "./job-detail.js";
 
 const $ = (id) => document.getElementById(id);
@@ -154,14 +155,17 @@ const callbacks = {
 const originalViewer = new Viewer($("input-canvas"), scene, callbacks),
   resultViewer = new Viewer($("result-canvas"), scene, callbacks);
 const split = new SplitController({
-  context:()=>({source:active,input,output:$("output-dir").value,devices:state?.split_devices}),
+  context:()=>({source:active,input,output:$("output-dir").value,devices:state?.split_devices,modules:state?.modules}),
   changed:scheduleDraft,report:toast,poll:pollJobs,
   activate:()=>setAnalysisMode("split_correlation"),
+  useModules:async(nodes,config)=>{steps=structuredClone(nodes);generalSequenceContext={sourceId:active?.id,config};renderSteps();await setAnalysisMode("general");toast("流程已复制到通用布局；模块参数与顺序保持一致");},
   promote:async(opened)=>{
     sources=sources.filter(s=>s.id!==opened.source.id);sources.push(opened.source);
     updateSources();await setAnalysisMode("general");await selectSource(opened.source.id);
   },
 });
+let generalSequenceContext=null;
+const generalEditor=new ModuleEditor({nodes:()=>steps,catalog:()=>state?.modules,source:()=>active,host:()=>$("steps"),status:()=>$("module-status"),change:changed,report:toast});
 async function setAnalysisMode(mode) {
   stopPlay();$("analysis-mode").value=mode;
   await split.setMode(mode);scheduleDraft();
@@ -270,6 +274,7 @@ function stashView() {
     });
 }
 function updateSummary() {
+  $("step-count").textContent=steps.length;
   const count = steps.filter((s) => s.enabled).length;
   $("run-summary").textContent = active
     ? `${$("batch").checked ? sources.filter((s) => s.role === "input").length : 1} 个来源 · ${count} 个处理步骤${scene.roi ? " · ROI" : ""}`
@@ -572,6 +577,7 @@ async function selectSource(id, request = ++selectionRequest) {
   const entry = sources.find((s) => s.id === id);
   if (!entry) return;
   if (entry.role === "result") {
+    if($("analysis-mode").value!=="general")await setAnalysisMode("general");
     const matching = sources.find((s) => s.id === entry.input_id);
     if (matching && (active?.id !== matching.id || !input))
       await selectSource(matching.id, request);
@@ -768,87 +774,13 @@ function updateAlgorithms() {
     $("algorithm").value = selected;
 }
 function renderSteps() {
-  $("step-count").textContent = steps.length;
-  $("steps").innerHTML = steps.length
-    ? steps
-        .map((s, i) => {
-          const spec = algorithms.find((a) => a.id === s.algorithm);
-          return `<div class="step-card ${s.enabled ? "" : "disabled"}"><div class="step-header"><span class="step-number">${String(i + 1).padStart(2, "0")}</span><span class="step-name">${escape(spec?.name || s.algorithm)}</span><input type="checkbox" data-enable="${i}" ${s.enabled ? "checked" : ""} aria-label="启用 ${escape(spec?.name || s.algorithm)}"><button class="icon-button" data-up="${i}" title="上移" aria-label="上移步骤">${icon("up")}</button><button class="icon-button" data-down="${i}" title="下移" aria-label="下移步骤">${icon("down")}</button><button class="icon-button" data-delete="${i}" title="删除" aria-label="删除步骤">${icon("close")}</button></div><p class="step-description">${escape(spec?.description)}</p><div class="step-parameters">${(spec?.parameters || []).map((p) => `<label>${escape(p.label)}${p.unit ? " · " + escape(p.unit) : ""}<input data-param="${i}" data-key="${escape(p.key)}" data-kind="${p.kind}" type="${p.kind === "bool" ? "checkbox" : p.kind === "str" ? "text" : "number"}" ${p.kind === "bool" ? (s.parameters[p.key] ? "checked" : "") : `value="${escape(s.parameters[p.key])}"`} ${p.minimum === null ? "" : `min="${p.minimum}"`} ${p.maximum === null ? "" : `max="${p.maximum}"`} step="${p.kind === "int" ? "1" : "any"}" title="${p.minimum ?? "无下限"} ～ ${p.maximum ?? "无上限"}"></label>`).join("")}</div></div>`;
-        })
-        .join("")
-    : '<div class="empty-steps">添加算法步骤，或直接试算以验证输入和输出。</div>';
-  $("steps")
-    .querySelectorAll("[data-param]")
-    .forEach(
-      (el) =>
-        (el.onchange = () => {
-          if (!el.reportValidity()) return;
-          steps[+el.dataset.param].parameters[el.dataset.key] =
-            el.dataset.kind === "bool"
-              ? el.checked
-              : el.dataset.kind === "str"
-                ? el.value
-                : Number(el.value);
-          changed();
-        }),
-    );
-  $("steps")
-    .querySelectorAll("[data-enable]")
-    .forEach(
-      (el) =>
-        (el.onchange = () => {
-          steps[+el.dataset.enable].enabled = el.checked;
-          renderSteps();
-          changed();
-        }),
-    );
-  $("steps")
-    .querySelectorAll("[data-delete]")
-    .forEach(
-      (el) =>
-        (el.onclick = () => {
-          steps.splice(+el.dataset.delete, 1);
-          renderSteps();
-          changed();
-        }),
-    );
-  for (const [key, delta] of [
-    ["up", -1],
-    ["down", 1],
-  ])
-    $("steps")
-      .querySelectorAll(`[data-${key}]`)
-      .forEach(
-        (el) =>
-          (el.onclick = () => {
-            const i = +el.dataset[key],
-              j = i + delta;
-            if (j < 0 || j >= steps.length) return;
-            [steps[i], steps[j]] = [steps[j], steps[i]];
-            renderSteps();
-            changed();
-          }),
-      );
-  updateSummary();
+  $("step-count").textContent=steps.length;
+  generalEditor.render();updateSummary();
 }
-function addStep() {
-  const spec = algorithms.find((a) => a.id === $("algorithm").value);
-  if (steps.length >= 32) throw Error("最多支持 32 个步骤");
-  steps.push({
-    algorithm: spec.id,
-    parameters: Object.fromEntries(
-      spec.parameters.map((p) => [p.key, p.default]),
-    ),
-    enabled: true,
-    manifest: spec.manifest,
-    code_hash: spec.code_hash,
-    version: spec.version,
-  });
-  renderSteps();
-  changed();
-}
+function addStep(){generalEditor.add($("algorithm").value);$("step-count").textContent=steps.length;updateSummary();}
 async function submit(mode) {
   if (!active || !input) return;
+  const error=generalEditor.validate();if(error)throw Error(error);
   for (const el of $("steps").querySelectorAll("input"))
     if (!el.reportValidity()) return;
   const current = mode === "trial",
@@ -872,6 +804,7 @@ async function submit(mode) {
           ? sources.filter((s) => s.role === "input").map((s) => s.id)
           : [active.id],
       steps,
+      sequence_context:generalSequenceContext?.sourceId===active.id?generalSequenceContext.config:undefined,
       selection,
       output_dir: $("output-dir").value,
       config_revision: currentSignature,
@@ -931,7 +864,7 @@ async function pollJobs(initial = false) {
       fetchedJobs.add(j.id);
       if (initial) continue;
       const full = await api(`jobs/${j.id}`);
-      if (j.mode === "split") {
+      if (j.mode === "split" || split.requested.has(j.id)) {
         await split.completed(full);
       } else if (j.mode === "trial" && full.result) {
         const expected = trialSignatures.get(j.id);
@@ -1073,8 +1006,8 @@ async function submitDialog() {
       const spec = await api("plugins/register", {
         path: fileBrowser.selected[0],
       });
-      algorithms = algorithms.filter((a) => a.id !== spec.id);
-      algorithms.push(spec);
+      state.modules=await api("modules");
+      algorithms=Object.values(state.modules);
       updateAlgorithms();
       $("algorithm").value = spec.id;
       toast("已注册 " + spec.name);
@@ -1101,7 +1034,7 @@ async function submitDialog() {
       active = input = result = formalResult = null;
       state = { ...state, ...data.state };
       sources = state.sources;
-      algorithms = state.algorithms;
+      algorithms = Object.values(state.modules);
       steps = data.view.steps;
       sourceViews = new Map(Object.entries(data.view.web_views || {}));
       display = data.view.web_display || {
@@ -1167,6 +1100,7 @@ function projectView() {
     analysis_mode:$("analysis-mode").value,
     split_mode:split.serialize(),
     web_job_name:$("job-name").value,
+    web_sequence_context:generalSequenceContext,
     steps,
     output_dir: $("output-dir").value,
     active_source: active?.id,
@@ -1189,6 +1123,7 @@ function projectView() {
 }
 async function restoreProjectOptions(view) {
   split.restore(view.split_mode);
+  generalSequenceContext=view.web_sequence_context||null;
   $("job-name").value=view.web_job_name||"";
   await setAnalysisMode(view.analysis_mode==="split_correlation"?"split_correlation":"general");
   if (["current", "all", "range"].includes(view.web_scope))
@@ -1549,7 +1484,7 @@ async function bootstrap() {
   state = await api("state");
   session(state.session_token);
   sources = state.sources;
-  algorithms = state.algorithms;
+  algorithms = Object.values(state.modules);
   $("version").textContent = "v" + state.version;
   $("connection").textContent = "本机已连接";
   $("workspace-path").textContent = state.workspace;
