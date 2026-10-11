@@ -53,8 +53,8 @@ export class SplitController {
     }catch(error){if(this[property]===key)target.textContent+=` · ${error.message}`;}},100);
   }
   bind() {
-    $("split-open-context").onclick=()=>{$("split-run-context").open=!$("split-run-context").open;$("split-run-context").scrollIntoView({block:"nearest"});};
-    $("split-open-results").onclick=()=>{$("split-results-tools").open=!$("split-results-tools").open;$("split-results-tools").scrollIntoView({block:"nearest"});};
+    $("split-open-context").onclick=()=>{this.bridge.openParameters?.();$("split-run-context").open=!$("split-run-context").open;$("split-run-context").scrollIntoView({block:"nearest"});};
+    $("split-open-results").onclick=()=>{this.bridge.openParameters?.();$("split-results-tools").open=!$("split-results-tools").open;$("split-results-tools").scrollIntoView({block:"nearest"});};
     $("split-use-general").onclick=this.wrap(()=>this.bridge.useModules(clone(this.cfg?.workflow||[]),this.executionContext()));
     $("split-refresh-preview").onclick=this.wrap(()=>this.updateGeometry());
     $("split-layout").onchange=()=>{document.querySelector(".split-views").dataset.layout=$("split-layout").value;this.fit();this.fitResult();this.bridge.changed();};
@@ -232,9 +232,9 @@ export class SplitController {
   modulePanel() {
     const node=this.selectedNode,spec=this.context.modules?.[node?.algorithm];
     document.querySelectorAll("[data-module-panel]").forEach(el=>el.hidden=el.dataset.modulePanel!==node?.algorithm);
-    $("split-module-inspector").hidden=!["alignment","calibration","statistics","correlation"].includes(node?.algorithm);
-    $("split-module-title").textContent=spec?.name||"模块参数";
-    $("split-module-instance").textContent=node?`实例 ${node.id.slice(0,8)} · v${node.version||"1.0"}${node.enabled?"":" · 已停用"}`:"";
+    $("split-module-inspector").hidden=false;
+    $("split-module-title").textContent=spec?.name||"选择一个模块";
+    $("split-module-instance").textContent=node?`实例 ${node.id.slice(0,8)} · v${node.version||"1.0"}${node.enabled?"":" · 已停用"}`:"在模块流程中添加或选择算法，然后编辑该实例的参数。";
   }
   previewError(error) {const el=$("split-preview-error");el.hidden=!error;el.textContent=error?`流程预览：${error.message||error}。原始帧仍可定位和播放。`:"";}
   async showRaw(snapshot) {
@@ -348,9 +348,9 @@ export class SplitController {
     return response;
   }
   async setStage(stage) {
-    if(stage==="result"){$("split-results-tools").open=true;return;}
+    if(stage==="result"){this.bridge.openParameters?.();$("split-results-tools").open=true;return;}
     const algorithm={geometry:"alignment",preprocess:"calibration",trial:"correlation"}[stage];
-    const node=this.cfg?.workflow?.find(n=>n.algorithm===algorithm);if(node){this.record.selectedModule=node.id;this.fill();}
+    const node=this.cfg?.workflow?.find(n=>n.algorithm===algorithm);if(node){this.record.selectedModule=node.id;this.fill();this.bridge.openParameters?.();}
     if(stage==="trial"){$("split-run-context").open=true;if(this.snapshots?.left)await this.showView("left");}
     if(stage==="geometry"&&this.rawSnapshot)await this.showRaw(this.rawSnapshot);
     if(stage==="flow")this.flow.render();this.bridge.changed();

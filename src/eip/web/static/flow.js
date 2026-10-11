@@ -13,9 +13,12 @@ export function moduleNode(s,source){
 }
 
 export class ModuleEditor{
-  constructor(options){this.options=options;this.drag=null;}
+  constructor(options){this.options=options;this.drag=null;this.selectedId=null;}
   get nodes(){return this.options.nodes()||[];}
   get specs(){return this.options.catalog()||{};}
+  get selected(){return this.nodes.find(n=>n.id===(this.options.selected?.()??this.selectedId));}
+  select(id){this.selectedId=id;this.options.select?.(id);}
+  choose(id){this.select(id);this.render();this.options.inspect?.();this.options.selectionChanged?.();}
   normalize(){this.nodes.forEach(n=>{n.id??=crypto.randomUUID();n.enabled??=true;n.parameters??={};n.target??=n.parameters.target||"both";delete n.parameters.target;const s=this.specs[n.algorithm];n.version??=s?.version||"1.0";n.manifest??=null;n.code_hash??=null;});}
   validate(nodes=this.nodes){
     let type="sensor",kind="image",labelled=false;
@@ -29,7 +32,7 @@ export class ModuleEditor{
       type=s.output==="same"?type:s.output;if(!["alignment","calibration","statistics","correlation","select_channel"].includes(n.algorithm))kind=s.output_kind;labelled||=kind==="label";
     }return null;
   }
-  add(algorithm,index=this.nodes.length){if(this.nodes.length>=32)throw Error("处理流程最多 32 个模块");const s=this.specs[algorithm];if(!s)throw Error("请选择已注册模块");const n=moduleNode(s,this.options.source?.());this.nodes.splice(index,0,n);this.options.select?.(n.id);this.changed();if(this.options.special?.(n))this.options.inspect?.();}
+  add(algorithm,index=this.nodes.length){if(this.nodes.length>=32)throw Error("处理流程最多 32 个模块");const s=this.specs[algorithm];if(!s)throw Error("请选择已注册模块");const n=moduleNode(s,this.options.source?.());this.nodes.splice(index,0,n);this.select(n.id);this.changed();this.options.inspect?.();}
   move(a,b){if(b<0||b>=this.nodes.length)return;this.nodes.splice(b,0,this.nodes.splice(a,1)[0]);this.changed();}
   changed(){this.options.change?.();this.render();}
   field(p,n,i){
@@ -41,24 +44,34 @@ export class ModuleEditor{
   }
   render(){
     this.normalize();const host=this.options.host(),nodes=this.nodes;if(!host)return;
-    host.innerHTML=nodes.length?nodes.map((n,i)=>{const s=this.specs[n.algorithm]||{name:n.algorithm,description:"尚未注册的模块",parameters:[],inputs:[],output:"same"},special=this.options.special?.(n),selected=this.options.selected?.()===n.id;
-      return `<article class="flow-node step-card ${n.enabled?"":"disabled"} ${selected?"selected":""}" data-node="${i}" data-algorithm="${esc(n.algorithm)}" data-instance="${esc(n.id)}" draggable="true"><div class="flow-node-title step-header"><span class="flow-grip" title="拖动排序">⠿</span><span class="mono">${i+1}</span><strong>${esc(n.name||s.name)}</strong><button data-up="${i}" class="text-button" aria-label="上移模块" ${i===0?"disabled":""}>↑</button><button data-down="${i}" class="text-button" aria-label="下移模块" ${i===nodes.length-1?"disabled":""}>↓</button></div><p class="flow-type">${s.inputs.map(t=>types[t]).join(" / ")} → ${s.output==="same"?"保持网格":types[s.output]}</p>${special?`<button data-edit="${esc(n.id)}" class="quiet small">${selected?"正在编辑此实例":"编辑此模块参数"}</button>`:`<p class="step-description">${esc(s.description)}</p><div class="flow-fields step-parameters">${s.parameters.map(p=>this.field(p,n,i)).join("")}</div>`}<div class="flow-actions"><label><input type="checkbox" data-enable="${i}" ${n.enabled?"checked":""}/>启用</label>${s.output==="same"?`<label class="flow-target">范围<select data-target="${i}">${["both","left","right"].map(t=>`<option value="${t}" ${t===n.target?"selected":""}>${labels[t]}</option>`).join("")}</select></label>`:""}<button data-duplicate="${i}" class="text-button">复制</button><button data-delete="${i}" class="text-button">删除</button></div></article>`;
+    if(!this.selected)this.select(nodes[0]?.id??null);
+    host.innerHTML=nodes.length?nodes.map((n,i)=>{const s=this.specs[n.algorithm]||{name:n.algorithm,parameters:[],inputs:[],output:"same"},selected=this.selected?.id===n.id;
+      return `<article class="flow-node step-card ${n.enabled?"":"disabled"} ${selected?"selected":""}" data-node="${i}" data-algorithm="${esc(n.algorithm)}" data-instance="${esc(n.id)}" draggable="true" tabindex="0" aria-label="${i+1}. ${esc(n.name||s.name)}"><div class="flow-node-title step-header"><span class="flow-grip" title="拖动排序">⠿</span><span class="mono">${i+1}</span><strong>${esc(n.name||s.name)}</strong><button data-up="${i}" class="text-button" aria-label="上移模块" ${i===0?"disabled":""}>↑</button><button data-down="${i}" class="text-button" aria-label="下移模块" ${i===nodes.length-1?"disabled":""}>↓</button></div><p class="flow-type">${s.inputs.map(t=>types[t]).join(" / ")} → ${s.output==="same"?"保持网格":types[s.output]}</p><button data-edit="${esc(n.id)}" class="quiet small" aria-pressed="${selected}">${selected?"正在编辑此实例":"编辑此模块参数"}</button><div class="flow-actions"><label><input type="checkbox" data-enable="${i}" ${n.enabled?"checked":""}/>启用</label>${s.output==="same"?`<label class="flow-target">范围<select data-target="${i}">${["both","left","right"].map(t=>`<option value="${t}" ${t===n.target?"selected":""}>${labels[t]}</option>`).join("")}</select></label>`:""}<button data-duplicate="${i}" class="text-button">复制</button><button data-delete="${i}" class="text-button">删除</button></div></article>`;
     }).join(""):'<p class="empty-steps">流程为空。可添加任意已注册模块；原始数据可照常预览。</p>';
     host.querySelectorAll("[data-node]").forEach(el=>{const i=Number(el.dataset.node),n=nodes[i];
       el.ondragstart=e=>{if(e.target.closest("input,select,button")){e.preventDefault();return;}this.drag=i;e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain",String(i));};el.ondragover=e=>{e.preventDefault();el.classList.add("drop-target");};el.ondragleave=()=>el.classList.remove("drop-target");el.ondrop=e=>{e.preventDefault();if(this.drag!=null)this.move(this.drag,i);this.drag=null;};
       el.querySelector("[data-up]").onclick=()=>this.move(i,i-1);el.querySelector("[data-down]").onclick=()=>this.move(i,i+1);
-      el.querySelector("[data-delete]").onclick=()=>{nodes.splice(i,1);this.changed();this.options.inspect?.(false);};el.querySelector("[data-duplicate]").onclick=()=>{if(nodes.length>=32)return;const d={...copy(n),id:crypto.randomUUID()};nodes.splice(i+1,0,d);this.options.select?.(d.id);this.changed();if(this.options.special?.(d))this.options.inspect?.();};
+      el.querySelector("[data-delete]").onclick=()=>{nodes.splice(i,1);this.changed();this.options.inspect?.(false);};el.querySelector("[data-duplicate]").onclick=()=>{if(nodes.length>=32)return;const d={...copy(n),id:crypto.randomUUID()};nodes.splice(i+1,0,d);this.select(d.id);this.changed();this.options.inspect?.();};
       el.querySelector("[data-enable]").onchange=e=>{n.enabled=e.target.checked;this.changed();};const target=el.querySelector("[data-target]");if(target)target.onchange=e=>{n.target=e.target.value;this.changed();};
-      if(el.querySelector("[data-edit]"))el.querySelector("[data-edit]").onclick=()=>{this.options.select(n.id);this.options.inspect?.();this.render();};
-      el.querySelectorAll("[data-param]").forEach(input=>input.onchange=()=>{try{if(!input.reportValidity())return;const kind=input.dataset.kind;let v=kind==="bool"?input.checked:["int","float"].includes(kind)?Number(input.value):kind==="array"?(input.value.trim()?input.value.split(/[,，;\s]+/).map(Number):null):input.value;if(input.dataset.nullable&&input.value==="")v=null;set(n.parameters,input.dataset.key,v);this.options.change?.();this.status();}catch(error){this.options.report?.(error.message,true);}});
-    });this.status();this.options.afterRender?.();
+      el.querySelector("[data-edit]").onclick=()=>this.choose(n.id);
+      el.onclick=e=>{if(!e.target.closest("button,input,select,label"))this.choose(n.id);};
+      el.onkeydown=e=>{if(e.target===el&&["Enter"," "].includes(e.key)){e.preventDefault();this.choose(n.id);}};
+    });this.renderInspector();this.status();this.options.afterRender?.();
+  }
+  renderInspector(){
+    const host=this.options.inspector?.();if(!host)return;const n=this.selected,s=this.specs[n?.algorithm];
+    if(this.options.title)this.options.title().textContent=n?(n.name||s?.name||n.algorithm):"选择一个模块";
+    if(this.options.instance)this.options.instance().textContent=n?`实例 ${n.id.slice(0,8)} · v${n.version||"1.0"}${n.enabled?"":" · 已停用"}`:"在模块流程中添加或选择算法，然后编辑该实例的参数。";
+    host.hidden=!!n&&!!this.options.special?.(n);
+    host.innerHTML=n?(host.hidden?"":`<p class="step-description">${esc(s?.description||"尚未注册的模块")}</p><div class="flow-fields step-parameters">${(s?.parameters||[]).map(p=>this.field(p,n,this.nodes.indexOf(n))).join("")}</div>`):"";
+    host.querySelectorAll("[data-param]").forEach(input=>input.onchange=()=>{try{if(!input.reportValidity())return;const kind=input.dataset.kind;let v=kind==="bool"?input.checked:["int","float"].includes(kind)?Number(input.value):kind==="array"?(input.value.trim()?input.value.split(/[,，;\s]+/).map(Number):null):input.value;if(input.dataset.nullable&&input.value==="")v=null;set(n.parameters,input.dataset.key,v);this.options.change?.();this.status();}catch(error){this.options.report?.(error.message,true);}});
   }
   status(){const error=this.validate(),el=this.options.status?.();if(el){el.textContent=error||"按列表顺序执行；每个实例的参数、顺序和版本随结果保存。";el.classList.toggle("error",!!error);}return error;}
 }
 
 export class FlowEditor extends ModuleEditor{
   constructor(controller){
-    super({nodes:()=>controller.cfg?.workflow,catalog:()=>controller.context.modules,source:()=>controller.context.source,host:()=>document.getElementById("split-flow-list"),status:()=>document.getElementById("split-flow-status"),selected:()=>controller.record?.selectedModule,select:id=>{if(controller.record)controller.record.selectedModule=id;},special:n=>["alignment","calibration","statistics","correlation"].includes(n.algorithm),inspect:(scroll=true)=>{controller.fill();if(scroll)document.getElementById("split-module-inspector").scrollIntoView({block:"nearest"});},change:()=>controller.changed(),afterRender:()=>controller.modulePanel?.(),report:controller.bridge.report});this.controller=controller;
+    super({nodes:()=>controller.cfg?.workflow,catalog:()=>controller.context.modules,source:()=>controller.context.source,host:()=>document.getElementById("split-flow-list"),status:()=>document.getElementById("split-flow-status"),inspector:()=>document.getElementById("split-module-fields"),title:()=>document.getElementById("split-module-title"),instance:()=>document.getElementById("split-module-instance"),selected:()=>controller.record?.selectedModule,select:id=>{if(controller.record)controller.record.selectedModule=id;},special:n=>["alignment","calibration","statistics","correlation"].includes(n.algorithm),inspect:(open=true)=>{controller.fill();if(open){controller.bridge.openParameters?.();document.getElementById("split-module-inspector").scrollIntoView({block:"nearest"});}},selectionChanged:()=>controller.bridge.changed(),change:()=>controller.changed(),afterRender:()=>controller.modulePanel?.(),report:controller.bridge.report});this.controller=controller;
     document.getElementById("split-module-add").onclick=controller.wrap(()=>this.add(document.getElementById("split-module-type").value,Number(document.getElementById("split-module-position").value)));
     document.getElementById("split-flow-reset").onclick=controller.wrap(()=>{if(controller.cfg){delete controller.cfg.workflow;this.sync();controller.record.accepted=null;controller.fill();controller.changed();}});
     document.getElementById("split-flow-clear").onclick=()=>{if(controller.cfg){controller.cfg.workflow=[];controller.cfg.workflow_version=2;controller.record.selectedModule=null;controller.changed();this.render();}};

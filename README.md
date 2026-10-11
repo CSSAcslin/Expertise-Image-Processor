@@ -2,11 +2,13 @@
 
 本地专业图像与视频工作台。两个核心始终是 **视频数据预览** 与 **数据处理**。
 
-当前版本为 `0.5.0`，默认使用 **本机 Web 工作台**。在导入、视频预览、ROI 编辑、处理及结果串联的基础上，提供独立 **分幅强度关联布局**：固定配准、完整序列基线、正负延迟 g² 系数图、固定中心帧的点 / ROI 曲线与导出。Python 读取、算法模块和计算进程保持独立。使用与数值定义见 [docs/SPLIT_CORRELATION_0_4_0.md](docs/SPLIT_CORRELATION_0_4_0.md)，完整目标规划见 [FRAMEWORK_PLAN.md](FRAMEWORK_PLAN.md)；CINE 支持范围见 [docs/CINE_0_3_1.md](docs/CINE_0_3_1.md)。
+当前版本为 `0.5.1`，默认使用 **本机 Web 工作台**。在导入、视频预览、ROI 编辑、处理及结果串联的基础上，提供独立 **分幅强度关联布局**：固定配准、完整序列基线、正负延迟 g² 系数图、固定中心帧的点 / ROI 曲线与导出。Python 读取、算法模块和计算进程保持独立。使用与数值定义见 [docs/SPLIT_CORRELATION_0_4_0.md](docs/SPLIT_CORRELATION_0_4_0.md)，完整目标规划见 [FRAMEWORK_PLAN.md](FRAMEWORK_PLAN.md)；CINE 支持范围见 [docs/CINE_0_3_1.md](docs/CINE_0_3_1.md)。
 
 0.4.1 增加数据 / 结果双视窗、自定义结果名称、详细任务参数、LUT 曲线预设、可拖排和重复添加的执行模块，以及独立的 τ 扫描 / 固定 τ 空间图入口。使用和模块契约见 [docs/SPLIT_WORKFLOW_0_4_1.md](docs/SPLIT_WORKFLOW_0_4_1.md)。
 
 0.5.0 将算法统一为跨布局共享的模块目录，取消分幅五段导航；所有模块均可新增、删除、复制、启停和排序。模块参数未完成时仍可定位原始帧，删除全源统计后不会继续扫描背景。新使用方式、类型规则和兼容边界见 [docs/UNIFIED_MODULES_0_5_0.md](docs/UNIFIED_MODULES_0_5_0.md)。长期原则写入 [AGENTS.md](AGENTS.md)。
+
+0.5.1 将模块流程与参数设置拆为右侧两个独立面板，可分别展开、收起和滚动；来源栏、右侧栏、双视窗、上下模块面板与任务区之间均可拖动调整。布局随浏览器草稿和项目保存，支持一键重置。操作说明见 [docs/GUI_0_5_1.md](docs/GUI_0_5_1.md)。
 
 ## 启动
 

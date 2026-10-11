@@ -8,6 +8,7 @@
     <link rel="icon" href="/static/logo.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/static/style.css" />
     <link rel="stylesheet" href="/static/split.css" />
+    <link rel="stylesheet" href="/static/layout.css" />
     <script type="module" src="/static/app.js"></script>
   </head>
   <body>
@@ -32,10 +33,11 @@
             class="quiet small"
             aria-pressed="false"
           >
-            处理</button
+            处理面板</button
           ><button id="focus-preview" class="quiet small" aria-pressed="false">
             专注预览
           </button>
+          <button id="reset-layout" class="quiet small" title="恢复默认栏宽、面板高度与展开状态">重置布局</button>
         </div>
         <span class="connection" id="connection">正在连接</span
         ><button id="load-project" class="quiet">打开项目</button
@@ -270,18 +272,13 @@
           </div>
         </details>
       </section>
-      <aside class="processing">
-        <div class="panel-heading">
-          <div>
-            <span class="eyebrow">PROCESSING PIPELINE</span>
-            <h2>数据处理</h2>
-          </div>
-          <span class="badge muted">Python</span>
-        </div>
-        <div class="processing-scroll">
+      <aside class="processing dock-stack" data-dock-stack="general" aria-label="处理面板">
+        <section class="dock-panel" data-dock-panel="flow">
+          <header class="dock-heading"><button data-dock-toggle="flow" aria-expanded="true" aria-controls="general-flow-body"><span class="dock-chevron">⌄</span><strong>模块流程</strong><span id="step-count" class="count">0</span></button></header>
+          <div class="dock-body" id="general-flow-body">
           <section class="pipeline-section">
             <div class="section-title">
-              <h3>处理流程 <span id="step-count" class="count">0</span></h3>
+              <span class="hint small-copy">选择模块编辑参数 · 拖动排序</span>
               <button id="plugin" class="text-button">接入算法</button>
             </div>
             <div id="steps" class="steps"></div><p id="module-status" class="hint small-copy"></p>
@@ -295,8 +292,15 @@
               步骤按顺序执行。自定义 Python 算法可复用同一流程。
             </p>
           </section>
-          <section class="settings-section">
-            <h3>处理范围</h3>
+          </div>
+        </section>
+        <div class="panel-resizer" data-resize="general-panels" role="separator" aria-orientation="horizontal" aria-label="调整模块流程与参数面板高度" tabindex="0"></div>
+        <section class="dock-panel" data-dock-panel="parameters">
+          <header class="dock-heading"><button data-dock-toggle="parameters" aria-expanded="true" aria-controls="general-parameters-body"><span class="dock-chevron">⌄</span><strong>参数设置</strong></button></header>
+          <div class="dock-body" id="general-parameters-body">
+          <div id="general-module-inspector" class="parameter-inspector"><h3 id="general-module-title">选择一个模块</h3><p id="general-module-instance" class="hint small-copy"></p><div id="general-module-fields"></div></div>
+          <details class="settings-section" open>
+            <summary>处理范围与 ROI</summary>
             <div class="field">
               <label for="scope">帧 / 时间范围</label
               ><select id="scope">
@@ -377,9 +381,9 @@
                 >图中拖动选区可移动；拖动边角可缩放。完整帧处理后裁剪输出。</small
               >
             </div>
-          </section>
-          <section class="settings-section">
-            <h3>结果输出</h3>
+          </details>
+          <details class="settings-section">
+            <summary>结果输出</summary>
             <div class="field">
               <label>输出目录</label>
               <div class="path-field">
@@ -400,8 +404,9 @@
             <p class="hint small-copy">
               机器学习可通过算法插件接入；模型管理与 GPU 调度尚未实现。
             </p>
-          </section>
-        </div>
+          </details>
+          </div>
+        </section>
         <div class="run-footer">
           <label class="split-run-name">结果名称<input id="job-name" maxlength="160" placeholder="可自定义；留空自动命名"/></label><div id="run-summary" class="hint">打开数据以开始处理</div>
           <div>
@@ -444,13 +449,24 @@
           </div>
         </section>
         </div>
-        <aside class="split-parameters">
-          <div id="split-stale" class="split-stale" hidden>配置已变更，已有结果保留其原始参数。</div>
-          <section class="module-library"><div class="section-title"><h2>处理流程</h2><button id="split-flow-clear" class="text-button">清空</button></div><p class="hint small-copy">模式共用算法库。拖动排序；选择模块以编辑该实例的参数。</p>
+        <div class="split-run-bar"><label class="split-run-name">本次结果名称<input id="split-job-name" maxlength="160" placeholder="可自定义；留空自动命名"/></label><span id="split-status" class="hint">先划分双幅并接受标定</span><div><button id="split-curve-run" class="quiet" disabled>运行 τ 扫描</button><button id="split-trial" class="quiet" disabled>当前中心系数图</button><button id="split-run" class="primary" disabled>运行固定 τ 系数图</button></div></div>
+      </section>
+      <aside class="split-dock dock-stack" data-dock-stack="split" aria-label="分幅处理面板">
+        <section class="dock-panel" data-dock-panel="flow">
+          <header class="dock-heading"><button data-dock-toggle="flow" aria-expanded="true" aria-controls="split-flow-body"><span class="dock-chevron">⌄</span><strong>模块流程</strong></button></header>
+          <div class="dock-body split-parameters" id="split-flow-body">
+          <section class="module-library"><div class="section-title"><span class="hint small-copy">选择模块编辑参数 · 拖动排序</span><button id="split-flow-clear" class="text-button">清空</button></div>
           <label class="split-field">算法模块<select id="split-module-type" aria-label="分幅算法模块"></select></label><label class="split-field">插入位置<select id="split-module-position"></select></label>
           <div class="split-buttons"><button id="split-module-add" class="primary">添加模块</button><button id="split-flow-reset" class="quiet">载入分幅预设</button></div><button id="split-use-general" class="text-button">在通用布局中继续此流程</button></section>
           <div id="split-flow-list" class="flow-list"></div><p id="split-flow-status" class="hint small-copy"></p>
-          <div id="split-module-inspector" class="module-inspector"><h3 id="split-module-title">模块参数</h3><p id="split-module-instance" class="hint small-copy"></p>
+          </div>
+        </section>
+        <div class="panel-resizer" data-resize="split-panels" role="separator" aria-orientation="horizontal" aria-label="调整模块流程与参数面板高度" tabindex="0"></div>
+        <section class="dock-panel" data-dock-panel="parameters">
+          <header class="dock-heading"><button data-dock-toggle="parameters" aria-expanded="true" aria-controls="split-parameters-body"><span class="dock-chevron">⌄</span><strong>参数设置</strong></button></header>
+          <div class="dock-body split-parameters" id="split-parameters-body">
+          <div id="split-stale" class="split-stale" hidden>配置已变更，已有结果保留其原始参数。</div>
+          <div id="split-module-inspector" class="module-inspector"><h3 id="split-module-title">选择一个模块</h3><p id="split-module-instance" class="hint small-copy"></p><div id="split-module-fields"></div>
           <section data-module-panel="alignment" hidden>
             <h3>划分左右幅</h3><p class="hint small-copy">原图中绘制中线，然后分别调整有效区。黑边建议需要人工检查。</p>
             <div class="two-fields"><label>中线顶部 X<input id="split-line-top" type="number" step="any"/></label><label>底部 X<input id="split-line-bottom" type="number" step="any"/></label></div>
@@ -496,9 +512,9 @@
             <button id="split-promote" class="primary">当前 τ 序列作为下一阶段输入</button><p class="hint small-copy">保留窗口、配对帧、原始坐标映射和完整来源链。</p>
             <label class="split-field">重开已有运行<input id="split-restore-path" placeholder="已完成结果的 run.json 路径"/></label><button id="split-restore" class="quiet">打开关联结果</button>
           </details>
-        </aside>
-        <div class="split-run-bar"><label class="split-run-name">本次结果名称<input id="split-job-name" maxlength="160" placeholder="可自定义；留空自动命名"/></label><span id="split-status" class="hint">先划分双幅并接受标定</span><div><button id="split-curve-run" class="quiet" disabled>运行 τ 扫描</button><button id="split-trial" class="quiet" disabled>当前中心系数图</button><button id="split-run" class="primary" disabled>运行固定 τ 系数图</button></div></div>
-      </section>
+          </div>
+        </section>
+      </aside>
       <section class="tasks">
         <div class="task-heading">
           <div>

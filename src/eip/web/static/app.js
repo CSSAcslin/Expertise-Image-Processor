@@ -4,6 +4,7 @@ import { FileBrowser } from "./file-browser.js";
 import { validROI, moveROI } from "./geometry.js";
 import { SplitController } from "./split.js";
 import { ModuleEditor } from "./flow.js";
+import { WorkbenchLayout } from "./layout.js";
 import { detailHTML, bindRename } from "./job-detail.js";
 
 const $ = (id) => document.getElementById(id);
@@ -154,9 +155,11 @@ const callbacks = {
 };
 const originalViewer = new Viewer($("input-canvas"), scene, callbacks),
   resultViewer = new Viewer($("result-canvas"), scene, callbacks);
+const layout = new WorkbenchLayout(scheduleDraft);
 const split = new SplitController({
   context:()=>({source:active,input,output:$("output-dir").value,devices:state?.split_devices,modules:state?.modules}),
   changed:scheduleDraft,report:toast,poll:pollJobs,
+  openParameters:()=>layout.openParameters("split"),
   activate:()=>setAnalysisMode("split_correlation"),
   useModules:async(nodes,config)=>{steps=structuredClone(nodes);generalSequenceContext={sourceId:active?.id,config};renderSteps();await setAnalysisMode("general");toast("流程已复制到通用布局；模块参数与顺序保持一致");},
   promote:async(opened)=>{
@@ -165,10 +168,10 @@ const split = new SplitController({
   },
 });
 let generalSequenceContext=null;
-const generalEditor=new ModuleEditor({nodes:()=>steps,catalog:()=>state?.modules,source:()=>active,host:()=>$("steps"),status:()=>$("module-status"),change:changed,report:toast});
+const generalEditor=new ModuleEditor({nodes:()=>steps,catalog:()=>state?.modules,source:()=>active,host:()=>$("steps"),status:()=>$("module-status"),inspector:()=>$("general-module-fields"),title:()=>$("general-module-title"),instance:()=>$("general-module-instance"),inspect:(open=true)=>{if(open){layout.openParameters("general");$("general-module-inspector").scrollIntoView({block:"nearest"});}},selectionChanged:scheduleDraft,change:changed,afterRender:()=>{$("step-count").textContent=steps.length;},report:toast});
 async function setAnalysisMode(mode) {
   stopPlay();$("analysis-mode").value=mode;
-  await split.setMode(mode);scheduleDraft();
+  await split.setMode(mode);layout.apply();scheduleDraft();
 }
 $("analysis-mode").onchange=safe(()=>setAnalysisMode($("analysis-mode").value));
 function redraw() {
@@ -781,7 +784,7 @@ function addStep(){generalEditor.add($("algorithm").value);$("step-count").textC
 async function submit(mode) {
   if (!active || !input) return;
   const error=generalEditor.validate();if(error)throw Error(error);
-  for (const el of $("steps").querySelectorAll("input"))
+  for (const el of $("general-module-fields").querySelectorAll("input"))
     if (!el.reportValidity()) return;
   const current = mode === "trial",
     scope = current ? "current" : $("scope").value,
@@ -1101,6 +1104,8 @@ function projectView() {
     split_mode:split.serialize(),
     web_job_name:$("job-name").value,
     web_sequence_context:generalSequenceContext,
+    web_selected_module:generalEditor.selected?.id||null,
+    web_docks:layout.serialize(),
     steps,
     output_dir: $("output-dir").value,
     active_source: active?.id,
@@ -1123,6 +1128,7 @@ function projectView() {
 }
 async function restoreProjectOptions(view) {
   split.restore(view.split_mode);
+  generalEditor.selectedId=view.web_selected_module||null;
   generalSequenceContext=view.web_sequence_context||null;
   $("job-name").value=view.web_job_name||"";
   await setAnalysisMode(view.analysis_mode==="split_correlation"?"split_correlation":"general");
@@ -1140,6 +1146,8 @@ async function restoreProjectOptions(view) {
     w.classList.toggle("processing-collapsed", !!view.web_layout.processing);
     updateLayout();
   }
+  layout.restore(view.web_docks);
+  generalEditor.render();
   updateSummary();
 }
 let draftTimer,
@@ -1174,9 +1182,11 @@ function updateLayout() {
     workspace.classList.contains("processing-collapsed");
   $("focus-preview").setAttribute("aria-pressed", String(focused));
   $("focus-preview").classList.toggle("selected", focused);
+  layout.apply();
   requestAnimationFrame(redraw);
   scheduleDraft();
 }
+document.addEventListener("workbench-layout",updateLayout);
 for (const [id, name] of [
   ["toggle-library", "library-collapsed"],
   ["toggle-processing", "processing-collapsed"],
@@ -1438,8 +1448,10 @@ for (const id of ["display-low", "display-high"])
 for (const id of ["display-gamma", "colormap"])
   $(id).onchange = safe(() => renderDisplay());
 $("auto-display").onclick = safe(() => renderDisplay(true));
-$("toggle-tasks").onclick = () =>
+$("toggle-tasks").onclick = () => {
   document.querySelector(".workspace").classList.toggle("task-collapse");
+  layout.apply();scheduleDraft();
+};
 document.addEventListener("keydown", (e) => {
   if (
     ["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName) ||
