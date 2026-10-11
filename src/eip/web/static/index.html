@@ -274,7 +274,7 @@
       </section>
       <aside class="processing dock-stack" data-dock-stack="general" aria-label="处理面板">
         <section class="dock-panel" data-dock-panel="flow">
-          <header class="dock-heading"><button data-dock-toggle="flow" aria-expanded="true" aria-controls="general-flow-body"><span class="dock-chevron">⌄</span><strong>模块流程</strong><span id="step-count" class="count">0</span></button></header>
+          <header class="dock-heading"><button data-dock-toggle="flow" aria-expanded="true" aria-controls="general-flow-body"><span class="dock-chevron" aria-hidden="true">›</span><strong>模块流程</strong><span id="step-count" class="count">0</span></button></header>
           <div class="dock-body" id="general-flow-body">
           <section class="pipeline-section">
             <div class="section-title">
@@ -294,9 +294,9 @@
           </section>
           </div>
         </section>
-        <div class="panel-resizer" data-resize="general-panels" role="separator" aria-orientation="horizontal" aria-label="调整模块流程与参数面板高度" tabindex="0"></div>
+        <div class="panel-resizer" data-resize="general-panels" role="separator" aria-orientation="vertical" aria-label="调整模块流程与参数列宽度" tabindex="0"></div>
         <section class="dock-panel" data-dock-panel="parameters">
-          <header class="dock-heading"><button data-dock-toggle="parameters" aria-expanded="true" aria-controls="general-parameters-body"><span class="dock-chevron">⌄</span><strong>参数设置</strong></button></header>
+          <header class="dock-heading"><button data-dock-toggle="parameters" aria-expanded="true" aria-controls="general-parameters-body"><span class="dock-chevron" aria-hidden="true">›</span><strong>参数设置</strong></button></header>
           <div class="dock-body" id="general-parameters-body">
           <div id="general-module-inspector" class="parameter-inspector"><h3 id="general-module-title">选择一个模块</h3><p id="general-module-instance" class="hint small-copy"></p><div id="general-module-fields"></div></div>
           <details class="settings-section" open>
@@ -453,7 +453,7 @@
       </section>
       <aside class="split-dock dock-stack" data-dock-stack="split" aria-label="分幅处理面板">
         <section class="dock-panel" data-dock-panel="flow">
-          <header class="dock-heading"><button data-dock-toggle="flow" aria-expanded="true" aria-controls="split-flow-body"><span class="dock-chevron">⌄</span><strong>模块流程</strong></button></header>
+          <header class="dock-heading"><button data-dock-toggle="flow" aria-expanded="true" aria-controls="split-flow-body"><span class="dock-chevron" aria-hidden="true">›</span><strong>模块流程</strong></button></header>
           <div class="dock-body split-parameters" id="split-flow-body">
           <section class="module-library"><div class="section-title"><span class="hint small-copy">选择模块编辑参数 · 拖动排序</span><button id="split-flow-clear" class="text-button">清空</button></div>
           <label class="split-field">算法模块<select id="split-module-type" aria-label="分幅算法模块"></select></label><label class="split-field">插入位置<select id="split-module-position"></select></label>
@@ -461,9 +461,9 @@
           <div id="split-flow-list" class="flow-list"></div><p id="split-flow-status" class="hint small-copy"></p>
           </div>
         </section>
-        <div class="panel-resizer" data-resize="split-panels" role="separator" aria-orientation="horizontal" aria-label="调整模块流程与参数面板高度" tabindex="0"></div>
+        <div class="panel-resizer" data-resize="split-panels" role="separator" aria-orientation="vertical" aria-label="调整模块流程与参数列宽度" tabindex="0"></div>
         <section class="dock-panel" data-dock-panel="parameters">
-          <header class="dock-heading"><button data-dock-toggle="parameters" aria-expanded="true" aria-controls="split-parameters-body"><span class="dock-chevron">⌄</span><strong>参数设置</strong></button></header>
+          <header class="dock-heading"><button data-dock-toggle="parameters" aria-expanded="true" aria-controls="split-parameters-body"><span class="dock-chevron" aria-hidden="true">›</span><strong>参数设置</strong></button></header>
           <div class="dock-body split-parameters" id="split-parameters-body">
           <div id="split-stale" class="split-stale" hidden>配置已变更，已有结果保留其原始参数。</div>
           <div id="split-module-inspector" class="module-inspector"><h3 id="split-module-title">选择一个模块</h3><p id="split-module-instance" class="hint small-copy"></p><div id="split-module-fields"></div>

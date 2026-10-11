@@ -3,7 +3,7 @@
 .workspace[data-analysis="split_correlation"],.workspace[data-analysis="split_correlation"].library-collapsed,
 .workspace[data-analysis]:not(.tasks-collapsed),.workspace.task-collapse {
   grid-template-areas:none;
-  grid-template-columns:var(--library-track,220px) var(--library-divider,6px) minmax(320px,1fr) var(--dock-divider,6px) var(--dock-track,340px);
+  grid-template-columns:var(--library-track,220px) var(--library-divider,6px) minmax(320px,1fr) var(--dock-divider,6px) var(--dock-track,556px);
   grid-template-rows:minmax(0,1fr) var(--task-divider,6px) var(--task-track,153px);
   min-width:760px;
   overflow:hidden;
@@ -17,23 +17,28 @@
 .workspace>.split-workspace {grid-area:auto;grid-column:3;grid-row:1;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;border:0;overflow:hidden;min-height:0}
 .split-heading,.split-run-bar {grid-column:1}
 .workspace>.split-dock {display:none}
-.workspace[data-analysis="split_correlation"]>.split-dock {display:flex}
+.workspace[data-analysis="split_correlation"]>.split-dock {display:grid}
 .workspace.processing-collapsed>.processing,.workspace.processing-collapsed>.split-dock {display:none}
 .workspace[data-analysis].library-collapsed.processing-collapsed>.tasks {display:none}
-.workspace>.dock-stack {flex-direction:column;min-width:0;min-height:0;overflow:hidden;background:var(--panel)}
-.workspace>.processing {display:flex}
+.workspace>.dock-stack {grid-template-columns:var(--flow-track,240px) var(--panel-divider,6px) var(--parameter-track,310px);grid-template-rows:minmax(0,1fr) auto;min-width:0;min-height:0;overflow:hidden;background:var(--panel)}
+.workspace>.processing {display:grid}
 .workspace[data-analysis="split_correlation"]>.processing {display:none}
-.dock-panel {display:flex;flex-direction:column;min-height:100px;min-width:0;overflow:hidden}
-.dock-panel[data-dock-panel="flow"] {flex:var(--flow-share,.46) 1 0}
-.dock-panel[data-dock-panel="parameters"] {flex:var(--parameter-share,.54) 1 0}
-.dock-panel.is-collapsed {flex:0 0 34px;min-height:34px}
-.dock-stack.has-collapsed-panel>.dock-panel:not(.is-collapsed) {flex-grow:1}
+.dock-panel {display:flex;flex-direction:column;grid-row:1;min-height:0;min-width:0;overflow:hidden}
+.dock-panel[data-dock-panel="flow"] {grid-column:1}
+.dock-panel[data-dock-panel="parameters"] {grid-column:3}
+.dock-stack>.panel-resizer {grid-column:2;grid-row:1}
 .dock-heading {flex:0 0 34px;display:flex;align-items:center;background:#202934;border-bottom:1px solid var(--line)}
 .dock-heading>button {display:flex;align-items:center;justify-content:flex-start;gap:8px;width:100%;height:34px;padding:0 12px;background:none;border:0;border-radius:0;text-align:left;font-size:12px;color:#c9d9e5}
 .dock-heading>button:hover {background:#283641;color:var(--accent)}
-.dock-heading .count {margin-left:auto}
-.dock-chevron {color:#8cafa8;font-size:16px;line-height:1}
-.is-collapsed .dock-chevron {transform:rotate(-90deg)}
+.dock-heading strong {order:0;white-space:nowrap}
+.dock-heading .count {order:1;margin-left:auto}
+.dock-chevron {order:2;margin-left:auto;color:#8cafa8;font-size:20px;line-height:1}
+.dock-heading .count+.dock-chevron {margin-left:0}
+.dock-panel.is-collapsed>.dock-heading {flex:1;align-items:stretch;border-bottom:0;border-right:1px solid var(--line)}
+.dock-panel.is-collapsed>.dock-heading>button {height:100%;padding:12px 0;flex-direction:column;gap:12px;justify-content:flex-start}
+.dock-panel.is-collapsed strong {order:1;writing-mode:vertical-rl;text-orientation:upright;letter-spacing:2px}
+.dock-panel.is-collapsed .dock-chevron {order:0;margin:0}
+.dock-panel.is-collapsed .count {order:2;margin:0;font-size:10px;padding:3px}
 .dock-body {flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:12px}
 .dock-panel.is-collapsed>.dock-body {display:none}
 .dock-body.split-parameters {border:0;background:var(--panel);margin:0}
@@ -50,7 +55,8 @@
 .dock-body .settings-section>summary {font-size:12px;color:#bbd5e2;cursor:pointer;margin-bottom:12px}
 .dock-body .settings-section:not([open])>summary {margin-bottom:0}
 .dock-body .settings-section .field {margin-top:10px}
-.dock-stack>.run-footer {flex:0 0 auto;margin-top:auto;padding:10px 12px}
+.dock-stack>.run-footer {grid-column:1/-1;grid-row:2;min-width:0;margin:0;padding:10px 12px}
+.dock-stack.both-collapsed>.run-footer {display:none}
 .run-footer>.split-run-name {max-width:none;width:100%;margin-bottom:7px}
 .run-footer>#run-summary {font-size:10px;margin-bottom:7px}
 .flow-node {cursor:pointer}
@@ -84,6 +90,9 @@
 .split-views[data-layout="data"],.split-views[data-layout="result"] {grid-template-columns:minmax(0,1fr)}
 .split-views:not([data-layout="both"])>[data-resize="splitCompare"] {display:none}
 .split-window-heading,.split-view-toolbar,.split-input-timeline,.split-result-nav,.split-window-note,.split-main>.pixel-bar {flex-shrink:0}
+.split-view-toolbar {flex-shrink:1;min-height:46px;overflow:auto;overscroll-behavior:contain}
+.split-result-nav {flex-shrink:1;min-height:70px;overflow:auto;overscroll-behavior:contain}
+.split-window-note {flex-shrink:1;overflow:auto;overscroll-behavior:contain}
 .split-view-toolbar select {flex:1 1 90px;min-width:0}
 #split-view-caption {flex:1 0 100%;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .split-window-heading button {padding:6px;font-size:10px}
@@ -93,7 +102,7 @@
 .split-input-timeline>label input {width:75px}
 .split-input-timeline>button {padding:5px;font-size:10px}
 .split-main {overflow:auto;overscroll-behavior:contain}
-.split-canvas-pane {flex:1 0 115px;min-height:115px}
+.split-canvas-pane {flex:1 1 115px;min-height:60px}
 .split-heading {padding:10px 12px;align-items:flex-start;flex-wrap:wrap;gap:8px}
 .split-heading h1 {font-size:18px}
 .split-run-bar {padding:8px 12px;gap:8px;flex-wrap:wrap}

@@ -1,4 +1,4 @@
-"""Browser checks for independent docks, real splitter drags and layout restore."""
+"""Browser checks for horizontal dock columns, real splitter drags and restore."""
 from pathlib import Path
 import json
 import os
@@ -45,6 +45,12 @@ def main():
                     page.mouse.move(x,y);page.mouse.down();page.mouse.move(x+dx,y+dy,steps=8);page.mouse.up()
                     page.wait_for_timeout(50)
                 def toggle(mode,key):return page.locator(f'[data-dock-stack="{mode}"] [data-dock-toggle="{key}"]')
+                def columns(mode):
+                    flow=box(f'[data-dock-stack="{mode}"] [data-dock-panel="flow"]')
+                    parameters=box(f'[data-dock-stack="{mode}"] [data-dock-panel="parameters"]')
+                    assert abs(flow["y"]-parameters["y"])<1 and abs(flow["height"]-parameters["height"])<1
+                    assert parameters["x"]>=flow["x"]+flow["width"],(flow,parameters)
+                    return flow,parameters
                 def draft():return page.evaluate("Object.entries(localStorage).map(([k,v])=>k.startsWith('eip-workbench-view-3:')?JSON.parse(v):null).find(Boolean)")
                 def in_screen(selector):
                     b=box(selector);assert b and b["width"]>0 and b["height"]>0
@@ -66,13 +72,14 @@ def main():
                 page.locator('#steps [data-edit]').last.click()
                 expect(toggle("general","parameters")).to_have_attribute("aria-expanded","true")
                 expect(fields.locator('[data-key="gain"]')).to_have_value("3")
+                columns("general")
                 lib=box(".library")["width"];drag("library",dx=35)
                 assert abs(box(".library")["width"]-lib-35)<2
                 dock=box(".processing")["width"];drag("dock",dx=-45)
                 assert abs(box(".processing")["width"]-dock-45)<2
-                flow=box('[data-dock-stack="general"] [data-dock-panel="flow"]')["height"]
-                drag("general-panels",dy=40)
-                assert abs(box('[data-dock-stack="general"] [data-dock-panel="flow"]')["height"]-flow-40)<2
+                flow=columns("general")[0]["width"]
+                drag("general-panels",dx=40)
+                assert abs(columns("general")[0]["width"]-flow-40)<2
                 tasks=box(".tasks")["height"];drag("tasks",dy=-25)
                 assert abs(box(".tasks")["height"]-tasks-25)<2
                 page.locator('[data-view="compare"]').click()
@@ -81,18 +88,39 @@ def main():
                 # Keyboard sizing and reset are usable without dragging.
                 handle=page.locator('[data-resize="library"]');handle.focus();handle.press("ArrowRight")
                 assert abs(box(".library")["width"]-lib-45)<2
+                expanded_dock=box(".processing")["width"];expanded_flow,expanded_parameters=columns("general")
+                preview=box(".preview-workspace")["width"]
                 toggle("general","flow").click()
                 expect(page.locator("#general-flow-body")).not_to_be_visible()
                 expect(page.locator("#general-parameters-body")).to_be_visible()
-                panels=page.locator('[data-dock-stack="general"] [data-dock-panel]')
                 dock_box=box(".processing");footer=box(".run-footer")
-                assert abs(sum(panels.nth(i).bounding_box()["height"] for i in range(2))+footer["height"]-dock_box["height"])<2
+                flow,parameters=columns("general")
+                assert abs(flow["width"]-34)<1 and abs(parameters["width"]-expanded_parameters["width"])<1
+                assert abs(flow["width"]+parameters["width"]+1-dock_box["width"])<2
+                assert abs(parameters["height"]+footer["height"]-dock_box["height"])<2
+                assert abs(box(".preview-workspace")["width"]-preview-expanded_dock+dock_box["width"])<2
                 page.wait_for_timeout(450)
                 before=draft();page.reload()
                 expect(toggle("general","flow")).to_have_attribute("aria-expanded","false")
                 expect(fields.locator('[data-key="gain"]')).to_have_value("3")
-                assert abs(box(".processing")["width"]-dock-45)<2
+                assert abs(box(".processing")["width"]-dock_box["width"])<2
                 assert before["web_docks"]["general"]["flow"] is True
+                assert before["web_docks"]["schema"]==2
+                # Resizing the remaining open column preserves the closed column's width.
+                drag("dock",dx=-20)
+                assert abs(columns("general")[1]["width"]-expanded_parameters["width"]-20)<2
+                expanded_dock+=20
+                # Either column can become a narrow, vertical tab; both recover preview space.
+                toggle("general","parameters").click()
+                assert abs(box(".processing")["width"]-69)<1
+                expect(page.locator(".run-footer")).not_to_be_visible()
+                expect(page.locator('[data-resize="dock"]')).not_to_be_visible()
+                for key in["flow","parameters"]:
+                    button=toggle("general",key);button.focus();button.press("Enter")
+                    expect(button).to_have_attribute("aria-expanded","true")
+                assert abs(box(".processing")["width"]-expanded_dock)<2
+                assert abs(columns("general")[0]["width"]-expanded_flow["width"])<2
+                toggle("general","flow").click()
                 page.screenshot(path=str(output/"01-general-docks.png"))
 
                 page.locator("#analysis-mode").select_option("split_correlation")
@@ -103,8 +131,8 @@ def main():
                 assert abs(box(".split-dock")["width"]-split_dock-30)<2
                 left=box(".split-data-window")["width"];drag("splitCompare",dx=30)
                 assert abs(box(".split-data-window")["width"]-left-30)<2
-                flow=box('[data-dock-stack="split"] [data-dock-panel="flow"]')["height"];drag("split-panels",dy=-45)
-                assert abs(box('[data-dock-stack="split"] [data-dock-panel="flow"]')["height"]-flow+45)<2
+                flow=columns("split")[0]["width"];drag("split-panels",dx=-45)
+                assert abs(columns("split")[0]["width"]-flow+45)<2
                 toggle("split","parameters").click()
                 expect(page.locator("#split-parameters-body")).not_to_be_visible()
                 page.locator('#split-flow-list [data-algorithm="alignment"] [data-edit]').click()
@@ -113,17 +141,19 @@ def main():
                 expect(page.locator('#split-module-fields [data-key="gain"]')).to_have_value("1")
                 page.locator('#split-module-fields [data-key="gain"]').fill("4");page.locator('#split-module-fields [data-key="gain"]').dispatch_event("change")
                 toggle("split","flow").click()
+                split_collapsed=box(".split-dock")["width"]
                 page.wait_for_timeout(450);page.reload()
                 expect(page.locator("#analysis-mode")).to_have_value("split_correlation")
                 expect(toggle("split","flow")).to_have_attribute("aria-expanded","false")
                 expect(page.locator('#split-module-fields [data-key="gain"]')).to_have_value("4")
-                assert abs(box(".split-dock")["width"]-split_dock-30)<2
+                assert abs(box(".split-dock")["width"]-split_collapsed)<2
                 page.locator("#save-project").click()
                 page.locator("#filename").fill("layout.eip.json")
                 page.locator("#dialog-submit").click()
                 expect(page.locator("#file-dialog")).not_to_be_visible()
                 saved=json.loads((output/"layout.eip.json").read_text(encoding="utf-8"))
                 assert saved["web_docks"]["split"]["flow"] is True
+                assert saved["web_docks"]["schema"]==2
                 assert saved["web_selected_module"]!=original_id
                 toggle("split","flow").click()
                 page.screenshot(path=str(output/"02-split-docks.png"))
@@ -132,9 +162,12 @@ def main():
                     page.set_viewport_size({"width":width,"height":height});page.wait_for_timeout(100)
                     for selector in[".library",".split-dock",".split-data-window",".split-result-window",".split-run-bar",".tasks",".split-input-timeline"]:in_screen(selector)
                     assert page.evaluate("document.documentElement.scrollWidth<=innerWidth")
+                    columns("split")
                     workspace=box(".split-workspace");bar=box(".split-run-bar");tasks_box=box(".tasks")
                     assert abs(workspace["y"]+workspace["height"]-bar["y"]-bar["height"])<2
                     assert abs(bar["y"]+bar["height"]+6-tasks_box["y"])<2
+                    timeline=box(".split-input-timeline")
+                    assert timeline["y"]+timeline["height"]<=bar["y"]+1,(timeline,bar)
                     page.screenshot(path=str(output/f"03-split-{width}.png"))
                 page.locator("#split-layout").select_option("data")
                 expect(page.locator('[data-resize="splitCompare"]')).not_to_be_visible()
@@ -147,7 +180,7 @@ def main():
                 page.locator("#reset-layout").click()
                 expect(toggle("split","flow")).to_have_attribute("aria-expanded","true")
                 expect(toggle("split","parameters")).to_have_attribute("aria-expanded","true")
-                assert abs(box(".split-dock")["width"]-340)<2
+                assert abs(box(".split-dock")["width"]-556)<2
                 page.locator("#analysis-mode").select_option("general")
                 expect(toggle("general","flow")).to_have_attribute("aria-expanded","true")
                 page.locator("#focus-preview").click()
@@ -165,11 +198,19 @@ def main():
                 expect(page.locator("#analysis-mode")).to_have_value("split_correlation")
                 expect(toggle("split","flow")).to_have_attribute("aria-expanded","false")
                 expect(page.locator('#split-module-fields [data-key="gain"]')).to_have_value("4")
-                assert abs(box(".split-dock")["width"]-split_dock-30)<2
+                assert abs(box(".split-dock")["width"]-split_collapsed)<2
                 page.locator("#analysis-mode").select_option("general")
                 expect(fields.locator('[data-key="gain"]')).to_have_value("3")
+                # Stacked layout drafts migrate without treating a 340px total as two columns.
+                page.wait_for_timeout(450)
+                page.add_init_script("""const entry=Object.entries(localStorage).find(([k])=>k.startsWith('eip-workbench-view-3:'));if(entry){const [key,text]=entry;const value=JSON.parse(text);value.web_docks={...value.web_docks,schema:1,general:{width:340,share:.46,flow:false,parameters:false}};localStorage.setItem(key,JSON.stringify(value));}""")
+                page.reload()
+                expect(page.locator("#connection")).to_have_text("本机已连接")
+                expect(fields.locator('[data-key="gain"]')).to_have_value("3")
+                assert abs(box(".processing")["width"]-556)<2
+                columns("general")
                 assert not errors,errors
-                report={"independent_panels":True,"shared_parameter_inspector":True,"real_drag_dividers":["library","dock","general-panels","split-panels","tasks","compare","splitCompare"],"restored_layout_and_instances":True,"project_roundtrip":True,"viewports":[1440,1100,960],"javascript_errors":errors}
+                report={"independent_columns":True,"horizontal_collapse_and_width_restore":True,"shared_parameter_inspector":True,"real_drag_dividers":["library","dock","general-panels","split-panels","tasks","compare","splitCompare"],"restored_layout_and_instances":True,"legacy_stacked_layout_migration":True,"project_roundtrip":True,"viewports":[1440,1100,960],"javascript_errors":errors}
                 (output/"report.json").write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8")
                 print(json.dumps({"output":str(output),**report},ensure_ascii=False))
                 browser.close()

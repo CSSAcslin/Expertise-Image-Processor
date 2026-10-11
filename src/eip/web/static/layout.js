@@ -1,7 +1,17 @@
 // Layout is a view preference only. Resizing never edits algorithm or ROI data.
 const clamp=(n,min,max)=>Math.min(Math.max(n,min),Math.max(min,max));
-const divider=6;
-const defaults=()=>({library:null,tasks:null,compare:.5,splitCompare:.5,general:{width:null,share:.46,flow:false,parameters:false},split:{width:null,share:.46,flow:false,parameters:false}});
+const divider=6,rail=34,columnKeys=["flow","parameters"];
+const columnDefault={flow:240,parameters:310},columnMin={flow:190,parameters:240},columnMax={flow:460,parameters:580};
+const dockDefaults=()=>({flowWidth:null,parametersWidth:null,flow:false,parameters:false});
+const defaults=()=>({schema:2,library:null,tasks:null,compare:.5,splitCompare:.5,general:dockDefaults(),split:dockDefaults()});
+
+// Fit visible columns without replacing their saved, expanded width preferences.
+function fitColumns(keys,widths,budget){
+  if(!keys.length)return {};
+  if(keys.length===1){const key=keys[0];return {[key]:clamp(budget,columnMin[key],columnMax[key])};}
+  const flow=clamp(budget*widths.flow/(widths.flow+widths.parameters),Math.max(columnMin.flow,budget-columnMax.parameters),Math.min(columnMax.flow,budget-columnMin.parameters));
+  return {flow,parameters:budget-flow};
+}
 
 export class WorkbenchLayout {
   constructor(changed){
@@ -25,30 +35,55 @@ export class WorkbenchLayout {
     el.setAttribute("role","separator");el.setAttribute("aria-orientation",orientation);el.setAttribute("aria-label",label);
     parent.insertBefore(el,before);return el;
   }
+  columns(mode,available=Infinity){
+    const s=this.state[mode],open=columnKeys.filter(key=>!s[key]),closed=2-open.length,gap=closed?1:divider;
+    const preferred=Object.fromEntries(columnKeys.map(key=>[key,clamp(s[`${key}Width`]??columnDefault[key],columnMin[key],columnMax[key])]));
+    const min=open.reduce((n,key)=>n+columnMin[key],closed*rail+gap),max=open.reduce((n,key)=>n+columnMax[key],closed*rail+gap);
+    const total=clamp(open.reduce((n,key)=>n+preferred[key],closed*rail+gap),min,Math.min(max,available));
+    const widths={flow:rail,parameters:rail,...fitColumns(open,preferred,total-closed*rail-gap)};
+    return {open,gap,min,max,total,widths};
+  }
+  geometry(){
+    const width=this.root.clientWidth,previewMin=Math.min(620,Math.max(320,width-900)),shown=!this.root.classList.contains("processing-collapsed");
+    const libraryShown=!this.root.classList.contains("library-collapsed"),base=this.columns(this.mode);
+    const library=libraryShown?clamp(this.state.library??(width<1200?190:220),160,Math.min(400,width-previewMin-(shown?base.min+divider:0)-divider)):0;
+    const available=width-library-previewMin-(libraryShown?divider:0)-divider,columns=this.columns(this.mode,available);
+    return {width,previewMin,library,available,columns,dock:shown?columns.total:0};
+  }
   metrics(key){
-    const width=this.root.clientWidth,height=this.root.clientHeight,compact=width<1200;
-    const previewMin=Math.min(620,Math.max(320,width-520));
-    const library=this.root.classList.contains("library-collapsed")?0:clamp(this.state.library??(compact?190:220),160,Math.min(400,width-previewMin-272));
-    const dock=this.root.classList.contains("processing-collapsed")?0:clamp(this.state[this.mode].width??(compact?300:340),260,Math.min(520,width-library-previewMin-12));
-    const taskHeight=clamp(this.state.tasks??(height<754?96:153),80,Math.min(360,height-380));
-    if(key==="library")return {value:library,min:160,max:Math.min(400,width-dock-previewMin-12),sign:1};
-    if(key==="dock")return {value:dock,min:260,max:Math.min(520,width-library-previewMin-12),sign:-1};
-    if(key==="tasks")return {value:taskHeight,min:80,max:Math.min(360,height-380),sign:-1};
-    const panel=key.endsWith("-panels"),mode=key.startsWith("split")?"split":"general";
-    const host=panel?document.querySelector(`[data-dock-stack="${mode}"]`):document.querySelector(key==="compare"?"#viewers":".split-views");
-    const total=panel?[...host.querySelectorAll(":scope > .dock-panel")].reduce((n,el)=>n+el.getBoundingClientRect().height,0):host.clientWidth-divider;
-    const share=panel&&total?host.querySelector('[data-dock-panel="flow"]').getBoundingClientRect().height/total:this.state[mode].share;
-    return {value:panel?share:this.state[key],min:panel?Math.min(.45,100/Math.max(1,total)):.2,max:panel?Math.max(.55,1-100/Math.max(1,total)):.8,sign:1,total};
+    const g=this.geometry(),height=this.root.clientHeight;
+    if(key==="library")return {value:g.library,min:160,max:Math.max(160,Math.min(400,g.width-g.dock-g.previewMin-divider-(g.dock?divider:0))),sign:1};
+    if(key==="dock")return {value:g.dock,min:g.columns.min,max:Math.max(g.columns.min,Math.min(g.columns.max,g.available)),sign:-1};
+    if(key==="tasks"){
+      const max=Math.max(80,Math.min(g.width<=1100?120:360,height-380));
+      return {value:clamp(this.state.tasks??(height<754?96:153),80,max),min:80,max,sign:-1};
+    }
+    if(key.endsWith("-panels")){
+      const mode=key.startsWith("split")?"split":"general",c=this.columns(mode,g.available),total=c.widths.flow+c.widths.parameters;
+      if(c.open.length<2)return {value:c.widths.flow,min:c.widths.flow,max:c.widths.flow,sign:1};
+      return {value:c.widths.flow,min:Math.max(columnMin.flow,total-columnMax.parameters),max:Math.min(columnMax.flow,total-columnMin.parameters),sign:1};
+    }
+    const host=document.querySelector(key==="compare"?"#viewers":".split-views");
+    return {value:this.state[key],min:.2,max:.8,sign:1,total:Math.max(1,host.clientWidth-divider)};
   }
   setValue(key,value){
-    if(key==="dock")this.state[this.mode].width=value;
-    else if(key.endsWith("-panels"))this.state[key.startsWith("split")?"split":"general"].share=value;
+    if(key==="dock"){
+      const c=this.geometry().columns,widths=fitColumns(c.open,c.widths,value-(2-c.open.length)*rail-c.gap);
+      for(const name of c.open)this.state[this.mode][`${name}Width`]=widths[name];
+    }
+    else if(key.endsWith("-panels")){
+      const mode=key.startsWith("split")?"split":"general",c=this.columns(mode,this.geometry().available);
+      this.state[mode].flowWidth=value;this.state[mode].parametersWidth=c.widths.flow+c.widths.parameters-value;
+    }
     else this.state[key]=value;
     this.apply();
   }
   resetValue(key){
-    if(key==="dock")this.state[this.mode].width=null;
-    else if(key.endsWith("-panels"))this.state[key.startsWith("split")?"split":"general"].share=.46;
+    if(key==="dock"){this.state[this.mode].flowWidth=null;this.state[this.mode].parametersWidth=null;}
+    else if(key.endsWith("-panels")){
+      const mode=key.startsWith("split")?"split":"general",c=this.columns(mode,this.geometry().available),widths=fitColumns(columnKeys,columnDefault,c.total-c.gap);
+      for(const name of columnKeys)this.state[mode][`${name}Width`]=widths[name];
+    }
     else this.state[key]=["compare","splitCompare"].includes(key) ? .5 : null;
     this.apply();this.changed();
   }
@@ -76,16 +111,18 @@ export class WorkbenchLayout {
     this.apply();this.changed();document.dispatchEvent(new Event("workbench-layout"));
   }
   apply(){
-    const lib=this.metrics("library").value,dock=this.metrics("dock").value,focused=this.root.classList.contains("library-collapsed")&&this.root.classList.contains("processing-collapsed"),tasks=focused?0:this.root.classList.contains("task-collapse")?43:this.metrics("tasks").value;
+    const geometry=this.geometry(),lib=geometry.library,dock=geometry.dock,focused=this.root.classList.contains("library-collapsed")&&this.root.classList.contains("processing-collapsed"),tasks=focused?0:this.root.classList.contains("task-collapse")?43:this.metrics("tasks").value;
     for(const [key,value]of Object.entries({"library-track":lib,"library-divider":lib?divider:0,"dock-track":dock,"dock-divider":dock?divider:0,"task-track":tasks,"task-divider":focused||this.root.classList.contains("task-collapse")?0:divider}))this.root.style.setProperty(`--${key}`,`${value}px`);
     this.root.style.setProperty("--compare-left",this.state.compare);this.root.style.setProperty("--compare-right",1-this.state.compare);
     this.root.style.setProperty("--split-left",`${this.state.splitCompare}fr`);this.root.style.setProperty("--split-right",`${1-this.state.splitCompare}fr`);
     for(const mode of["general","split"]){
-      const host=document.querySelector(`[data-dock-stack="${mode}"]`),s=this.state[mode];host.style.setProperty("--flow-share",s.share);host.style.setProperty("--parameter-share",1-s.share);
-      host.classList.toggle("has-collapsed-panel",s.flow||s.parameters);
-      for(const key of["flow","parameters"]){const panel=host.querySelector(`[data-dock-panel="${key}"]`),button=panel.querySelector("[data-dock-toggle]");panel.classList.toggle("is-collapsed",s[key]);button.setAttribute("aria-expanded",String(!s[key]));button.title=`${s[key]?"展开":"收起"}${key==="flow"?"模块流程":"参数设置"}`;}
+      const host=document.querySelector(`[data-dock-stack="${mode}"]`),s=this.state[mode],c=this.columns(mode,geometry.available);
+      host.style.setProperty("--flow-track",`${c.widths.flow}px`);host.style.setProperty("--parameter-track",`${c.widths.parameters}px`);host.style.setProperty("--panel-divider",`${c.gap}px`);
+      host.classList.toggle("both-collapsed",s.flow&&s.parameters);
+      for(const key of columnKeys){const panel=host.querySelector(`[data-dock-panel="${key}"]`),button=panel.querySelector("[data-dock-toggle]");panel.classList.toggle("is-collapsed",s[key]);button.setAttribute("aria-expanded",String(!s[key]));button.title=`${s[key]?"展开":"收起"}${key==="flow"?"模块流程":"参数设置"}`;button.setAttribute("aria-label",button.title);button.querySelector(".dock-chevron").textContent=s[key]?"‹":"›";}
       host.querySelector(":scope > .panel-resizer").hidden=s.flow||s.parameters;
     }
+    this.root.querySelector('[data-resize="dock"]').hidden=this.state[this.mode].flow&&this.state[this.mode].parameters;
     const taskButton=document.getElementById("toggle-tasks"),collapsed=this.root.classList.contains("task-collapse");taskButton.setAttribute("aria-expanded",String(!collapsed));taskButton.setAttribute("aria-label",`${collapsed?"展开":"折叠"}任务记录`);
     document.querySelectorAll("[data-resize]").forEach(el=>{const m=this.metrics(el.dataset.resize),factor=m.total?100:1;for(const [a,v]of[["now",m.value],["min",m.min],["max",m.max]])el.setAttribute(`aria-value${a}`,String(Math.round(v*factor)));});
   }
@@ -93,7 +130,8 @@ export class WorkbenchLayout {
   restore(value){
     const s=defaults();if(!value||typeof value!=="object"){this.state=s;this.root.classList.remove("task-collapse");this.apply();return;}
     for(const key of["library","tasks","compare","splitCompare"])if(Number.isFinite(value[key])){const ratio=["compare","splitCompare"].includes(key);s[key]=clamp(value[key],ratio ? .2 : 80,ratio ? .8 : 520);}
-    for(const mode of["general","split"]){const v=value[mode];if(!v||typeof v!=="object")continue;if(Number.isFinite(v.width))s[mode].width=clamp(v.width,260,520);if(Number.isFinite(v.share))s[mode].share=clamp(v.share,.1,.9);for(const key of["flow","parameters"])s[mode][key]=v[key]===true;}
+    // Old stacked panels saved one width and a height share; neither is a column width.
+    for(const mode of["general","split"]){const v=value[mode];if(!v||typeof v!=="object")continue;for(const key of columnKeys){if(value.schema===2&&Number.isFinite(v[`${key}Width`]))s[mode][`${key}Width`]=clamp(v[`${key}Width`],columnMin[key],columnMax[key]);s[mode][key]=v[key]===true;}}
     this.state=s;this.root.classList.toggle("task-collapse",value.tasksCollapsed===true);this.apply();
   }
   reset(){this.state=defaults();this.root.classList.remove("library-collapsed","processing-collapsed","task-collapse");this.apply();this.changed();document.dispatchEvent(new Event("workbench-layout"));}
