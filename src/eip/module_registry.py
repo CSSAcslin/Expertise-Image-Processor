@@ -13,7 +13,7 @@ def field(key, label, kind, default, **options):
 
 
 STRUCTURAL = {
-    "calibration": dict(name="强度校准 / LUT", inputs=["sensor"], output="sensor", description="传感器采样前的固定强度曲线、LUT、暗场及坏点排除；可删除或重复。", parameters=[
+    "calibration": dict(name="强度校准 / LUT", inputs=["sensor"], output="sensor", description="固定强度曲线、LUT、暗场与无效值标记；输入含义随上游模块确定。", parameters=[
         field("curve", "强度曲线", "str", "identity", choices=["identity", "linear", "sqrt", "square", "gamma", "log"]),
         field("input_max", "固定输入尺度", "float", 1023., minimum=1e-12), field("gamma", "指数 γ", "float", 1., minimum=1e-12),
         field("lut_path", "自定义 LUT 路径", "str", None, nullable=True), field("black_left", "左路 / 单幅暗场偏置", "float", 0.), field("black_right", "右路暗场偏置", "float", 0.),
@@ -25,18 +25,37 @@ STRUCTURAL = {
     "select_channel": dict(name="选择幅面", inputs=["pair"], output="sensor", description="将对齐双路中的左路或右路作为后续单幅输入；保留几何来源。", parameters=[field("channel", "输出幅面", "str", "left", choices=["left", "right"])]),
     "statistics": dict(name="全源均值与固定尺度", inputs=["pair"], output="moments", description="全序列均值 / 方差与每路固定尺度；删除后关联直接使用强度，且不扫描全源背景。", parameters=[field("normalization", "固定尺度", "str", "none", choices=["none", "fixed_rms"])]),
     "correlation": dict(name="标准二阶互关联 g²", inputs=["pair", "moments"], output="map", description="同一有效样本集合上的二阶互关联；支持固定 τ 图或双向 τ 曲线。", parameters=[
-        field("window", "平均窗口 W（奇数）", "int", 101, minimum=1), field("min_mean", "最小强度均值", "float", 1e-9, minimum=1e-15), field("min_samples", "最少有效样本", "int", 2, minimum=1),
-        field("stride", "输出时间步长", "int", 100, minimum=1), field("analysis", "关联输出", "str", "map", choices=["map", "curve"]), field("map_lag", "固定 τ（帧）", "int", 0),
-        field("lag_min", "τ 下限（帧）", "int", -10), field("lag_max", "τ 上限（帧）", "int", 10), field("lag_step", "延迟步长", "int", 1, minimum=1), field("lag_list", "延迟列表（留空使用范围）", "array", None, nullable=True),
+        field("window", "平均窗口 W（输入样本，奇数）", "int", 101, minimum=1), field("min_mean", "最小强度均值", "float", 1e-9, minimum=1e-15), field("min_samples", "最少有效样本", "int", 2, minimum=1),
+        field("stride", "输出步长（输入样本）", "int", 100, minimum=1), field("analysis", "关联输出", "str", "map", choices=["map", "curve"]), field("map_lag", "固定 τ（输入样本）", "int", 0),
+        field("lag_min", "τ 下限（输入样本）", "int", -10), field("lag_max", "τ 上限（输入样本）", "int", 10), field("lag_step", "延迟步长（输入样本）", "int", 1, minimum=1), field("lag_list", "延迟列表（留空使用范围）", "array", None, nullable=True),
         field("roi_estimator", "ROI 曲线估计", "str", "pixel_mean", choices=["pixel_mean", "intensity_sum"])])}
+
+AXIS_MODULES = {
+    "time_crop": dict(name="时间裁剪", description="流程起点：按样本或真实时间保留数据；后续模块不再重复设置运行范围。", parameters=[
+        field("unit", "范围单位", "str", "samples", choices=["samples", "seconds"]),
+        field("first", "首样本（从 1 起）", "int", 1, minimum=1), field("last", "尾样本（包含，留空至末尾）", "int", None, minimum=1, nullable=True),
+        field("start", "起始时间（秒）", "float", 0., minimum=0), field("end", "结束时间（秒，不含）", "float", None, minimum=0, nullable=True)]),
+    "spatial_roi": dict(name="空间 ROI / 区域归约", description="相对本步骤输入裁剪；保留像素，或对空间轴取均值、总和、分位值。归约后仅保留时间及显式通道。", parameters=[
+        field("x", "X", "int", 0, minimum=0), field("y", "Y", "int", 0, minimum=0),
+        field("width", "宽（留空至边界）", "int", None, minimum=1, nullable=True), field("height", "高（留空至边界）", "int", None, minimum=1, nullable=True),
+        field("mode", "区域操作", "str", "pixels", choices=["pixels", "mean", "sum", "quantile"]), field("quantile", "分位 q", "float", .5, minimum=0, maximum=1),
+        field("validity", "双路归约有效像素", "str", "joint", choices=["joint", "independent"])]),
+    "time_sample": dict(name="时间取间隔", description="按当前序列取间隔，保留实际样本时间与来源。", parameters=[field("step", "样本间隔", "int", 2, minimum=1), field("offset", "起始偏移（从 0 起）", "int", 0, minimum=0)]),
+    "time_smooth": dict(name="时间加窗平滑", description="逐元素滑动均值或分位值；只输出完整窗口，时间取中心样本。", parameters=[field("window", "窗口 W（奇数）", "int", 3, minimum=1), field("mode", "窗口操作", "str", "mean", choices=["mean", "quantile"]), field("quantile", "分位 q", "float", .5, minimum=0, maximum=1)]),
+    "time_bin": dict(name="时间合帧", description="连续样本逐元素取均值或总和；不完整尾组舍弃，保留贡献样本记录。", parameters=[field("size", "每组样本数", "int", 2, minimum=1), field("mode", "合帧操作", "str", "mean", choices=["mean", "sum"])])}
+for _value in AXIS_MODULES.values():
+    _value.update(inputs=["sensor", "pair", "moments", "map"], output="same")
+STRUCTURAL["correlation"]["parameters"].append(field("center", "固定中心样本（编辑后，从 1 起；留空居中）", "int", None, minimum=1, nullable=True))
+STRUCTURAL["statistics"].update(name="上游序列统计与固定尺度",inputs=["sensor","pair"],description="统计本节点直接收到的完整时间序列；此前的裁剪、抽样、合帧及空间归约都参与计算。")
+STRUCTURAL["calibration"]["inputs"] = ["sensor","pair"]
 
 
 def catalog(plugins=()):
     result = {}
     for spec in (*BUILTINS, *[s for s in plugins if s.manifest]):
         result[spec.id] = dict(asdict(spec), inputs=["sensor", "pair", "map"], output="same", repeatable=True)
-    for key, spec in STRUCTURAL.items():
-        result[key] = dict(deepcopy(spec), id=key, version="1.0", manifest=None, code_hash=None, execution_scope="sequence" if key in {"statistics", "correlation"} else "frame", output_kind="image", repeatable=True)
+    for key, spec in {**STRUCTURAL, **AXIS_MODULES}.items():
+        result[key] = dict(deepcopy(spec), id=key, version="1.0", manifest=None, code_hash=None, execution_scope="sequence" if key in {"statistics", "correlation", "time_crop", "time_sample", "time_smooth", "time_bin"} else "frame", output_kind="image", repeatable=True)
     for spec in result.values():
         spec["defaults"] = defaults(spec)
     return result
@@ -95,7 +114,7 @@ def normalize_nodes(nodes, *, check_types=True, input_type="sensor", input_kind=
     result, identifiers, state, kind = [], set(), input_type, input_kind
     labelled = input_kind=="label"
     for position, raw in enumerate(nodes):
-        if not isinstance(raw, dict) or set(raw)-{"id", "algorithm", "parameters", "enabled", "name", "version", "manifest", "code_hash", "target"}:
+        if not isinstance(raw, dict) or set(raw)-{"id", "algorithm", "parameters", "enabled", "name", "version", "manifest", "code_hash", "target", "execution"}:
             raise ValueError("模块记录格式无效")
         node = deepcopy(raw)
         identifier = node.get("id") or f"legacy-{position}"
@@ -114,9 +133,44 @@ def normalize_nodes(nodes, *, check_types=True, input_type="sensor", input_kind=
         node.setdefault("manifest", spec["manifest"])
         node.setdefault("code_hash", spec["code_hash"])
         algorithm = node["algorithm"]
-        if algorithm in STRUCTURAL and node["target"] != "both":
+        execution = node.get("execution", {})
+        if not isinstance(execution, dict) or set(execution)-{"backend", "memory_mb", "precision"}:
+            raise ValueError("模块执行设置无效")
+        if execution.get("backend", "cpu") not in {"cpu", "auto", "gpu"} or execution.get("precision", "native") not in {"native", "float32", "float64"}:
+            raise ValueError("模块设备或精度设置无效")
+        integer(execution.get("memory_mb", 256), "模块内存预算", 16)
+        if execution.get("memory_mb", 256)>4096:
+            raise ValueError("模块内存预算不能超过 4096 MiB")
+        if execution.get("backend")=="gpu" and algorithm!="correlation":
+            raise ValueError("此模块当前支持 CPU；GPU 仅用于二阶关联")
+        node["execution"] = deepcopy(execution)
+        if algorithm in {*STRUCTURAL,*AXIS_MODULES} and node["target"] != "both":
             raise ValueError("双路结构与时序模块作用于完整输入；左 / 右路范围仅适用于逐帧算法")
-        if frame_spec:
+        if algorithm in AXIS_MODULES:
+            if set(p)-set(spec["defaults"]):
+                raise ValueError("空间 / 时间编辑模块包含未知参数")
+            merged = deepcopy(spec["defaults"])
+            merged.update(p)
+            for parameter in spec["parameters"]:
+                key, item = parameter["key"], merged[parameter["key"]]
+                if parameter.get("nullable") and item is None:
+                    continue
+                if parameter["kind"]=="int":
+                    integer(item, parameter["label"], parameter.get("minimum"))
+                    if parameter.get("maximum") is not None and item>parameter["maximum"]:
+                        raise ValueError(f"{parameter['label']} 超出允许范围")
+                elif parameter["kind"]=="float":
+                    v = finite(item, parameter["label"])
+                    if v<parameter.get("minimum", -float("inf")) or v>parameter.get("maximum", float("inf")):
+                        raise ValueError(f"{parameter['label']} 超出允许范围")
+                if parameter.get("choices") and item not in parameter["choices"]:
+                    raise ValueError(f"{parameter['label']} 选项无效")
+            if algorithm=="time_crop" and (merged["last"] is not None and merged["last"]<merged["first"] or merged["end"] is not None and merged["end"]<=merged["start"]):
+                raise ValueError("时间裁剪终点必须在起点之后")
+            if algorithm=="time_smooth" and merged["window"]%2!=1:
+                raise ValueError("时间平滑窗口必须为奇数")
+            node["parameters"] = merged
+        elif frame_spec:
             node["parameters"] = validate_parameters(frame_spec, p)
         elif algorithm == "alignment":
             node["parameters"] = asdict(GeometryConfig.from_dict(p))
@@ -136,6 +190,8 @@ def normalize_nodes(nodes, *, check_types=True, input_type="sensor", input_kind=
             if set(p)-allowed:
                 raise ValueError("二阶关联模块包含未知参数")
             merged = dict(spec["defaults"], **p)
+            if merged["center"] is not None:
+                integer(merged["center"],"关联中心样本",1)
             for key in ("window", "min_samples", "stride", "lag_step"):
                 integer(merged[key], key, 1)
             if merged["window"]%2 != 1 or merged["min_samples"]>merged["window"]:
@@ -169,7 +225,7 @@ def normalize_nodes(nodes, *, check_types=True, input_type="sensor", input_kind=
 
 
 def temporal(nodes):
-    return any(n.get("enabled", True) and n["algorithm"] in {"statistics", "correlation"} for n in nodes)
+    return any(n.get("enabled", True) and n["algorithm"] in {"statistics", "correlation", "time_crop", "time_sample", "time_smooth", "time_bin"} for n in nodes)
 
 
 def output_shape(nodes, shape):

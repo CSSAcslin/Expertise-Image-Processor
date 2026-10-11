@@ -14,6 +14,43 @@ class RegistrationMethod(Protocol):
     def __call__(self, left: np.ndarray, right: np.ndarray) -> dict: ...
 
 
+def geometry_bounds(config: GeometryConfig, shape):
+    """Exact common bounding box using axis vectors, without a full image grid."""
+    if len(shape)!=2:
+        raise ValueError("分幅关联要求二维灰度矩阵")
+    config.left.validate(tuple(shape))
+    config.right.validate(tuple(shape))
+    if not all(0<x<shape[1] for x in config.midline):
+        raise ValueError("中线端点需位于图像内部")
+    l,r = config.left,config.right
+    x,y = np.arange(l.width,dtype=np.float64),np.arange(l.height,dtype=np.float64)
+    xr,yr = x+config.dx,y+config.dy
+    if config.mirror_x:
+        xr = r.width-1-xr
+    if config.mirror_y:
+        yr = r.height-1-yr
+    if config.interpolation=="nearest":
+        xr,yr = np.floor(xr+.5),np.floor(yr+.5)
+    vx,vy = (xr>=0)&(xr<=r.width-1),(yr>=0)&(yr<=r.height-1)
+    x,xr,y,yr = x[vx],xr[vx],y[vy],yr[vy]
+    if not x.size or not y.size:
+        raise ValueError("左右幅没有共同有效区域，请检查中线、区域和匹配偏移")
+    left_line = np.interp(y+l.y,[0,max(1,shape[0]-1)],config.midline)
+    right_line = np.interp(yr+r.y,[0,max(1,shape[0]-1)],config.midline)
+    upper = np.searchsorted(x+l.x,left_line,side="left")
+    if config.mirror_x:
+        lower = np.zeros(y.size,dtype=np.intp)
+        upper = np.minimum(upper,np.searchsorted(-(xr+r.x),-right_line,side="right"))
+    else:
+        lower = np.searchsorted(xr+r.x,right_line,side="left")
+    valid = upper>lower
+    if not valid.any():
+        raise ValueError("左右幅没有共同有效区域，请检查中线、区域和匹配偏移")
+    x0,x1 = int(x[lower[valid].min()]),int(x[(upper[valid]-1).max()])+1
+    y0,y1 = int(y[valid].min()),int(y[valid].max())+1
+    return x0,y0,x1,y1
+
+
 class Geometry:
     def __init__(self, config: GeometryConfig, shape):
         if len(shape) != 2:

@@ -29,6 +29,8 @@ from eip.modes.split_correlation.runner import split_job_entry
 from eip.web.split import SplitService
 from eip.web.records import display_name, automatic_name, saved_split_summary
 from eip.module_registry import catalog, normalize_nodes, temporal, output_shape
+from eip.module_contracts import compile_flow, source_contract
+from eip.sequence_processing import sequence_job_entry
 
 
 class PreviewBroker:
@@ -101,6 +103,10 @@ class FrameStore:
                 raise ValueError("该帧缓存已过期，请重新定位或试算")
             return self.frames[token]
 
+    def annotate(self,token,**metadata):
+        with self.lock:
+            self.get(token)["metadata"] = metadata
+
     def render(self, token, settings=None, maximum=1800):
         record = self.get(token)
         pixels = record["pixels"]
@@ -117,7 +123,7 @@ class FrameStore:
         finite = pixels[np.isfinite(pixels)]
         samples = finite[::max(1, finite.size // 100000)]
         counts, edges = np.histogram(samples, bins=64) if samples.size else (np.zeros(64, dtype=int), np.linspace(0, 1, 65))
-        return {"token": token, "image": "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode(), "shape": list(pixels.shape), "base_shape": list(record["base_shape"]), "origin": list(record["origin"]), "ref": record["ref"], "dtype": str(pixels.dtype), "kind": record["kind"], "display": asdict(display), "histogram": counts.tolist(), "histogram_range": [float(edges[0]), float(edges[-1])], "histogram_samples": int(samples.size), "statistics": statistics(pixels), "display_shape": [image.height, image.width], "downsampled": image.width != pixels.shape[1] or image.height != pixels.shape[0]}
+        return {"token": token, "image": "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode(), "shape": list(pixels.shape), "base_shape": list(record["base_shape"]), "origin": list(record["origin"]), "ref": record["ref"], "dtype": str(pixels.dtype), "kind": record["kind"], "display": asdict(display), "histogram": counts.tolist(), "histogram_range": [float(edges[0]), float(edges[-1])], "histogram_samples": int(samples.size), "statistics": statistics(pixels), "display_shape": [image.height, image.width], "downsampled": image.width != pixels.shape[1] or image.height != pixels.shape[0],**record.get("metadata",{})}
 
     def pixel(self, token, x, y):
         record = self.get(token)
@@ -219,6 +225,9 @@ class Workbench:
             raise ValueError("数据源没有可显示帧")
         token = self.frames.add(event["pixels"], event["frame"], extra.get("origin", [0, 0]), extra.get("base_shape", event["pixels"].shape[:2]), extra.get("result_kind", "image"))
         snapshot = self.frames.render(token)
+        if event.get("contract"):
+            snapshot.update(contract=event["contract"],signal_values=event.get("signal_values"))
+            self.frames.annotate(token,contract=event["contract"],signal_values=event.get("signal_values"))
         thumbnail = self.frames.render(token, maximum=160)["image"]
         identifier = extra.pop("identifier", f"result_{source.key}" if role == "result" else source.key)
         entry = {"id": identifier, "source": asdict(source), "meta": event["meta"], "role": role, "thumbnail": thumbnail, **extra}
@@ -232,9 +241,11 @@ class Workbench:
         entry = self.get_source(identifier)
         if entry["role"] != "result":
             raise ValueError("请选择正式保存的处理结果")
-        manifest = Path(entry["source"]["path"]).parent / "run.json"
+        output_path = Path(entry["source"]["path"])
+        manifest = (output_path.parent.parent if entry["source"]["kind"]=="dataset" else output_path.parent) / "run.json"
         run = json.loads(manifest.read_text(encoding="utf-8"))
-        item = next((item for item in run["results"] if item["output_directory"] == Path(entry["source"]["path"]).name), None)
+        part_name = output_path.parent.name if entry["source"]["kind"]=="dataset" else output_path.name
+        item = next((item for item in run["results"] if item["output_directory"] == part_name), None)
         if not item or item["status"] != "succeeded" or run["status"] not in {"succeeded", "completed_with_errors"}:
             raise ValueError("未完成的输出不能作为下一阶段输入")
         parent = self.sources.get(entry.get("input_id"))
@@ -243,9 +254,9 @@ class Workbench:
         if len(previous) >= 32:
             raise ValueError("当前来源链最多支持 32 个阶段")
         lineage = [*previous, {"run_id": run["run_id"], "manifest": str(manifest), "manifest_sha256": sha256_file(manifest), "parent_source_id": entry.get("input_id"), "parent_source": item["source"], "crop_origin": item["origin"], "parent_shape": item["data_spec"]["shape"], "output_directory": entry["source"]["path"], "timestamp_source": "run_record"}]
-        mappings = item.get("modules",{}).get("mappings",[])
+        mappings = item.get("mappings") or item.get("modules",{}).get("mappings",[])
         if mappings:
-            lineage[-1].update(coordinate_space="module_output_grid",mappings=mappings,modules=item["modules"]["modules"])
+            lineage[-1].update(coordinate_space="module_output_grid",mappings=mappings,modules=item["modules"].get("nodes",item["modules"].get("modules",[])))
         return self.open(entry["source"], role="input", identifier=f"input_{SourceSpec(**entry['source']).key}", display_name=f"派生 · {entry.get('display_name', entry['meta']['name'])}", result_kind=entry.get("result_kind", "image"), lineage=lineage, parent_result_id=identifier)
 
     def remove(self, identifier):
@@ -269,7 +280,10 @@ class Workbench:
         if action == "match" and source["role"] == "result":
             reference = value["reference"]
             index = None
-            with (Path(source["source"]["path"]) / "measurements.csv").open(encoding="utf-8-sig", newline="") as file:
+            mapping_path = Path(source["source"]["path"])
+            if source["source"]["kind"]=="dataset":
+                mapping_path = mapping_path.parent
+            with (mapping_path / "measurements.csv").open(encoding="utf-8-sig", newline="") as file:
                 for row in csv.DictReader(file):
                     if reference.get("index") is not None and row["source_frame"]:
                         matches = int(row["source_frame"]) == reference["index"]
@@ -297,7 +311,11 @@ class Workbench:
         if event["meta"]["revision"] != source["meta"]["revision"]:
             raise ValueError("来源已变化，请重新打开")
         token = self.frames.add(event["pixels"], event["frame"], source.get("origin", [0, 0]), source.get("base_shape", event["pixels"].shape[:2]), source.get("result_kind", "image"))
-        return self.frames.render(token, value.get("display"))
+        snapshot = self.frames.render(token, value.get("display"))
+        if event.get("contract"):
+            snapshot.update(contract=event["contract"],signal_values=event.get("signal_values"))
+            self.frames.annotate(token,contract=event["contract"],signal_values=event.get("signal_values"))
+        return snapshot
 
     def register(self, path):
         spec = load_manifest(path)
@@ -307,8 +325,8 @@ class Workbench:
             self.algorithms[spec.id] = spec
         return asdict(spec)
 
-    def validate_steps(self, values):
-        nodes, state, kind = normalize_nodes(values)
+    def validate_steps(self, values, *, check_types=True):
+        nodes, state, kind = normalize_nodes(values,check_types=check_types)
         registered = catalog(self.algorithms.values())
         for node in nodes:
             if node["algorithm"] not in registered or node.get("code_hash") != registered[node["algorithm"]]["code_hash"]:
@@ -316,6 +334,8 @@ class Workbench:
         return [StepSpec(**item) for item in nodes]
 
     def submit(self, value):
+        if value.get("contract_version")==3 or any(n.get("algorithm") in {"time_crop","spatial_roi","time_sample","time_smooth","time_bin"} for n in value.get("steps",[])):
+            return self.submit_sequence(value)
         mode = value.get("mode", "trial")
         if mode not in {"trial", "run"}:
             raise ValueError("未知任务类型")
@@ -367,6 +387,106 @@ class Workbench:
         job.update(name=name,source_name=entries[0]["meta"]["name"],summary=f"{sum(bool(s.get('enabled',True)) for s in value['steps'])} 个步骤 · {selection.mode}" )
         self.enqueue(identifier,job)
         return {"id": identifier}
+
+    def module_plan(self,value):
+        entry = self.get_source(value["source_id"])
+        contract = source_contract(entry["meta"],entry.get("result_kind","image"))
+        return compile_flow(value.get("steps",[]),contract,center=value.get("center"),single=value.get("single",False),strict=False)
+
+    def submit_sequence(self,value):
+        mode = value.get("mode","run")
+        if mode not in {"run","trial"}:
+            raise ValueError("未知任务类型")
+        identifiers = value.get("source_ids",[])
+        if not identifiers or len(identifiers)>32 or len(set(identifiers))!=len(identifiers):
+            raise ValueError("请选择 1–32 个不重复的输入来源")
+        entries = [self.get_source(i) for i in identifiers]
+        if any(e["role"]!="input" for e in entries):
+            raise ValueError("请明确选择输入来源")
+        if value.get("selection",{}).get("roi") or value.get("selection",{}).get("mode") in {"range","current"}:
+            raise ValueError("新流程的范围 / ROI 只能由时间裁剪与空间 ROI 模块设置")
+        nodes,_,_ = normalize_nodes(value.get("steps",[]),check_types=False)
+        dependencies,_,_ = normalize_nodes(value.get("preview_dependencies",[]),check_types=False)
+        if dependencies and (mode!="trial" or dependencies[-1]["algorithm"]!="alignment" or len(nodes)+len(dependencies)>32):
+            raise ValueError("阶段检查的几何依赖只能用于试算，并止于后续配准模块")
+        registered = catalog(self.algorithms.values())
+        if any(n["algorithm"] not in registered or n.get("code_hash")!=registered[n["algorithm"]]["code_hash"] for n in [*nodes,*dependencies]):
+            raise ValueError("请先注册流程中的算法版本")
+        center = value.get("center")
+        sample = value.get("sample_index",0)
+        if center is not None and (type(center) is not int or center<0) or type(sample) is not int or sample<0:
+            raise ValueError("试算样本与关联中心必须为非负整数位置")
+        plans = [compile_flow(nodes,source_contract(e["meta"],e.get("result_kind","image")),center=center,single=mode=="trial",following_nodes=dependencies) for e in entries]
+        identifier = uuid.uuid4().hex[:12]
+        name = display_name(value.get("name"),automatic_name(entries[0]["meta"]["name"],"模块试算" if mode=="trial" else "模块处理"))
+        payload = dict(id=identifier,mode=mode,contract_version=3,steps=list(nodes),sources=[e["source"] for e in entries],revisions=[e["meta"]["revision"] for e in entries],center=center,sample_index=sample,output_dir=str(Path(value.get("output_dir") or self.workspace/"outputs").resolve()),display_name=name,seed=0,config_revision=value.get("config_revision"),provenance=[dict(source_id=e["id"],lineage=e.get("lineage",[])) for e in entries])
+        payload = json.loads(json.dumps(payload,allow_nan=False))
+        payload["input_kinds"] = [e.get("result_kind","image") for e in entries]
+        payload["preview_dependencies"] = list(dependencies)
+        job = dict(id=identifier,mode=mode,engine="sequence",contract_version=3,name=name,source_name=entries[0]["meta"]["name"],source_ids=identifiers,source_count=len(entries),status="queued",completed=0,total=None,logs=[],payload=payload,created=time.time(),summary=f"{len(nodes)} 个模块 · {plans[0]['output']['label']}",base_shape=entries[0]["meta"]["shape"][:2])
+        self.enqueue(identifier,job)
+        return dict(id=identifier,plan=plans[0])
+
+    def sequence_result(self,identifier,value=None):
+        job = self.job(identifier)
+        if job.get("engine")!="sequence" or job["status"] not in {"succeeded","completed_with_errors"}:
+            raise ValueError("请选择已完成的模块流程结果")
+        items = job["run"]["results"]
+        if value is None:
+            return dict(id=identifier,name=job["name"],mode=job["mode"],results=items)
+        position = value.get("source",0)
+        if type(position) is not int or not 0<=position<len(items) or items[position]["status"]!="succeeded":
+            raise ValueError("该来源没有完整结果")
+        item = items[position]
+        from eip.sequence_storage import DatasetReader
+        reader = DatasetReader(SourceSpec(str(Path(job["directory"])/item["output_directory"]/"dataset.json"),"dataset"))
+        try:
+            c = item["contract"]
+            if "Y" not in c["axes"]:
+                indices = sorted(set([*range(0,c["length"],max(1,math.ceil(c["length"]/2000))),c["length"]-1]))
+                refs = [reader.sample_ref(i) for i in indices]
+                values = reader.values[indices].reshape(len(indices),-1)
+                return dict(kind="signals",contract=c,indices=indices,references=refs,values=[[float(v) if np.isfinite(v) else None for v in row] for row in values],downsampled=len(indices)<c["length"],total=c["length"])
+            index,channel = value.get("index",0),value.get("channel",0)
+            if type(index) is not int or not 0<=index<c["length"] or type(channel) is not int or channel not in {0,1}:
+                raise ValueError("结果样本或幅面超出范围")
+            pixels = reader.read_sample(index)
+            if c["axes"].startswith("P"):
+                pixels = pixels[channel]
+            ref = reader.sample_ref(index)
+            token = self.frames.add(pixels,ref,[0,0],pixels.shape[:2],item["result_kind"])
+            return dict(kind="image",contract=c,frame=self.frames.render(token,value.get("display")),reference=ref)
+        finally:
+            reader.close()
+
+    def restore_sequence(self,path):
+        from datetime import datetime
+        path = Path(path).resolve()
+        run = json.loads(path.read_text(encoding="utf-8"))
+        if run.get("contract_version")!=3 or run.get("status") not in {"succeeded","completed_with_errors"}:
+            raise ValueError("请选择已完成的模块流程 run.json")
+        identifier = run["run_id"]
+        payload = run["spec"]
+        with self.lock:
+            if identifier in self.jobs:
+                return dict(id=identifier,engine="sequence")
+        good = [r for r in run["results"] if r["status"]=="succeeded"]
+        if not good:
+            raise ValueError("此记录没有完整输出")
+        from eip.sequence_storage import DatasetReader
+        for item in good:
+            if Path(item["output_directory"]).name!=item["output_directory"]:
+                raise ValueError("运行记录的结果目录无效")
+            reader = DatasetReader(SourceSpec(str(path.parent/item["output_directory"]/"dataset.json"),"dataset"))
+            reader.close()
+        ids = [p["source_id"] for p in payload.get("provenance",[])]
+        job = dict(id=identifier,mode=payload["mode"],engine="sequence",contract_version=3,name=run.get("display_name",identifier),source_name=good[0]["data_spec"]["name"],source_ids=ids,source_count=len(payload["sources"]),status=run["status"],completed=sum(r["completed_frames"] for r in good),total=None,logs=[],payload=payload,run=run,directory=str(path.parent),result_available=True,created=datetime.fromisoformat(run["created_at"]).timestamp(),summary=f"{len(payload['steps'])} 个模块 · {good[0]['contract']['label']}")
+        self.enqueue(identifier,job,queue_job=False)
+        if payload["mode"]=="run":
+            for position,item in enumerate(run["results"]):
+                if item["status"]=="succeeded" and not any(s.get("run_id")==identifier and Path(s["source"]["path"]).parent.name==item["output_directory"] for s in self.sources.values()):
+                    self.open(asdict(SourceSpec(str(path.parent/item["output_directory"]/"dataset.json"),"dataset")),role="result",input_id=ids[position] if position<len(ids) else None,result_kind=item["result_kind"],run_id=identifier,display_name=job["name"])
+        return dict(id=identifier,engine="sequence")
 
     def enqueue(self,identifier,job,*,queue_job=True):
         with self.lock:
@@ -429,7 +549,7 @@ class Workbench:
                     identifier = self.pending.popleft()
                     results = self.context.Queue(maxsize=64)
                     cancel = self.context.Event()
-                    target = split_job_entry if self.jobs[identifier]["mode"] == "split" else job_entry
+                    target = sequence_job_entry if self.jobs[identifier].get("engine")=="sequence" else split_job_entry if self.jobs[identifier]["mode"] == "split" else job_entry
                     process = self.context.Process(target=target, args=(self.jobs[identifier]["payload"], results, cancel), name="EIP-web-compute")
                     try:
                         process.start()
@@ -487,6 +607,20 @@ class Workbench:
                 job["result"] = self.frames.render(token, job["payload"].get("display"))
                 job.update(status="succeeded", completed=1, total=1, result_available=True)
                 active["terminal"] = True
+            elif kind == "sequence_completed":
+                event["run"]["display_name"] = job["name"]
+                write_json(Path(event["directory"])/"run.json",event["run"])
+                job.update(status=event["run"]["status"],run=event["run"],directory=event["directory"],result_available=any(i["status"]=="succeeded" for i in event["run"]["results"]))
+                active["terminal"] = True
+                if job["mode"]=="run":
+                    for position,item in enumerate(event["run"]["results"]):
+                        if item["status"]!="succeeded":
+                            continue
+                        try:
+                            path = Path(event["directory"])/item["output_directory"]/"dataset.json"
+                            self.open(asdict(SourceSpec(str(path),"dataset")),role="result",input_id=job["source_ids"][position],result_kind=item["result_kind"],run_id=job["id"],display_name=job["name"])
+                        except Exception as error:
+                            job["logs"].append(f"结果已保存，自动预览失败：{error}")
             elif kind == "completed":
                 event["run"]["display_name"] = job["name"]
                 write_json(Path(event["directory"])/"run.json",event["run"])
@@ -529,9 +663,10 @@ class Workbench:
         return {"path": str(resolved), "directory": resolved.is_dir(), "suffix": resolved.suffix.lower(), "size": resolved.stat().st_size if resolved.is_file() else None, "supported_data": resolved.is_dir() or resolved.suffix.lower() in IMAGE_EXTENSIONS | VIDEO_EXTENSIONS}
 
     def save_project(self, path, view):
-        self.validate_steps(view.get("steps", []))
+        self.validate_steps(view.get("steps", []),check_types=view.get("web_module_contract")!=3)
         value = {**view, "schema_version": 1, "sources": [entry["source"] for entry in self.sources.values() if entry["role"] == "input"], "results": [{"source": entry["source"], "id": entry["id"], "run_id": entry.get("run_id"), "display_name": entry.get("display_name"), "result": True, "input_key": entry.get("input_id"), "origin": entry.get("origin", [0, 0]), "base_shape": entry.get("base_shape"), "result_kind": entry.get("result_kind", "image")} for entry in self.sources.values() if entry["role"] == "result"], "split_result_paths": [str(Path(job["directory"])/"run.json") for job in self.jobs.values() if job["mode"]=="split" and job["status"]=="succeeded"]}
         value["source_entries"] = [{key: entry[key] for key in ["source", "id", "lineage", "parent_result_id", "display_name", "result_kind"] if key in entry} for entry in self.sources.values() if entry["role"] == "input"]
+        value["sequence_result_paths"] = [str(Path(j["directory"])/"run.json") for j in self.jobs.values() if j.get("engine")=="sequence" and j["status"] in {"succeeded","completed_with_errors"}]
         target = Path(path).resolve()
         if target.suffix != ".json":
             raise ValueError("项目文件请使用 .json 后缀")
@@ -553,7 +688,7 @@ class Workbench:
         for step in value["steps"]:
             if step.get("manifest"):
                 self.register(step["manifest"])
-        self.validate_steps(value["steps"])
+        self.validate_steps(value["steps"],check_types=value.get("web_module_contract")!=3)
         if any(not Path(source["path"]).exists() for source in value["sources"]):
             raise ValueError("项目引用的部分来源缺失，请恢复来源路径")
         previous = self.sources.copy()
@@ -583,6 +718,9 @@ class Workbench:
         for result_path in value.get("split_result_paths",[]):
             if Path(result_path).is_file():
                 self.split.restore(result_path)
+        for result_path in value.get("sequence_result_paths",[]):
+            if Path(result_path).is_file():
+                self.restore_sequence(result_path)
         return {"state": self.state(), "view": value}
 
     def close(self):

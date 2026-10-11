@@ -53,8 +53,8 @@ export class SplitController {
     $("split-open-results").onclick=()=>{this.bridge.openParameters?.();$("split-results-tools").open=!$("split-results-tools").open;$("split-results-tools").scrollIntoView({block:"nearest"});};
     $("split-use-general").onclick=this.wrap(()=>this.bridge.useModules(clone(this.cfg?.workflow||[]),this.executionContext()));
     $("split-refresh-preview").onclick=this.wrap(()=>this.updateGeometry());
-    $("split-roi-draw").onclick=this.wrap(async()=>{await this.setStage("trial");$("split-tool").value="roi";this.setTool("roi");});
-    $("split-point-draw").onclick=this.wrap(async()=>{await this.setStage("trial");$("split-tool").value="point";this.setTool("point");});
+    $("split-roi-draw").onclick=this.wrap(()=>this.bridge.drawModuleROI?.(this.flow));
+    $("split-point-draw").onclick=this.wrap(()=>this.bridge.drawModuleROI?.(this.flow,true));
     document.querySelectorAll("[data-split-analysis]").forEach(b=>b.onclick=()=>this.setAnalysis(b.dataset.splitAnalysis));
     $("split-job-name").oninput=()=>{if(this.record){this.record.names??={};this.record.names[this.record.analysis||"map"]=$("split-job-name").value;this.bridge.changed();}};
     $("split-result-rename").onclick=this.wrap(async()=>{if(!this.resultId)throw Error("请先选择完成的结果");await api(`jobs/${this.resultId}/rename`,{name:$("split-result-name").value});await this.bridge.poll();await this.loadResult(this.resultId,false);this.bridge.report("结果名称已保存");});
@@ -219,10 +219,11 @@ export class SplitController {
   executionContext() {return Object.fromEntries(["start","end","center","roi","points","memory_mb","backend","output_dtype"].map(k=>[k,clone(this.cfg[k])]));}
   modulePanel() {
     const node=this.selectedNode,spec=this.context.modules?.[node?.algorithm];
-    document.querySelectorAll("[data-module-panel]").forEach(el=>el.hidden=el.dataset.modulePanel!==node?.algorithm);
+    document.querySelectorAll("[data-module-panel]").forEach(el=>el.hidden=!["alignment","calibration"].includes(node?.algorithm)||el.dataset.modulePanel!==node?.algorithm);
     $("split-module-inspector").hidden=false;
     $("split-module-title").textContent=spec?.name||"选择一个模块";
     $("split-module-instance").textContent=node?`实例 ${node.id.slice(0,8)} · v${node.version||"1.0"}${node.enabled?"":" · 已停用"}`:"在模块流程中添加或选择算法，然后编辑该实例的参数。";
+    if(this.mode==="split_correlation")$("module-preview-tools").hidden=node?.algorithm!=="alignment";
   }
   previewError(error) {const el=$("split-preview-error");el.hidden=!error;el.textContent=error?`流程预览：${error.message||error}。原始帧仍可定位和播放。`:"";}
   previewTransform() {
@@ -250,7 +251,7 @@ export class SplitController {
   updateStatus() {
     const source=this.context.source,corr=this.activeNode("correlation"),stats=this.activeNode("statistics"),alignment=this.activeNode("alignment"),error=this.flow.validate();
     let type="sensor";for(const n of this.cfg?.workflow||[]){if(!n.enabled)continue;const out=this.context.modules?.[n.algorithm]?.output;if(out&&out!=="same")type=out;}
-    const incomplete=type==="pair"?"流程输出为双路，请添加选择幅面或二阶关联模块":null;
+    const incomplete=null;
     const missingLut=(this.cfg?.workflow||[]).some(n=>n.enabled&&this.record?.customLutNodes?.includes(n.id)&&!n.parameters.lut_path);
     const valid=!!source&&!error&&!incomplete&&!missingLut&&this.accepted();
     for(const id of["split-trial","split-run","split-curve-run"])$(id).disabled=!valid;
@@ -258,7 +259,7 @@ export class SplitController {
     $("split-trial").textContent=corr?"当前中心系数图":"当前帧试算";
     $("split-run").textContent=corr?"运行固定 τ 系数图":stats?"运行全源统计":"运行图像流程";
     const curve=!!corr&&this.record?.analysis==="curve";$("split-curve-run").hidden=!curve;$("split-trial").hidden=curve||!!stats&&!corr;$("split-run").hidden=curve;
-    $("split-status").textContent=error||incomplete||(missingLut?"请填写校准模块的 LUT 路径":alignment&&!this.accepted()?"请检查并接受当前分幅标定":corr?`${stats?"复用全源统计":"直接强度关联 · 未启用全源统计"} · 固定标定已接受`:`${(this.cfg?.workflow||[]).filter(n=>n.enabled).length} 个模块 · 逐帧处理`);
+    $("split-status").textContent=error||(missingLut?"请填写校准模块的 LUT 路径":alignment&&!this.accepted()?"请检查并接受当前分幅标定":this.flow.plan?.output?.label||"配置模块流程 · ROI 与时间范围由独立模块设置");
     let stale=false;if(this.resultData?.run&&this.cfg){const saved=clone(this.resultData.run.config),current=this.taskConfig(this.resultData.run.task);if(this.resultData.run.task==="run"){delete saved.center;delete current.center;}stale=JSON.stringify(saved)!==JSON.stringify(current)||this.resultData.run.provenance?.source_id!==this.sourceId;}
     $("split-stale").hidden=!stale;
     const devices=this.context.devices,gpu=$("split-backend").querySelector('option[value="gpu"]');gpu.disabled=!devices?.gpu;gpu.textContent=devices?.gpu?`GPU · ${devices.gpu_name}`:"GPU（不可用）";
@@ -305,11 +306,13 @@ export class SplitController {
       const curve=$("split-photo-curve").value;p.curve=curve==="custom"?"identity":curve;p.lut_path=curve==="custom"?$("split-lut").value.trim()||null:null;
       p.input_semantics=$("split-semantics").value;p.input_max=Number($("split-photo-max").value);p.gamma=Number($("split-photo-gamma").value);p.black_left=Number($("split-black-left").value);p.black_right=Number($("split-black-right").value);p.saturation_code=$("split-saturation").value===""?null:Number($("split-saturation").value);
       this.record.customLutNodes=(this.record.customLutNodes||[]).filter(id=>id!==node.id);if(curve==="custom")this.record.customLutNodes.push(node.id);this.photoPreview();
+    }else if(this.cfg.workflow_version===3){this.flow.sync();return;
     }else if(node?.algorithm==="statistics"){p.normalization=$("split-normalization").value;
     }else if(node?.algorithm==="correlation"){
       for(const[id,key]of[["split-window","window"],["split-stride","stride"],["split-lag-min","lag_min"],["split-lag-max","lag_max"],["split-lag-step","lag_step"],["split-min-mean","min_mean"],["split-min-samples","min_samples"]])p[key]=Number($(id).value);
       const lag=$("split-lag-list").value.trim();p.lag_list=lag?lag.split(/[,，;\s]+/).map(Number):null;p.map_lag=Number($("split-map-lag").value);p.analysis=this.record.analysis||"map";
     }
+    if(this.cfg.workflow_version===3){this.flow.sync();return;}
     const corr=this.activeNode("correlation");if(corr)corr.parameters.roi_estimator=$("split-roi-estimator").value;
     c.backend=$("split-backend").value;c.output_dtype=$("split-output-dtype").value;c.memory_mb=Number($("split-memory").value);c.start=Number($("split-range-start").value)-1;c.end=Number($("split-range-end").value)-1;c.center=Number($("split-center").value)-1;
     this.flow.sync();
@@ -331,10 +334,11 @@ export class SplitController {
     this.readFields();
     const generation=++this.generation;
     const g=this.cfg.geometry;
-    const response=await api("split/geometry",{source_id:this.sourceId,index:this.context.input?.ref.index??0,...(suggest?{midline:g?.midline||[this.context.source.meta.shape[1]/2,this.context.source.meta.shape[1]/2],threshold:Number($("split-black-threshold").value)}:{geometry:g}),photometry:this.cfg.photometry,calibrate,workflow_config:!suggest?{workflow:this.cfg.workflow}:null});
+    const alignmentIndex=this.cfg.workflow.findIndex(n=>n.id===(this.selectedNode?.algorithm==="alignment"?this.selectedNode.id:this.activeNode("alignment")?.id));
+    const response=await api("split/geometry",{source_id:this.sourceId,index:this.context.input?.ref.index??0,...(suggest?{midline:g?.midline||[this.context.source.meta.shape[1]/2,this.context.source.meta.shape[1]/2],threshold:Number($("split-black-threshold").value)}:{geometry:g}),photometry:this.cfg.photometry,calibrate,...(this.cfg.workflow_version===3?{contract_version:3,module_prefix:this.cfg.workflow.slice(0,Math.max(0,alignmentIndex)),module_dependencies:alignmentIndex>=0?[this.cfg.workflow[alignmentIndex]]:[],sample_index:this.flow.previewSample||0}:{workflow_config:!suggest?{workflow:this.cfg.workflow}:null})});
     if(generation!==this.generation) return;
     const changed=JSON.stringify(this.snapshots?.geometry||this.cfg.geometry)!==JSON.stringify(response.geometry);
-    this.cfg.geometry=response.geometry;const alignment=this.activeNode("alignment");if(alignment)alignment.parameters=response.geometry;this.record.previewInitialized=true;this.rawSnapshot=this.context.input;this.previewError(null);
+    this.cfg.geometry=response.geometry;const alignment=this.selectedNode?.algorithm==="alignment"?this.selectedNode:this.activeNode("alignment");if(alignment)alignment.parameters=response.geometry;this.record.previewInitialized=true;this.rawSnapshot=this.context.input;this.previewError(null);
     if(changed) {this.record.accepted=null;this.cfg.roi=null;this.cfg.points=[];this.record.pointsAuto=true;}
     this.snapshots=response;
     if(response.mapping&&this.record.pointsAuto&&!this.cfg.points.length) this.cfg.points=[[Math.floor(response.mapping.shape[1]/2),Math.floor(response.mapping.shape[0]/2)]];
@@ -462,6 +466,11 @@ export class SplitController {
     return estimate;
   }
   async submit(task) {
+    if(this.cfg?.workflow_version===3){
+      if(!this.accepted())throw Error("请先检查并接受当前分幅标定");this.readFields();
+      const nodes=clone(this.cfg.workflow);if(task==="statistics"){const i=nodes.findIndex(n=>n.enabled&&n.algorithm==="statistics");if(i<0)throw Error("请先添加统计模块");nodes.splice(i+1);}
+      return this.bridge.submitModules?.(nodes,task==="trial"?"trial":"run",$("split-job-name").value.trim()||null);
+    }
     if(!this.accepted()) throw Error("请先检查分幅与配准，并接受当前固定标定");
     this.readFields();
     if(!this.accepted()) throw Error("标定参数已变更，请更新预览并重新接受");

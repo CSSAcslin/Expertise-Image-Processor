@@ -1,0 +1,20 @@
+.module-contract { white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.7 var(--mono,Consolas,monospace); color: #b6d9da; background: #12242b; padding: 10px; border: 1px solid #284148; border-radius: 6px; }
+.flow-type { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 1.6; }
+.contract-error { border-color: #b46667 !important; }
+.contract-error .flow-type { color: #e4a3a4; }
+.module-execution { margin-top: 16px; padding-top: 10px; border-top: 1px solid #2b3947; }
+.module-stage-tools { margin-top: 12px; }
+.axis-stage-note { display: flex; gap: 10px; align-items: center; padding: 8px 14px; background: #19373a; font-size: 12px; color: #b9e4df; }
+.axis-stage-note[hidden],.sequence-controls[hidden] { display: none !important; }
+.sequence-controls { padding: 8px 12px; border-top: 1px solid #293846; background: #121c27; }
+.sequence-controls label { display: flex; flex: 1; min-width: 95px; gap: 5px; font-size: 11px; align-items: center; }
+.sequence-controls select { min-width: 0; width: 100%; }
+#sequence-readout { white-space: pre-wrap; overflow-wrap: anywhere; margin: 7px 0; color: #a7bfce; font-size: 11px; }
+#sequence-index { width: 100%; }
+#sequence-controls .split-buttons { flex-wrap: wrap; }
+.sequence-controls .quiet { font-size: 10px; }
+.sequence-controls summary { cursor: pointer; font-size: 11px; color: #a7c8d2; }
+.sequence-controls details[open] { max-height: 200px; overflow-y: auto; }
+.sequence-controls { max-height: 45%; overflow-y: auto; flex: 0 0 auto; }
+.module-stage-tools label { width: 100%; font-size: 11px; color: #aac1ce; }
+.module-stage-tools input { max-width: 90px; margin-left: 8px; }

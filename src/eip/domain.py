@@ -17,7 +17,7 @@ class SourceSpec:
     interval: float | None = None
 
     def __post_init__(self):
-        if self.kind not in {"auto", "image", "sequence", "video", "correlation"}:
+        if self.kind not in {"auto", "image", "sequence", "video", "correlation", "dataset"}:
             raise ValueError("不支持的数据源类型")
         if self.interval is not None and (not math.isfinite(self.interval) or self.interval <= 0):
             raise ValueError("序列时间间隔必须为正数")
@@ -44,6 +44,7 @@ class DataSpec:
     notes: tuple[str, ...] = ()
     frame_indexed: bool = False
     sample_bits: int | None = None
+    contract: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -112,6 +113,7 @@ class StepSpec:
     id: str | None = None
     target: str = "both"
     name: str | None = None
+    execution: dict[str, Any] = field(default_factory=dict)
 
 
 def validate_pixels(array: np.ndarray) -> None:

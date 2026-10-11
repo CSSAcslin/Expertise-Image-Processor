@@ -139,6 +139,22 @@ def create_app(workspace: Path | None = None, restore_session: Path | None = Non
         from eip.module_registry import catalog
         return catalog(workbench().algorithms.values())
 
+    @app.post("/api/modules/plan")
+    def module_plan(value: dict):
+        return workbench().module_plan(value)
+
+    @app.get("/api/jobs/{identifier}/sequence")
+    def sequence_result(identifier: str):
+        return workbench().sequence_result(identifier)
+
+    @app.post("/api/jobs/{identifier}/sequence")
+    def sequence_slice(identifier: str,value: dict):
+        return workbench().sequence_result(identifier,value)
+
+    @app.post("/api/sequence/restore")
+    def restore_sequence(value: dict):
+        return workbench().restore_sequence(value["path"])
+
     @app.post("/api/jobs/{identifier}/cancel")
     def cancel(identifier: str):
         workbench().cancel(identifier)
@@ -152,13 +168,17 @@ def create_app(workspace: Path | None = None, restore_session: Path | None = Non
         directory = Path(job["directory"])
         if file == "manifest":
             path = directory / "run.json"
-        elif file in {"csv", "image"}:
+        elif file in {"csv", "image", "array", "png", "svg", "references"}:
             run = job.get("run", {})
             results = run.get("results", [])
             if source < 0 or source >= len(results) or results[source]["status"] != "succeeded":
                 raise ValueError("该来源没有完成的输出")
             result = results[source]
-            path = directory / result["output_directory"] / ("measurements.csv" if file == "csv" else result["artifacts"][0])
+            names = {"csv":"measurements.csv","array":"values.npy","png":"curve.png","svg":"curve.svg","references":"references.jsonl"}
+            if job.get("engine")=="sequence" and file=="image":
+                path = directory/result["output_directory"]/"first.tif"
+            else:
+                path = directory / result["output_directory"] / (names[file] if file in names else result["artifacts"][0])
         else:
             raise ValueError("未知导出类型")
         if not path.is_file():

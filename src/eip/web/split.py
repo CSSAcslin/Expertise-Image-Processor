@@ -47,17 +47,20 @@ class SplitService:
         return self.workbench.frames.render(token,display)
 
     def geometry(self,value):
-        entry = self._source(value)
-        event = self._frame(entry,value.get("index",0))
+        axis = value.get("contract_version")==3
+        entry = self.workbench.get_source(value["source_id"]) if axis else self._source(value)
+        if entry["role"]!="input":
+            raise ValueError("请选择输入来源")
+        event = self.workbench.preview.request(entry["source"],"module",nodes=value.get("module_prefix",[]),dependencies=value.get("module_dependencies",[]),input_kind=entry.get("result_kind","image"),index=value.get("sample_index",0)) if axis else self._frame(entry,value.get("index",0))
         if value.get("geometry"):
             config = GeometryConfig.from_dict(value["geometry"])
         else:
-            line = value.get("midline",[entry["meta"]["shape"][1]/2]*2)
-            if len(line)!=2 or not all(0<finite(x,"中线坐标")<entry["meta"]["shape"][1] for x in line):
+            line = value.get("midline",[event["pixels"].shape[1]/2]*2)
+            if len(line)!=2 or not all(0<finite(x,"中线坐标")<event["pixels"].shape[1] for x in line):
                 raise ValueError("中线需有两个位于图内的 X 坐标")
             threshold = finite(value.get("threshold",0),"黑边识别阈值")
             config = GeometryConfig.from_dict(propose_rectangles(event["pixels"],line,threshold))
-        photo = Photometry(PhotometryConfig.from_dict(value.get("photometry")))
+        photo = Photometry(PhotometryConfig.from_dict(dict(curve="identity",normalization="none"))) if axis else Photometry(PhotometryConfig.from_dict(value.get("photometry")))
         mapping = Geometry(config,event["pixels"].shape)
         requested = (value.get("workflow_config") or {}).get("workflow")
         if requested is not None:

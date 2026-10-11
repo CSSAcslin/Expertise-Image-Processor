@@ -3,7 +3,8 @@ import { Viewer } from "./viewer.js";
 import { FileBrowser } from "./file-browser.js";
 import { validROI, moveROI } from "./geometry.js";
 import { SplitController } from "./split.js";
-import { ModuleEditor } from "./flow.js";
+import { ModuleEditor, moduleNode } from "./flow.js";
+import { SequenceResults } from "./sequence.js";
 import { WorkbenchLayout } from "./layout.js";
 import { detailHTML, bindRename } from "./job-detail.js";
 import { PreviewEngine } from "./preview.js";
@@ -93,6 +94,8 @@ let sourceViews = new Map(),
   committedROI = null,
   pixelGeneration = 0;
 let resultOwner="general",generalROI=null;
+let axisEditing=null,axisStage=false;
+const stageRequests=new Map();
 const preview=new PreviewEngine({read:(id,value)=>api(`sources/${id}/frame`,value),generation:()=>sourceGeneration,state:value=>{playing=value;$("play").innerHTML=icon(value?"pause":"play");$("play").setAttribute("aria-label",value?"暂停":"播放");}});
 let selectionRequest = 0;
 function frameRequest(id, value, generation = sourceGeneration) {
@@ -113,17 +116,20 @@ const callbacks = {
   redraw,
   fit,
   roi: () => {
+    if(axisEditing){commitModuleROI();return;}
     if(splitActive()){split.commitROI();return;}
     rememberROI();
     changed();
     updateROI();
   },
   roiPreview: () => {
+    if(axisEditing){redraw();return;}
     if(splitActive()){split.draw();return;}
     updateROI();
     $("stale").hidden = !result || resultSignature === signature();
   },
   pixel: (snapshot, x, y, generic=false) => {
+    if(snapshot.signal_values){$("pixel-info").textContent=`时间信号 · 无空间像素 · ${snapshot.signal_values.map(v=>v==null?"无效":Number(v).toPrecision(8)).join(" / ")}`;return;}
     if(splitActive()&&!generic){split.pixel(snapshot,x,y);return;}
     const generation = ++pixelGeneration;
     clearTimeout(pixelTimer);
@@ -157,6 +163,7 @@ const layout = new WorkbenchLayout(scheduleDraft);
 const split = new SplitController({
   viewer:originalViewer,resultViewer,seek:seekFrame,stopPreview:stopPlay,
   resultShown:snapshot=>{
+    sequenceResults.hide();
     resultOwner="split";result=snapshot;formalResult=null;resultSignature=null;
     $("split-result-controls").hidden=false;$("split-result-title").hidden=false;$("stale").hidden=true;$("result-label").textContent="处理结果";$("result-meta").textContent="";
     if(snapshot)resultDisplay={...snapshot.display};
@@ -166,6 +173,7 @@ const split = new SplitController({
   context:()=>({source:active,input,output:$("output-dir").value,devices:state?.split_devices,modules:state?.modules}),
   changed:()=>{updateSummary();scheduleDraft();},report:toast,poll:pollJobs,
   openParameters:()=>layout.openParameters("split"),
+  previewModule,drawModuleROI,submitModules,
   activate:()=>setAnalysisMode("split_correlation"),
   useModules:async(nodes,config)=>{steps=structuredClone(nodes);generalSequenceContext={sourceId:active?.id,config};renderSteps();await setAnalysisMode("general");toast("流程已复制到通用预设；模块参数与顺序保持一致");},
   promote:async(opened)=>{
@@ -174,7 +182,45 @@ const split = new SplitController({
   },
 });
 let generalSequenceContext=null;
-const generalEditor=new ModuleEditor({nodes:()=>steps,catalog:()=>state?.modules,source:()=>active,host:()=>$("steps"),status:()=>$("module-status"),inspector:()=>$("general-module-fields"),title:()=>$("general-module-title"),instance:()=>$("general-module-instance"),inspect:(open=true)=>{if(open){layout.openParameters("general");$("general-module-inspector").scrollIntoView({block:"nearest"});}},selectionChanged:scheduleDraft,change:changed,afterRender:()=>{$("step-count").textContent=steps.length;},report:toast});
+const generalEditor=new ModuleEditor({nodes:()=>steps,catalog:()=>state?.modules,source:()=>active,host:()=>$("steps"),status:()=>$("module-status"),inspector:()=>$("general-module-fields"),title:()=>$("general-module-title"),instance:()=>$("general-module-instance"),preview:previewModule,drawROI:drawModuleROI,inspect:(open=true)=>{if(open){layout.openParameters("general");$("general-module-inspector").scrollIntoView({block:"nearest"});}},selectionChanged:scheduleDraft,change:changed,afterRender:()=>{$("step-count").textContent=steps.length;},report:toast});
+const sequenceResults=new SequenceResults({report:toast,display:()=>resultDisplay,image:async snapshot=>{result=snapshot;resultOwner="sequence";formalResult=null;resultSignature=null;resultScene.width=snapshot.shape[1];resultScene.height=snapshot.shape[0];await resultViewer.set(snapshot);if($("display-target").value==="result")fillDisplayControls(snapshot,resultDisplay);},signals:()=>{resultOwner="sequence";result=null;formalResult=null;resultViewer.clear();if($("display-target").value==="result")fillDisplayControls(null,resultDisplay);},shown:()=>{resultOwner="sequence";$("stale").hidden=true;setMode("compare");redraw();},promote:async(id,position)=>{sources=(await api("state")).sources;const job=await api(`jobs/${id}`),path=job.directory+"/"+job.run.results[position].output_directory+"/dataset.json";const entry=sources.find(s=>s.role==="result"&&s.run_id===id&&s.source.path.replaceAll("\\","/")===path.replaceAll("\\","/"));if(!entry)throw Error("该结果未能自动加入来源，请查看任务日志");formalResult=entry;await promoteResult();}});
+$("general-module-inspector").after($("batch").closest("label"));
+async function submitModules(nodes,mode="run",name=null,extra={}){
+  if(!active||!input)return;
+  const response=await api("jobs",{contract_version:3,mode,name,source_ids:extra.source_ids||[active.id],steps:structuredClone(nodes),preview_dependencies:extra.dependencies||[],sample_index:extra.sample_index||0,output_dir:$("output-dir").value,config_revision:JSON.stringify(nodes)});
+  if(extra.stage)stageRequests.set(response.id,extra.stage);
+  toast(mode==="trial"?"流程试算已加入后台；输出首样本，关联中心由模块参数决定":"模块流程已加入后台队列");await pollJobs();return response;
+}
+async function previewModule(editor,side="input",drawing=false,point=false){
+  try{
+    if(!active||!editor.selected)throw Error("请先选择输入来源和模块");
+    stopPlay();const i=editor.nodes.indexOf(editor.selected),nodes=editor.nodes.slice(0,i+(side==="output"?1:0));
+    let dependencies=[];if(nodes.some(n=>n.enabled&&n.algorithm==="calibration"&&n.parameters.black_left!==n.parameters.black_right)){const end=editor.nodes.findIndex((n,j)=>j>=nodes.length&&n.enabled&&n.algorithm==="alignment");if(end>=0)dependencies=structuredClone(editor.nodes.slice(nodes.length,end+1));}
+    await submitModules(nodes,"trial",`${editor.specs[editor.selected.algorithm]?.name} · ${side==="input"?"输入":"输出"}检查`,{sample_index:editor.previewSample||0,dependencies,stage:{editor,nodeId:editor.selected.id,side,drawing,point,sourceId:active.id,prefix:JSON.stringify(nodes)}});
+  }catch(e){toast(e.message,true);}
+}
+async function drawModuleROI(editor=splitActive()?split.flow:generalEditor,point=false){
+  try{if(!active)throw Error("请先导入来源");if(editor.selected?.algorithm!=="spatial_roi"){editor.add("spatial_roi");}await previewModule(editor,"input",true,point);}catch(e){toast(e.message,true);}
+}
+function commitModuleROI(roi=scene.roi,remember=true){
+  const bound=axisEditing,node=bound?.editor.nodes.find(n=>n.id===bound.nodeId);if(!node)return;
+  const q=structuredClone(roi||{x:0,y:0,width:scene.width,height:scene.height});if(bound.point){q.width=q.height=1;node.parameters.mode="mean";}
+  if(!validROI(q,scene.width,scene.height))throw Error("ROI 必须位于此模块输入的空间范围内");
+  if(remember&&JSON.stringify(q)!==JSON.stringify(bound.committed)){bound.undo.push(structuredClone(bound.committed));bound.undo=bound.undo.slice(-32);bound.redo=[];}
+  bound.committed=structuredClone(q);Object.assign(node.parameters,q);scene.roi=q;bound.editor.changed();updateROI();redraw();scheduleDraft();
+}
+async function showStageResult(job,request){
+  if(active?.id!==request.sourceId)return;
+  const data=await api(`jobs/${job.id}/sequence`,{source:0,index:0,channel:0});
+  if(data.kind!=="image"){await sequenceResults.load(job.id);toast("此步骤已没有空间轴，结果以曲线显示");return;}
+  const node=request.editor.nodes.find(n=>n.id===request.nodeId);if(!node)return;
+  axisStage=true;axisEditing=request.drawing?request:null;stopPlay();scene.width=data.frame.shape[1];scene.height=data.frame.shape[0];scene.zoom=1;scene.panX=scene.panY=0;scene.tool=request.drawing?"roi":"pan";scene.roi=request.drawing?{x:node.parameters.x,y:node.parameters.y,width:node.parameters.width||scene.width-node.parameters.x,height:node.parameters.height||scene.height-node.parameters.y}:null;
+  if(axisEditing)Object.assign(axisEditing,{undo:[],redo:[],committed:structuredClone(scene.roi)});
+  updateROI();if(splitActive()){$("split-tool").value="pan";split.view="stage";}
+  await originalViewer.set(data.frame);$("axis-stage-note").hidden=false;$("axis-stage-caption").textContent=`${request.editor.specs[node.algorithm].name} · ${request.side==="input"?"此步输入":"此步输出"} · ${data.contract.label}${request.drawing?" · 拖动选区会修改此 ROI 实例":""}`;$("input-label").textContent="模块阶段检查";setMode("compare");redraw();
+  if($("display-target").value==="input")fillDisplayControls(data.frame,display);
+}
+$("axis-restore-raw").onclick=safe(async()=>{axisEditing=null;axisStage=false;$("axis-stage-note").hidden=true;if(input)await setInput(input);});
 async function setAnalysisMode(mode) {
   const previous=split.mode;$("analysis-mode").value=mode;
   if(previous==="general"&&mode!==previous)generalROI=structuredClone(scene.roi);
@@ -186,8 +232,8 @@ async function setAnalysisMode(mode) {
 $("analysis-mode").onchange=safe(()=>setAnalysisMode($("analysis-mode").value));
 function redraw(viewer) {
   if(viewer===resultViewer&&resultOwner==="general")Object.assign(scene,{zoom:resultScene.zoom,panX:resultScene.panX,panY:resultScene.panY});
-  if(splitActive())split.draw();else originalViewer.draw();
-  if(resultOwner==="split")split.drawResult();else{
+  if(splitActive()&&!axisStage)split.draw();else originalViewer.draw();
+  if(resultOwner==="sequence")resultViewer.draw();else if(resultOwner==="split")split.drawResult();else{
     Object.assign(resultScene,{zoom:scene.zoom,panX:scene.panX,panY:scene.panY,roi:splitActive()?generalROI:scene.roi,tool:"pan"});resultViewer.draw();
   }
   $("zoom-value").textContent =
@@ -198,6 +244,7 @@ function visibleViewer() {
   return $("viewers").dataset.mode === "result" ? resultViewer : originalViewer;
 }
 function fit(viewer=visibleViewer()) {
+  if(viewer===resultViewer&&resultOwner==="sequence"){resultScene.zoom=1;resultScene.panX=resultScene.panY=0;redraw();return;}
   if(viewer===resultViewer&&resultOwner==="split"){split.fitResult();redraw();return;}
   scene.zoom = 1;
   scene.panX = scene.panY = 0;
@@ -224,8 +271,8 @@ function updateROI() {
     : "全幅图像";
   for (const key of ["x", "y", "width", "height"])
     $("roi-" + key).value = q?.[key] ?? "";
-  $("roi-undo").disabled = !roiUndo.length;
-  $("roi-redo").disabled = !roiRedo.length;
+  $("roi-undo").disabled = !(axisEditing?.undo||roiUndo).length;
+  $("roi-redo").disabled = !(axisEditing?.redo||roiRedo).length;
   $("roi-editor").hidden = !q;
   $("clear-roi").disabled = !q;
 }
@@ -273,6 +320,7 @@ function rememberROI() {
 function commitROI(roi) {
   if (roi && !validROI(roi, scene.width, scene.height))
     throw Error("ROI 必须是图像范围内的整数像素矩形");
+  if(axisEditing){commitModuleROI(roi);return;}
   scene.roi = roi;
   rememberROI();
   updateROI();
@@ -326,17 +374,20 @@ function updateSummary() {
 }
 function updateSources() {
   const inputs = sources.filter((s) => s.role === "input"),
-    results = sources.filter((s) => s.role === "result");
+    results = sources.filter((s) => s.role === "result"&&s.source.kind!=="dataset");
   $("source-count").textContent = inputs.length;
   const splitResults=jobs.filter(j=>j.mode==="split"&&j.status==="succeeded");
-  $("result-count").textContent = results.length+splitResults.length;
+  const sequenceJobs=jobs.filter(j=>j.engine==="sequence"&&["succeeded","completed_with_errors"].includes(j.status));
+  $("result-count").textContent = results.length+splitResults.length+sequenceJobs.length;
   const card = (s) =>
-    `<div class="source-card ${s.id === active?.id || s.id === formalResult?.id ? "selected" : ""}" tabindex="0" role="button" data-source="${s.id}" aria-label="预览 ${escape(s.display_name || s.meta.name)}"><img src="${s.thumbnail}" alt=""><div class="source-copy"><strong title="${escape(s.source.path)}">${escape(s.display_name || s.meta.name)}</strong><span class="source-kind">${s.role === "result" ? "处理结果" : s.lineage?.length ? "派生输入 · 阶段 " + (s.lineage.length + 1) : s.meta.kind === "video" ? "视频" : s.meta.kind === "sequence" ? "图像序列" : "图像"}</span><small>${s.meta.shape[1]} × ${s.meta.shape[0]} · ${escape(s.meta.dtype)}</small><button class="text-button source-info" data-info="${s.id}">属性 / 来源</button></div><button class="icon-button source-remove" data-remove="${s.id}" aria-label="移除 ${escape(s.display_name || s.meta.name)}">${icon("close")}</button></div>`;
+    `<div class="source-card ${s.id === active?.id || s.id === formalResult?.id ? "selected" : ""}" tabindex="0" role="button" data-source="${s.id}" aria-label="预览 ${escape(s.display_name || s.meta.name)}"><img src="${s.thumbnail}" alt=""><div class="source-copy"><strong title="${escape(s.source.path)}">${escape(s.display_name || s.meta.name)}</strong><span class="source-kind">${s.role === "result" ? "处理结果" : s.lineage?.length ? "派生输入 · 阶段 " + (s.lineage.length + 1) : s.meta.kind === "video" ? "视频" : s.meta.kind === "sequence" ? "图像序列" : "图像"}</span><small>${s.meta.contract?escape(s.meta.contract.label):`${s.meta.shape[1]} × ${s.meta.shape[0]}`} · ${escape(s.meta.contract?.dtype||s.meta.dtype)}</small><button class="text-button source-info" data-info="${s.id}">属性 / 来源</button></div><button class="icon-button source-remove" data-remove="${s.id}" aria-label="移除 ${escape(s.display_name || s.meta.name)}">${icon("close")}</button></div>`;
   $("source-list").innerHTML = inputs.length
     ? inputs.map(card).join("")
     : '<div class="library-empty">导入图像、视频<br>或图像序列目录</div>';
   $("result-list").innerHTML = results.map(card).join("")+splitResults.map(j=>`<div class="split-result-card ${split.resultId===j.id?"selected":""}" data-split-result="${j.id}" tabindex="0" role="button" aria-label="打开处理结果 ${escape(j.name)}"><strong>${escape(j.name)}</strong><span class="source-kind">${({statistics:"全源统计",trial:"空间图试算",curve:"τ 扫描曲线",run:"空间系数图"}[j.task])}</span><small>${escape(j.summary||j.source_name||"")}</small><small>${new Date(j.created*1000).toLocaleString()} · ${escape(j.id.slice(0,6))}</small></div>`).join("");
-  document.querySelectorAll("[data-split-result]").forEach(el=>{el.onclick=safe(async()=>{await setAnalysisMode("split_correlation");await split.loadResult(el.dataset.splitResult);});el.onkeydown=e=>{if(e.key==="Enter")el.click();};});
+  $("result-list").insertAdjacentHTML("beforeend",sequenceJobs.map(j=>`<div class="split-result-card" data-sequence-result="${j.id}" tabindex="0" role="button"><strong>${escape(j.name)}</strong><span class="source-kind">${j.mode==="trial"?"模块试算":"模块处理"}</span><small>${escape(j.summary||"")}</small><small>${new Date(j.created*1000).toLocaleString()} · ${escape(j.id.slice(0,6))}</small></div>`).join(""));
+  document.querySelectorAll("[data-sequence-result]").forEach(el=>{el.onclick=safe(()=>sequenceResults.load(el.dataset.sequenceResult));el.onkeydown=e=>{if(e.key==="Enter")el.click();};});
+  document.querySelectorAll("[data-split-result]").forEach(el=>{el.onclick=safe(async()=>{sequenceResults.hide();await setAnalysisMode("split_correlation");await split.loadResult(el.dataset.splitResult);});el.onkeydown=e=>{if(e.key==="Enter")el.click();};});
   document.querySelectorAll("[data-source]").forEach((el) => {
     el.onclick = safe(() => selectSource(el.dataset.source));
     el.onkeydown = (e) => {
@@ -374,7 +425,7 @@ function showSourceDetails(id) {
     ["来源", entry.display_name || entry.meta.name],
     ["路径", entry.source.path],
     ["类型", entry.meta.kind],
-    ["数据尺寸", entry.meta.shape.join(" × ")],
+    ["数据尺寸", entry.meta.contract?.label||entry.meta.shape.join(" × ")],
     ["像素类型", entry.meta.dtype],
     [
       "有效位深",
@@ -474,6 +525,8 @@ function drawHistogram(snapshot) {
     `有限样本直方图，${snapshot.histogram_samples ?? "采样"} 个样本`;
 }
 async function setInput(snapshot, reset = false) {
+  axisStage=false;axisEditing=null;$("axis-stage-note").hidden=true;
+  $("input-label").textContent="原始数据";
   pixelGeneration++;
   input = snapshot;
   await split.contextChanged();
@@ -489,8 +542,8 @@ async function setInput(snapshot, reset = false) {
   if (input !== snapshot) return;
   $("welcome").hidden = true;
   $("preview-title").textContent = active.display_name || active.meta.name;
-  $("dtype-badge").textContent = snapshot.dtype;
-  $("shape-badge").textContent = `${snapshot.shape[1]} × ${snapshot.shape[0]}`;
+  $("dtype-badge").textContent = snapshot.contract?.dtype||snapshot.dtype;
+  $("shape-badge").textContent = snapshot.contract?.label||`${snapshot.shape[1]} × ${snapshot.shape[0]}`;
   const ref = snapshot.ref;
   $("frame-info").textContent =
     `${ref.index == null ? "帧号未知" : `第 ${ref.index + 1} 帧`}${active.meta.frame_count ? " / " + active.meta.frame_count : ""}  |  ${ref.time == null ? "时间未知" : `${formatTime(ref.time)} s`}${snapshot.downsampled ? "  |  显示降采样" : ""}`;
@@ -614,6 +667,7 @@ async function selectSource(id, request = ++selectionRequest) {
   }
   stashView();
   active = entry;
+  sequenceResults.hide();
   const view = sourceViews.get(id);
   $("seek-mode").value = view?.seek_mode || (indexed(entry) ? "frame" : "time");
   display = view?.display || {
@@ -785,37 +839,7 @@ async function submit(mode) {
   const error=generalEditor.validate();if(error)throw Error(error);
   for (const el of $("general-module-fields").querySelectorAll("input"))
     if (!el.reportValidity()) return;
-  const current = mode === "trial",
-    scope = current ? "current" : $("scope").value,
-    video = active.meta.kind === "video";
-  const selection = {
-    mode: scope,
-    start:
-      scope === "range" ? Number($("range-start").value) - (video ? 0 : 1) : 0,
-    end:
-      scope === "range" ? Number($("range-end").value) - (video ? 0 : 1) : null,
-    current: input.ref,
-    roi: scene.roi,
-  };
-  const currentSignature = signature(),
-    response = await api("jobs", {
-      mode,
-      name:$("job-name").value.trim()||null,
-      source_ids:
-        !current && $("batch").checked
-          ? sources.filter((s) => s.role === "input").map((s) => s.id)
-          : [active.id],
-      steps,
-      sequence_context:generalSequenceContext?.sourceId===active.id?generalSequenceContext.config:undefined,
-      selection,
-      output_dir: $("output-dir").value,
-      config_revision: currentSignature,
-      display,
-      result_display: resultDisplay,
-    });
-  if (current) trialSignatures.set(response.id, currentSignature);
-  toast(current ? "试算已加入后台任务" : "处理任务已加入队列");
-  await pollJobs();
+  return submitModules(steps,mode,$("job-name").value.trim()||null,{sample_index:generalEditor.previewSample||0,source_ids:mode==="run"&&$("batch").checked?sources.filter(s=>s.role==="input").map(s=>s.id):[active.id]});
 }
 const trialSignatures = new Map();
 const statusText = {
@@ -866,7 +890,14 @@ async function pollJobs(initial = false) {
       fetchedJobs.add(j.id);
       if (initial) continue;
       const full = await api(`jobs/${j.id}`);
-      if (j.mode === "split" || split.requested.has(j.id)) {
+      if(j.engine==="sequence"){
+        if(j.status==="succeeded"||j.status==="completed_with_errors"){
+          sources=(await api("state")).sources;updateSources();
+          const request=stageRequests.get(j.id);stageRequests.delete(j.id);
+          if(request)await showStageResult(full,request);else if(active?.id===j.source_ids[0])await sequenceResults.load(j.id);
+          toast(j.status==="succeeded"?"模块流程完成，完整结果已保存":"部分来源失败，请查看任务详情",j.status!=="succeeded");
+        }else if(full.error||full.run?.results?.[0]?.error)toast(full.error||full.run.results[0].error,true);
+      } else if (j.mode === "split" || split.requested.has(j.id)) {
         await split.completed(full);
       } else if (j.mode === "trial" && full.result) {
         const expected = trialSignatures.get(j.id);
@@ -923,10 +954,12 @@ async function jobDetail(id) {
   if (job.logs.length) parts.push(`<pre>${escape(job.logs.join("\n"))}</pre>`);
   if (job.directory)
     parts.push(
-      `<div class="downloads"><button data-download="manifest" class="quiet">运行记录 JSON</button>${(job.run?.results || []).map((r, i) => (r.status === "succeeded" ? `<button data-download="csv" data-index="${i}" class="quiet">来源 ${i + 1} CSV</button><button data-download="image" data-index="${i}" class="quiet">来源 ${i + 1} 首帧 TIFF</button>` : "")).join("")}</div>`,
+      `<div class="downloads"><button data-download="manifest" class="quiet">运行记录 JSON</button>${(job.run?.results || []).map((r, i) => (r.status === "succeeded" ? `<button data-download="csv" data-index="${i}" class="quiet">来源 ${i + 1} CSV</button>${!r.contract||r.contract.axes.includes("Y")?`<button data-download="image" data-index="${i}" class="quiet">来源 ${i + 1} 首帧 TIFF</button>`:`<button data-download="svg" data-index="${i}" class="quiet">来源 ${i + 1} 曲线 SVG</button>`}${r.contract?`<button data-download="array" data-index="${i}" class="quiet">来源 ${i + 1} 完整 NPY</button>`:""}` : "")).join("")}</div>`,
     );
+  if(job.engine==="sequence"&&["succeeded","completed_with_errors"].includes(job.status))parts.push(`<button id="show-sequence-result" class="primary">查看模块流程结果</button><p class="hint">各步输入输出形状、参数和完整样本映射保存在运行记录。信号曲线与矩阵使用相同流程引擎。</p>`);
   $("job-detail").innerHTML = parts.join("");
   bindRename(job,async()=>{await pollJobs();await jobDetail(id);},toast);
+  $("show-sequence-result")?.addEventListener("click",safe(async()=>{await sequenceResults.load(id);$("job-dialog").close();}));
   $("job-detail")
     .querySelectorAll("[data-download]")
     .forEach(
@@ -1099,10 +1132,12 @@ async function submitDialog() {
 function projectView() {
   stashView();
   return {
+    web_module_contract:3,
     analysis_mode:$("analysis-mode").value,
     split_mode:split.serialize(),
     web_job_name:$("job-name").value,
     web_sequence_context:generalSequenceContext,
+    web_sequence_result:resultOwner==="sequence"&&sequenceResults.id?{id:sequenceResults.id,source:sequenceResults.source,index:sequenceResults.index,x:$("sequence-x").value,channel:$("sequence-channel").value}:null,
     web_selected_module:generalEditor.selected?.id||null,
     web_docks:layout.serialize(),
     web_preview:{schema:1,view:$("viewers").dataset.mode},
@@ -1150,10 +1185,24 @@ async function restoreProjectOptions(view) {
   if(active&&view.split_mode?.resultId&&(split.resultId!==view.split_mode.resultId||!split.resultData)){
     try{await split.loadResult(view.split_mode.resultId,false);}catch(error){toast(`历史结果未能恢复：${error.message}；原始数据仍可预览`,true);}
   }
+  if(active&&view.web_sequence_result&&(sequenceResults.id!==view.web_sequence_result.id||resultOwner!=="sequence")){
+    try{const saved=view.web_sequence_result;$("sequence-x").value=saved.x||"samples";$("sequence-channel").value=saved.channel||"0";await sequenceResults.load(saved.id,saved.source||0);sequenceResults.index=saved.index||0;await sequenceResults.show();}catch(error){toast(`模块结果未能恢复：${error.message}；可从处理结果列表重开`,true);}
+  }
   const previewMode=view.web_preview?.view||({both:"compare",data:"input",result:"result"}[view.split_mode?.layout]);
   if(["input","compare","result"].includes(previewMode))setMode(previewMode);
+  migrateGeneralFlow(view);
   generalEditor.render();
   updateSummary();
+}
+function migrateGeneralFlow(view){
+  if(view.web_module_contract===3||!active)return;
+  if(!steps.some(n=>n.algorithm==="time_crop")){const time=moduleNode(state.modules.time_crop,active),range=view.web_range,ctx=view.web_sequence_context?.config;
+    if(ctx)Object.assign(time.parameters,{first:(ctx.start||0)+1,last:ctx.end||null});
+    else if(view.web_scope==="range"&&range){if(active.meta.kind==="video"&&!active.meta.frame_indexed)Object.assign(time.parameters,{unit:"seconds",start:Number(range[0]),end:Number(range[1])});else Object.assign(time.parameters,{first:Number(range[0]),last:Number(range[1])-1});}
+    steps.unshift(time);
+  }
+  const q=view.web_roi;if(q&&!steps.some(n=>n.algorithm==="spatial_roi")){const roi=moduleNode(state.modules.spatial_roi,active);Object.assign(roi.parameters,q);steps.push(roi);}
+  scene.roi=null;generalROI=null;$("scope").value="all";view.web_module_contract=3;renderSteps();toast("旧配置已迁移：时间范围在起点，原输出 ROI 保留在链末；请检查模块形状与范围。");
 }
 let draftTimer,
   restoringDraft = false,
@@ -1259,8 +1308,8 @@ $("demo").onclick = safe(async () => {
 $("add-step").onclick = safe(addStep);
 $("fit").onclick = () => fit();
 $("actual").onclick = () => {
-  const viewer=visibleViewer(),canvas=viewer.canvas,target=viewer===resultViewer&&resultOwner==="split"?resultScene:scene;
-  if(target===resultScene)split.resultAutoFit=false;
+  const viewer=visibleViewer(),canvas=viewer.canvas,target=viewer===resultViewer&&resultOwner!=="general"?resultScene:scene;
+  if(target===resultScene&&resultOwner==="split")split.resultAutoFit=false;
   target.zoom =
     1 /
     Math.min(
@@ -1271,12 +1320,13 @@ $("actual").onclick = () => {
   redraw();
 };
 for (const tool of ["pan", "roi"])
-  $("tool-" + tool).onclick = () => {
-    if(splitActive()){$("split-tool").value=tool;split.wrap(()=>tool==="roi"?split.setStage("trial").then(()=>split.setTool(tool)):split.setTool(tool))();}
+  $("tool-" + tool).onclick = safe(async() => {
+    if(tool==="roi"){await drawModuleROI();return;}
+    if(splitActive()){$("split-tool").value=tool;split.setTool(tool);}
     scene.tool = tool;
     $("tool-pan").classList.toggle("selected", tool === "pan");
     $("tool-roi").classList.toggle("selected", tool === "roi");
-  };
+  });
 $("clear-roi").onclick = () => commitROI(null);
 $("roi-full").onclick = () => {
   if (input)
@@ -1298,6 +1348,7 @@ for (const key of ["x", "y", "width", "height"])
     }
   });
 $("roi-undo").onclick = () => {
+  if(axisEditing){if(axisEditing.undo.length){axisEditing.redo.push(structuredClone(scene.roi));commitModuleROI(axisEditing.undo.pop(),false);}return;}
   if (!roiUndo.length) return;
   roiRedo.push(structuredClone(scene.roi));
   scene.roi = roiUndo.pop();
@@ -1307,6 +1358,7 @@ $("roi-undo").onclick = () => {
   redraw();
 };
 $("roi-redo").onclick = () => {
+  if(axisEditing){if(axisEditing.redo.length){axisEditing.undo.push(structuredClone(scene.roi));commitModuleROI(axisEditing.redo.pop(),false);}return;}
   if (!roiRedo.length) return;
   roiUndo.push(structuredClone(scene.roi));
   scene.roi = roiRedo.pop();
@@ -1387,6 +1439,7 @@ function fillDisplayControls(snapshot, settings) {
   }
 }
 async function paintResult(snapshot) {
+  sequenceResults.hide();
   resultOwner="general";$("split-result-controls").hidden=true;$("split-result-title").hidden=true;$("split-curve").hidden=true;$("split-result-empty").hidden=true;
   resultScene.width=snapshot.base_shape[1];resultScene.height=snapshot.base_shape[0];
   await resultViewer.set(snapshot);
@@ -1401,16 +1454,17 @@ async function paintResult(snapshot) {
 }
 $("display-target").onchange = () =>
   fillDisplayControls(
-    $("display-target").value === "result" ? result : input,
+    displaySnapshot(),
     $("display-target").value === "result" ? resultDisplay : display,
   );
+function displaySnapshot(target=$("display-target").value){return target==="result"?result:axisStage?originalViewer.snapshot:input;}
 async function renderDisplay(
   auto = false,
   supplied = null,
   windowChanged = false,
 ) {
   const target = $("display-target").value,
-    snapshot = target === "result" ? result : input;
+    snapshot = displaySnapshot(target);
   if (!snapshot) return;
   const generation = ++displayRevision,
     token = snapshot.token;
@@ -1431,22 +1485,23 @@ async function renderDisplay(
   const rendered = await api(`frames/${token}/render`, { display: settings });
   if (
     generation !== displayRevision ||
-    (target === "result" ? result : input)?.token !== token
+    displaySnapshot(target)?.token !== token
   )
     return;
   if (target === "result") {
     resultDisplay = settings;
     result = rendered;
-    if(resultOwner==="split"){await resultViewer.set(rendered);split.drawResult();}else await paintResult(result);
+    if(resultOwner==="split"){await resultViewer.set(rendered);split.drawResult();}else if(resultOwner==="sequence"){await resultViewer.set(rendered);redraw();}else await paintResult(result);
   } else {
     display = settings;
-    await setInput(rendered);
+    if(axisStage){await originalViewer.set(rendered);redraw();}else await setInput(rendered);
   }
+  fillDisplayControls(rendered,settings);
   scheduleDraft();
 }
 $("copy-display").onclick = safe(async () => {
   const from = $("display-target").value,
-    snapshot = from === "result" ? result : input;
+    snapshot = displaySnapshot(from);
   if (!snapshot) return;
   const settings = { ...snapshot.display };
   $("display-target").value = from === "input" ? "result" : "input";
@@ -1482,12 +1537,13 @@ document.addEventListener("keydown", (e) => {
         scene.width,
         scene.height,
       );
-    if(splitActive()){scene.roi=moved;split.commitROI();redraw();}
+    if(axisEditing)commitROI(moved);
+    else if(splitActive()){scene.roi=moved;split.commitROI();redraw();}
     else commitROI(moved);
     return;
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
-    if(splitActive())return;
+    if(splitActive()&&!axisEditing)return;
     e.preventDefault();
     $(e.shiftKey ? "roi-redo" : "roi-undo").click();
     return;
@@ -1508,6 +1564,7 @@ async function bootstrap() {
   session(state.session_token);
   sources = state.sources;
   algorithms = Object.values(state.modules);
+  steps=[moduleNode(state.modules.time_crop,null)];
   $("version").textContent = "v" + state.version;
   $("connection").textContent = "本机已连接";
   $("workspace-path").textContent = state.workspace;

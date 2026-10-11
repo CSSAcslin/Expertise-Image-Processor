@@ -60,7 +60,7 @@ class AlgorithmSpec:
 
 BUILTINS = [
     AlgorithmSpec("intensity", "强度线性变换", "输出 = 输入 × 增益 + 偏置；整数结果裁剪到原类型范围。", (Parameter("gain", "增益", "float", 1.0, -1000, 1000), Parameter("offset", "偏置", "float", 0.0, -1e9, 1e9))),
-    AlgorithmSpec("box_blur", "均值滤波", "使用反射边界，逐帧处理；保留原类型。ROI 在完整处理后裁剪。", (Parameter("radius", "半径", "int", 1, 1, 32, "px"),)),
+    AlgorithmSpec("box_blur", "均值滤波", "对当前输入的空间矩阵使用反射边界；保留原类型。ROI 的前后顺序决定滤波上下文。", (Parameter("radius", "半径", "int", 1, 1, 32, "px"),)),
     AlgorithmSpec("threshold", "阈值分割", "多颜色样本先取算术平均；输出 0/1 的 uint8 标签图。", (Parameter("threshold", "阈值", "float", 128.0, -1e12, 1e12),), output_kind="label"),
     AlgorithmSpec("affine", "线性缩放与偏置", "y = gain × x + offset；浮点输出，不裁剪或量化。", (Parameter("gain", "倍率", "float", 1., -1e12, 1e12), Parameter("offset", "偏置", "float", 0., -1e12, 1e12))),
     AlgorithmSpec("gaussian", "空间高斯平滑", "可分离高斯核，边界复制、有效权重归一；原无效位置保持无效。", (Parameter("sigma", "σ", "float", 1., 1e-12, 1e12, "px"), Parameter("radius", "半径", "int", 2, 1, 32, "px"))),
