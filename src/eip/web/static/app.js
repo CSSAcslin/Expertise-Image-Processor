@@ -6,6 +6,7 @@ import { SplitController } from "./split.js";
 import { ModuleEditor } from "./flow.js";
 import { WorkbenchLayout } from "./layout.js";
 import { detailHTML, bindRename } from "./job-detail.js";
+import { PreviewEngine } from "./preview.js";
 
 const $ = (id) => document.getElementById(id);
 const escape = (value) =>
@@ -81,7 +82,6 @@ let state,
   sourceGeneration = 0,
   display = { low: null, high: null, gamma: 1, colormap: "gray" },
   resultDisplay = { low: null, high: null, gamma: 1, colormap: "gray" },
-  playbackGeneration = 0,
   requestBusy = false,
   pendingSeek = null,
   playing = false,
@@ -92,19 +92,13 @@ let sourceViews = new Map(),
   roiRedo = [],
   committedROI = null,
   pixelGeneration = 0;
-let previewChain = Promise.resolve();
+let resultOwner="general",generalROI=null;
+const preview=new PreviewEngine({read:(id,value)=>api(`sources/${id}/frame`,value),generation:()=>sourceGeneration,state:value=>{playing=value;$("play").innerHTML=icon(value?"pause":"play");$("play").setAttribute("aria-label",value?"暂停":"播放");}});
 let selectionRequest = 0;
 function frameRequest(id, value, generation = sourceGeneration) {
-  const task = previewChain
-    .catch(() => {})
-    .then(() =>
-      generation === sourceGeneration
-        ? api(`sources/${id}/frame`, value)
-        : null,
-    );
-  previewChain = task;
-  return task;
+  return preview.request(id,value,generation);
 }
+function splitActive(){return document.body.dataset.analysis==="split_correlation";}
 const scene = {
   width: 640,
   height: 480,
@@ -119,15 +113,18 @@ const callbacks = {
   redraw,
   fit,
   roi: () => {
+    if(splitActive()){split.commitROI();return;}
     rememberROI();
     changed();
     updateROI();
   },
   roiPreview: () => {
+    if(splitActive()){split.draw();return;}
     updateROI();
     $("stale").hidden = !result || resultSignature === signature();
   },
-  pixel: (snapshot, x, y) => {
+  pixel: (snapshot, x, y, generic=false) => {
+    if(splitActive()&&!generic){split.pixel(snapshot,x,y);return;}
     const generation = ++pixelGeneration;
     clearTimeout(pixelTimer);
     $("pixel-info").textContent = `x ${x} · y ${y}`;
@@ -153,15 +150,24 @@ const callbacks = {
     }, 130);
   },
 };
+const resultScene={...scene,roi:null};
 const originalViewer = new Viewer($("input-canvas"), scene, callbacks),
-  resultViewer = new Viewer($("result-canvas"), scene, callbacks);
+  resultViewer = new Viewer($("result-canvas"), resultScene, {...callbacks,fit:()=>fit(resultViewer),roi:()=>{},roiPreview:()=>{},pixel:(snapshot,x,y)=>resultOwner==="split"?split.pixel(snapshot,x,y,true):callbacks.pixel(snapshot,x,y,true)});
 const layout = new WorkbenchLayout(scheduleDraft);
 const split = new SplitController({
+  viewer:originalViewer,resultViewer,seek:seekFrame,stopPreview:stopPlay,
+  resultShown:snapshot=>{
+    resultOwner="split";result=snapshot;formalResult=null;resultSignature=null;
+    $("split-result-controls").hidden=false;$("split-result-title").hidden=false;$("stale").hidden=true;$("result-label").textContent="处理结果";$("result-meta").textContent="";
+    if(snapshot)resultDisplay={...snapshot.display};
+    if($("viewers").dataset.mode==="input")setMode("compare");
+    fillDisplayControls($("display-target").value==="result"?snapshot:input,$("display-target").value==="result"?resultDisplay:display);
+  },
   context:()=>({source:active,input,output:$("output-dir").value,devices:state?.split_devices,modules:state?.modules}),
-  changed:scheduleDraft,report:toast,poll:pollJobs,
+  changed:()=>{updateSummary();scheduleDraft();},report:toast,poll:pollJobs,
   openParameters:()=>layout.openParameters("split"),
   activate:()=>setAnalysisMode("split_correlation"),
-  useModules:async(nodes,config)=>{steps=structuredClone(nodes);generalSequenceContext={sourceId:active?.id,config};renderSteps();await setAnalysisMode("general");toast("流程已复制到通用布局；模块参数与顺序保持一致");},
+  useModules:async(nodes,config)=>{steps=structuredClone(nodes);generalSequenceContext={sourceId:active?.id,config};renderSteps();await setAnalysisMode("general");toast("流程已复制到通用预设；模块参数与顺序保持一致");},
   promote:async(opened)=>{
     sources=sources.filter(s=>s.id!==opened.source.id);sources.push(opened.source);
     updateSources();await setAnalysisMode("general");await selectSource(opened.source.id);
@@ -170,20 +176,29 @@ const split = new SplitController({
 let generalSequenceContext=null;
 const generalEditor=new ModuleEditor({nodes:()=>steps,catalog:()=>state?.modules,source:()=>active,host:()=>$("steps"),status:()=>$("module-status"),inspector:()=>$("general-module-fields"),title:()=>$("general-module-title"),instance:()=>$("general-module-instance"),inspect:(open=true)=>{if(open){layout.openParameters("general");$("general-module-inspector").scrollIntoView({block:"nearest"});}},selectionChanged:scheduleDraft,change:changed,afterRender:()=>{$("step-count").textContent=steps.length;},report:toast});
 async function setAnalysisMode(mode) {
-  stopPlay();$("analysis-mode").value=mode;
-  await split.setMode(mode);layout.apply();scheduleDraft();
+  const previous=split.mode;$("analysis-mode").value=mode;
+  if(previous==="general"&&mode!==previous)generalROI=structuredClone(scene.roi);
+  if(previous==="split_correlation"&&mode==="general"&&input){await split.showRaw(input);scene.roi=structuredClone(generalROI);scene.tool="pan";$("input-label").textContent="原始数据";}
+  await split.setMode(mode);
+  $(mode==="split_correlation"?"split-flow-body":"general-flow-body").prepend($("algorithm-preset"));
+  layout.apply();redraw();scheduleDraft();
 }
 $("analysis-mode").onchange=safe(()=>setAnalysisMode($("analysis-mode").value));
-function redraw() {
-  originalViewer.draw();
-  resultViewer.draw();
+function redraw(viewer) {
+  if(viewer===resultViewer&&resultOwner==="general")Object.assign(scene,{zoom:resultScene.zoom,panX:resultScene.panX,panY:resultScene.panY});
+  if(splitActive())split.draw();else originalViewer.draw();
+  if(resultOwner==="split")split.drawResult();else{
+    Object.assign(resultScene,{zoom:scene.zoom,panX:scene.panX,panY:scene.panY,roi:splitActive()?generalROI:scene.roi,tool:"pan"});resultViewer.draw();
+  }
   $("zoom-value").textContent =
     `${Math.round(visibleViewer().scale() * 100) || 100}%`;
+  for(const tool of["pan","roi"])$("tool-"+tool).classList.toggle("selected",scene.tool===tool);
 }
 function visibleViewer() {
   return $("viewers").dataset.mode === "result" ? resultViewer : originalViewer;
 }
-function fit() {
+function fit(viewer=visibleViewer()) {
+  if(viewer===resultViewer&&resultOwner==="split"){split.fitResult();redraw();return;}
   scene.zoom = 1;
   scene.panX = scene.panY = 0;
   redraw();
@@ -193,17 +208,17 @@ function signature() {
     active: active?.id,
     ref: input?.ref,
     steps,
-    roi: scene.roi,
+    roi: splitActive()?generalROI:scene.roi,
   });
 }
 function changed() {
-  $("stale").hidden = !result || resultSignature === signature();
+  $("stale").hidden = resultOwner==="split" || !result || resultSignature === signature();
   updateSummary();
   updateROIStatistics();
   scheduleDraft();
 }
 function updateROI() {
-  const q = scene.roi;
+  const q = splitActive()?generalROI:scene.roi;
   $("roi-info").textContent = q
     ? `x ${q.x} · y ${q.y}  /  ${q.width} × ${q.height} px`
     : "全幅图像";
@@ -219,7 +234,7 @@ let roiStatisticsKey = "",
 function updateROIStatistics() {
   if (!input) return;
   const token = input.token,
-    roi = scene.roi,
+    roi = splitActive()?generalROI:scene.roi,
     key = JSON.stringify({ token, roi });
   if (key === roiStatisticsKey) return;
   roiStatisticsKey = key;
@@ -265,20 +280,22 @@ function commitROI(roi) {
   redraw();
 }
 function stashView() {
-  if (active && input)
+  if (active && input) {
+    const transform=splitActive()?split.previewTransform():scene;
     sourceViews.set(active.id, {
-      roi: structuredClone(scene.roi),
+      roi: structuredClone(splitActive()?generalROI:scene.roi),
       display: { ...display },
       ref: input.ref,
-      zoom: scene.zoom,
-      panX: scene.panX,
-      panY: scene.panY,
+      zoom: transform.zoom,
+      panX: transform.panX,
+      panY: transform.panY,
       seek_mode: $("seek-mode").value,
     });
+  }
 }
 function updateSummary() {
   $("step-count").textContent=steps.length;
-  const count = steps.filter((s) => s.enabled).length;
+  const count = (splitActive()?split.cfg?.workflow||[]:steps).filter((s) => s.enabled).length;
   $("run-summary").textContent = active
     ? `${$("batch").checked ? sources.filter((s) => s.role === "input").length : 1} 个来源 · ${count} 个处理步骤${scene.roi ? " · ROI" : ""}`
     : "打开数据以开始处理";
@@ -435,6 +452,7 @@ function setMode(mode) {
     .querySelectorAll("[data-view]")
     .forEach((b) => b.classList.toggle("selected", b.dataset.view === mode));
   requestAnimationFrame(redraw);
+  scheduleDraft();
 }
 function drawHistogram(snapshot) {
   const c = $("histogram"),
@@ -458,10 +476,12 @@ function drawHistogram(snapshot) {
 async function setInput(snapshot, reset = false) {
   pixelGeneration++;
   input = snapshot;
+  await split.contextChanged();
+  if(splitActive())split.inputChanged(snapshot);
   scene.width = snapshot.base_shape[1];
   scene.height = snapshot.base_shape[0];
   if (reset) {
-    scene.roi = null;
+    if(!splitActive())scene.roi = null;
     fit();
     updateROI();
   }
@@ -480,7 +500,7 @@ async function setInput(snapshot, reset = false) {
     $("display-target").value === "input" ? display : resultDisplay,
   );
   changed();
-  await split.contextChanged();
+  redraw();
 }
 function indexed(entry = active) {
   return (
@@ -580,7 +600,6 @@ async function selectSource(id, request = ++selectionRequest) {
   const entry = sources.find((s) => s.id === id);
   if (!entry) return;
   if (entry.role === "result") {
-    if($("analysis-mode").value!=="general")await setAnalysisMode("general");
     const matching = sources.find((s) => s.id === entry.input_id);
     if (matching && (active?.id !== matching.id || !input))
       await selectSource(matching.id, request);
@@ -608,6 +627,7 @@ async function selectSource(id, request = ++selectionRequest) {
   originalViewer.clear();
   $("frame-info").textContent = "正在打开数据…";
   result = formalResult = null;
+  resultOwner="general";generalROI=null;$("split-result-controls").hidden=true;$("split-result-title").hidden=true;$("split-curve").hidden=true;
   resultSignature = null;
   resultViewer.clear();
   $("result-meta").textContent = "";
@@ -631,7 +651,7 @@ async function selectSource(id, request = ++selectionRequest) {
   roiUndo = roiRedo = [];
   committedROI = null;
   if (view?.roi && validROI(view.roi, scene.width, scene.height)) {
-    scene.roi = structuredClone(view.roi);
+    if(splitActive())generalROI=structuredClone(view.roi);else scene.roi = structuredClone(view.roi);
     committedROI = structuredClone(view.roi);
   }
   if (view?.zoom) {
@@ -713,10 +733,7 @@ async function syncFormalResult() {
   }
 }
 function stopPlay() {
-  playing = false;
-  playbackGeneration++;
-  $("play").innerHTML = icon("play");
-  $("play").setAttribute("aria-label", "播放");
+  preview.stop();
 }
 function step(direction) {
   if (!active || !input) return;
@@ -746,27 +763,9 @@ function step(direction) {
   );
 }
 async function play() {
-  if (playing) {
-    stopPlay();
-    return;
-  }
   if (!active || !input) return;
-  playing = true;
-  const generation = ++playbackGeneration;
-  $("play").innerHTML = icon("pause");
-  $("play").setAttribute("aria-label", "暂停");
-  while (playing && generation === playbackGeneration) {
-    const before = input.token;
-    await step(1);
-    if (generation !== playbackGeneration) break;
-    if (input.token === before) {
-      stopPlay();
-      break;
-    }
-    await new Promise((resolve) =>
-      setTimeout(resolve, Math.max(25, 1000 / (active.meta.rate || 10))),
-    );
-  }
+  if(splitActive()&&!playing)await split.showRaw(input);
+  await preview.play({advance:()=>step(1),token:()=>input?.token,interval:()=>Math.max(25,1000/(active?.meta.rate||10))});
 }
 function updateAlgorithms() {
   const selected = $("algorithm").value;
@@ -1106,12 +1105,13 @@ function projectView() {
     web_sequence_context:generalSequenceContext,
     web_selected_module:generalEditor.selected?.id||null,
     web_docks:layout.serialize(),
+    web_preview:{schema:1,view:$("viewers").dataset.mode},
     steps,
     output_dir: $("output-dir").value,
     active_source: active?.id,
     web_display: display,
     web_result_display: resultDisplay,
-    web_roi: scene.roi,
+    web_roi: splitActive()?generalROI:scene.roi,
     web_views: Object.fromEntries(sourceViews),
     web_scope: $("scope").value,
     web_batch: $("batch").checked,
@@ -1147,6 +1147,11 @@ async function restoreProjectOptions(view) {
     updateLayout();
   }
   layout.restore(view.web_docks);
+  if(active&&view.split_mode?.resultId&&(split.resultId!==view.split_mode.resultId||!split.resultData)){
+    try{await split.loadResult(view.split_mode.resultId,false);}catch(error){toast(`历史结果未能恢复：${error.message}；原始数据仍可预览`,true);}
+  }
+  const previewMode=view.web_preview?.view||({both:"compare",data:"input",result:"result"}[view.split_mode?.layout]);
+  if(["input","compare","result"].includes(previewMode))setMode(previewMode);
   generalEditor.render();
   updateSummary();
 }
@@ -1252,20 +1257,22 @@ $("demo").onclick = safe(async () => {
   }
 });
 $("add-step").onclick = safe(addStep);
-$("fit").onclick = fit;
+$("fit").onclick = () => fit();
 $("actual").onclick = () => {
-  const canvas = visibleViewer().canvas;
-  scene.zoom =
+  const viewer=visibleViewer(),canvas=viewer.canvas,target=viewer===resultViewer&&resultOwner==="split"?resultScene:scene;
+  if(target===resultScene)split.resultAutoFit=false;
+  target.zoom =
     1 /
     Math.min(
-      (canvas.clientWidth - 40) / scene.width,
-      (canvas.clientHeight - 50) / scene.height,
+      (canvas.clientWidth - 40) / target.width,
+      (canvas.clientHeight - 50) / target.height,
     );
-  scene.panX = scene.panY = 0;
+  target.panX = target.panY = 0;
   redraw();
 };
 for (const tool of ["pan", "roi"])
   $("tool-" + tool).onclick = () => {
+    if(splitActive()){$("split-tool").value=tool;split.wrap(()=>tool==="roi"?split.setStage("trial").then(()=>split.setTool(tool)):split.setTool(tool))();}
     scene.tool = tool;
     $("tool-pan").classList.toggle("selected", tool === "pan");
     $("tool-roi").classList.toggle("selected", tool === "roi");
@@ -1380,6 +1387,8 @@ function fillDisplayControls(snapshot, settings) {
   }
 }
 async function paintResult(snapshot) {
+  resultOwner="general";$("split-result-controls").hidden=true;$("split-result-title").hidden=true;$("split-curve").hidden=true;$("split-result-empty").hidden=true;
+  resultScene.width=snapshot.base_shape[1];resultScene.height=snapshot.base_shape[0];
   await resultViewer.set(snapshot);
   if (result?.token !== snapshot.token) return;
   $("result-meta").textContent =
@@ -1428,7 +1437,7 @@ async function renderDisplay(
   if (target === "result") {
     resultDisplay = settings;
     result = rendered;
-    await paintResult(result);
+    if(resultOwner==="split"){await resultViewer.set(rendered);split.drawResult();}else await paintResult(result);
   } else {
     display = settings;
     await setInput(rendered);
@@ -1453,6 +1462,7 @@ $("toggle-tasks").onclick = () => {
   layout.apply();scheduleDraft();
 };
 document.addEventListener("keydown", (e) => {
+  if(e.defaultPrevented)return;
   if (
     ["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName) ||
     document.querySelector("dialog[open]")
@@ -1465,18 +1475,19 @@ document.addEventListener("keydown", (e) => {
   ) {
     e.preventDefault();
     const delta = e.shiftKey ? 10 : 1;
-    commitROI(
-      moveROI(
+    const moved=moveROI(
         scene.roi,
         e.key === "ArrowRight" ? delta : e.key === "ArrowLeft" ? -delta : 0,
         e.key === "ArrowDown" ? delta : e.key === "ArrowUp" ? -delta : 0,
         scene.width,
         scene.height,
-      ),
-    );
+      );
+    if(splitActive()){scene.roi=moved;split.commitROI();redraw();}
+    else commitROI(moved);
     return;
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+    if(splitActive())return;
     e.preventDefault();
     $(e.shiftKey ? "roi-redo" : "roi-undo").click();
     return;

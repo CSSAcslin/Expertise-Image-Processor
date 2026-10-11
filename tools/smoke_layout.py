@@ -36,7 +36,7 @@ def main():
                 page.on("pageerror",lambda e:errors.append(str(e)))
                 page.goto(url)
                 expect(page.locator("#connection")).to_have_text("本机已连接")
-                expect(page.locator("#version")).to_have_text("v0.5.1")
+                expect(page.locator("#version")).to_have_text("v0.5.2")
 
                 def box(selector):return page.locator(selector).bounding_box()
                 def drag(key,dx=0,dy=0):
@@ -93,7 +93,7 @@ def main():
                 toggle("general","flow").click()
                 expect(page.locator("#general-flow-body")).not_to_be_visible()
                 expect(page.locator("#general-parameters-body")).to_be_visible()
-                dock_box=box(".processing");footer=box(".run-footer")
+                dock_box=box(".processing");footer=box(".processing>.run-footer")
                 flow,parameters=columns("general")
                 assert abs(flow["width"]-34)<1 and abs(parameters["width"]-expanded_parameters["width"])<1
                 assert abs(flow["width"]+parameters["width"]+1-dock_box["width"])<2
@@ -105,7 +105,7 @@ def main():
                 expect(fields.locator('[data-key="gain"]')).to_have_value("3")
                 assert abs(box(".processing")["width"]-dock_box["width"])<2
                 assert before["web_docks"]["general"]["flow"] is True
-                assert before["web_docks"]["schema"]==2
+                assert before["web_docks"]["schema"]==3
                 # Resizing the remaining open column preserves the closed column's width.
                 drag("dock",dx=-20)
                 assert abs(columns("general")[1]["width"]-expanded_parameters["width"]-20)<2
@@ -113,7 +113,7 @@ def main():
                 # Either column can become a narrow, vertical tab; both recover preview space.
                 toggle("general","parameters").click()
                 assert abs(box(".processing")["width"]-69)<1
-                expect(page.locator(".run-footer")).not_to_be_visible()
+                expect(page.locator(".processing>.run-footer")).not_to_be_visible()
                 expect(page.locator('[data-resize="dock"]')).not_to_be_visible()
                 for key in["flow","parameters"]:
                     button=toggle("general",key);button.focus();button.press("Enter")
@@ -123,14 +123,16 @@ def main():
                 toggle("general","flow").click()
                 page.screenshot(path=str(output/"01-general-docks.png"))
 
+                toggle("general","flow").click()
                 page.locator("#analysis-mode").select_option("split_correlation")
-                expect(page.locator("#split-canvas")).to_be_visible()
+                expect(page.locator("#input-canvas")).to_be_visible()
                 expect(page.locator("#split-flow-list [data-param]")).to_have_count(0)
                 expect(toggle("split","flow")).to_have_attribute("aria-expanded","true")
                 split_dock=box(".split-dock")["width"];drag("dock",dx=-30)
                 assert abs(box(".split-dock")["width"]-split_dock-30)<2
-                left=box(".split-data-window")["width"];drag("splitCompare",dx=30)
-                assert abs(box(".split-data-window")["width"]-left-30)<2
+                page.locator('[data-view="compare"]').click()
+                left=box("#input-pane")["width"];drag("compare",dx=30)
+                assert abs(box("#input-pane")["width"]-left-30)<2
                 flow=columns("split")[0]["width"];drag("split-panels",dx=-45)
                 assert abs(columns("split")[0]["width"]-flow+45)<2
                 toggle("split","parameters").click()
@@ -153,25 +155,24 @@ def main():
                 expect(page.locator("#file-dialog")).not_to_be_visible()
                 saved=json.loads((output/"layout.eip.json").read_text(encoding="utf-8"))
                 assert saved["web_docks"]["split"]["flow"] is True
-                assert saved["web_docks"]["schema"]==2
+                assert saved["web_docks"]["schema"]==3
                 assert saved["web_selected_module"]!=original_id
                 toggle("split","flow").click()
                 page.screenshot(path=str(output/"02-split-docks.png"))
                 # Every primary pane remains inside the viewport after responsive clamping.
                 for width,height in[(1100,760),(960,760),(1440,960)]:
                     page.set_viewport_size({"width":width,"height":height});page.wait_for_timeout(100)
-                    for selector in[".library",".split-dock",".split-data-window",".split-result-window",".split-run-bar",".tasks",".split-input-timeline"]:in_screen(selector)
+                    for selector in[".library",".split-dock","#input-pane","#result-pane",".split-run-bar",".tasks",".timeline"]:in_screen(selector)
                     assert page.evaluate("document.documentElement.scrollWidth<=innerWidth")
                     columns("split")
-                    workspace=box(".split-workspace");bar=box(".split-run-bar");tasks_box=box(".tasks")
-                    assert abs(workspace["y"]+workspace["height"]-bar["y"]-bar["height"])<2
-                    assert abs(bar["y"]+bar["height"]+6-tasks_box["y"])<2
-                    timeline=box(".split-input-timeline")
-                    assert timeline["y"]+timeline["height"]<=bar["y"]+1,(timeline,bar)
+                    workspace=box(".preview-workspace");tasks_box=box(".tasks")
+                    assert abs(workspace["y"]+workspace["height"]+6-tasks_box["y"])<2
+                    timeline=box(".timeline")
+                    assert timeline["y"]+timeline["height"]<=workspace["y"]+workspace["height"]+1,(timeline,workspace)
                     page.screenshot(path=str(output/f"03-split-{width}.png"))
-                page.locator("#split-layout").select_option("data")
-                expect(page.locator('[data-resize="splitCompare"]')).not_to_be_visible()
-                page.locator("#split-layout").select_option("both")
+                page.locator('[data-view="input"]').click()
+                expect(page.locator('[data-resize="compare"]')).not_to_be_visible()
+                page.locator('[data-view="compare"]').click()
                 page.locator("#toggle-processing").click()
                 expect(page.locator(".split-dock")).not_to_be_visible()
                 page.locator("#split-open-context").click()
@@ -199,6 +200,7 @@ def main():
                 expect(toggle("split","flow")).to_have_attribute("aria-expanded","false")
                 expect(page.locator('#split-module-fields [data-key="gain"]')).to_have_value("4")
                 assert abs(box(".split-dock")["width"]-split_collapsed)<2
+                toggle("split","flow").click()
                 page.locator("#analysis-mode").select_option("general")
                 expect(fields.locator('[data-key="gain"]')).to_have_value("3")
                 # Stacked layout drafts migrate without treating a 340px total as two columns.
@@ -210,7 +212,7 @@ def main():
                 assert abs(box(".processing")["width"]-556)<2
                 columns("general")
                 assert not errors,errors
-                report={"independent_columns":True,"horizontal_collapse_and_width_restore":True,"shared_parameter_inspector":True,"real_drag_dividers":["library","dock","general-panels","split-panels","tasks","compare","splitCompare"],"restored_layout_and_instances":True,"legacy_stacked_layout_migration":True,"project_roundtrip":True,"viewports":[1440,1100,960],"javascript_errors":errors}
+                report={"independent_columns":True,"horizontal_collapse_and_width_restore":True,"shared_parameter_inspector":True,"real_drag_dividers":["library","dock","general-panels","split-panels","tasks","compare"],"restored_layout_and_instances":True,"legacy_stacked_layout_migration":True,"project_roundtrip":True,"viewports":[1440,1100,960],"javascript_errors":errors}
                 (output/"report.json").write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8")
                 print(json.dumps({"output":str(output),**report},ensure_ascii=False))
                 browser.close()

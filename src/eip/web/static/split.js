@@ -1,5 +1,4 @@
 import { api, downloadSplit } from "./api.js";
-import { Viewer } from "./viewer.js";
 import { FlowEditor } from "./flow.js";
 import { detailHTML, bindRename } from "./job-detail.js";
 
@@ -22,14 +21,11 @@ export class SplitController {
     this.stage="geometry";
     this.view="raw";
     this.generation=0;
-    this.autoFit=true;
-    this.scene={width:640,height:480,zoom:1,panX:0,panY:0,tool:"pan",roi:null};
-    this.viewer=new Viewer($("split-canvas"),this.scene,{redraw:()=>this.draw(),fit:()=>this.fit(),roi:()=>this.commitROI(),roiPreview:()=>this.draw(),pixel:(frame,x,y)=>this.pixel(frame,x,y)});
-    this.resultScene={width:640,height:480,zoom:1,panX:0,panY:0,tool:"pan",roi:null};
+    this.viewer=bridge.viewer;this.scene=this.viewer.scene;
+    this.resultViewer=bridge.resultViewer;this.resultScene=this.resultViewer.scene;
     this.resultAutoFit=true;
-    this.resultViewer=new Viewer($("split-result-canvas"),this.resultScene,{redraw:()=>this.drawResult(),fit:()=>this.fitResult(),pixel:(frame,x,y)=>this.pixel(frame,x,y,true)});
-    $("split-result-canvas").addEventListener("wheel",()=>{this.resultAutoFit=false;},{capture:true,passive:true});
-    $("split-result-canvas").addEventListener("pointerdown",()=>{this.resultAutoFit=false;},true);
+    this.resultViewer.canvas.addEventListener("wheel",()=>{this.resultAutoFit=false;},{capture:true,passive:true});
+    this.resultViewer.canvas.addEventListener("pointerdown",()=>{this.resultAutoFit=false;},true);
     this.flow=new FlowEditor(this);
     this.bind();
   }
@@ -57,23 +53,18 @@ export class SplitController {
     $("split-open-results").onclick=()=>{this.bridge.openParameters?.();$("split-results-tools").open=!$("split-results-tools").open;$("split-results-tools").scrollIntoView({block:"nearest"});};
     $("split-use-general").onclick=this.wrap(()=>this.bridge.useModules(clone(this.cfg?.workflow||[]),this.executionContext()));
     $("split-refresh-preview").onclick=this.wrap(()=>this.updateGeometry());
-    $("split-layout").onchange=()=>{document.querySelector(".split-views").dataset.layout=$("split-layout").value;this.fit();this.fitResult();this.bridge.changed();};
     $("split-roi-draw").onclick=this.wrap(async()=>{await this.setStage("trial");$("split-tool").value="roi";this.setTool("roi");});
     $("split-point-draw").onclick=this.wrap(async()=>{await this.setStage("trial");$("split-tool").value="point";this.setTool("point");});
-    $("split-result-fit").onclick=()=>this.fitResult();
     document.querySelectorAll("[data-split-analysis]").forEach(b=>b.onclick=()=>this.setAnalysis(b.dataset.splitAnalysis));
     $("split-job-name").oninput=()=>{if(this.record){this.record.names??={};this.record.names[this.record.analysis||"map"]=$("split-job-name").value;this.bridge.changed();}};
     $("split-result-rename").onclick=this.wrap(async()=>{if(!this.resultId)throw Error("请先选择完成的结果");await api(`jobs/${this.resultId}/rename`,{name:$("split-result-name").value});await this.bridge.poll();await this.loadResult(this.resultId,false);this.bridge.report("结果名称已保存");});
     document.querySelectorAll("[data-split-stage]").forEach(b=>b.onclick=this.wrap(()=>this.setStage(b.dataset.splitStage)));
     $("split-view").onchange=this.wrap(()=>this.showView($("split-view").value));
     $("split-tool").onchange=()=>this.setTool($("split-tool").value);
-    $("split-fit").onclick=()=>this.fit();
-    for(const id of ["split-prev","split-next"]) $(id).onclick=this.wrap(()=>this.seek(this.cfg.center+(id==="split-prev"?-1:1)));
     $("split-seek").onclick=this.wrap(()=>this.seek(Number($("split-center").value)-1));
     $("split-center").onchange=()=>{if(this.cfg){this.cfg.center=Number($("split-center").value)-1;this.changed();}};
-    $("split-scrubber").onchange=this.wrap(()=>this.seek(Number($("split-scrubber").value)-1));
-    $("split-play").onclick=this.wrap(()=>this.play(false));
-    $("split-result-play").onclick=this.wrap(()=>this.play(true));
+    $("split-use-current").onclick=this.wrap(()=>{const index=this.context.input?.ref.index;if(!Number.isInteger(index))throw Error("当前来源没有确定的帧号");this.cfg.center=index;this.fill();this.changed();});
+    $("split-result-play").onclick=this.wrap(()=>this.playResult());
     $("split-suggest").onclick=this.wrap(()=>this.updateGeometry(true));
     $("split-preview").onclick=this.wrap(()=>this.updateGeometry());
     $("split-calibrate").onclick=this.wrap(()=>this.updateGeometry(false,true));
@@ -140,11 +131,9 @@ export class SplitController {
       if(excluded.has(el.id)||["split-result-select","split-stat-view","split-restore-path","split-curve-axis","split-module-type","split-module-position","split-result-name"].includes(el.id)) return;
       el.addEventListener("change",()=>{if(this.cfg){this.readFields();this.changed(el.closest('[data-module-panel="alignment"]')!=null);}});
     });
-    const canvas=$("split-canvas");
-    canvas.addEventListener("wheel",()=>{this.autoFit=false;},{capture:true,passive:true});
-    canvas.addEventListener("pointerdown",()=>{this.autoFit=false;},true);
+    const canvas=this.viewer.canvas;
     canvas.addEventListener("pointerdown",e=>{
-      if(!this.cfg||!this.viewer.snapshot||e.button!==0) return;
+      if(this.mode!=="split_correlation"||!this.cfg||!this.viewer.snapshot||e.button!==0) return;
       const tool=$("split-tool").value;
       if(tool!=="point"&&tool!=="midline") return;
       e.stopImmediatePropagation();canvas.setPointerCapture(e.pointerId);
@@ -192,27 +181,28 @@ export class SplitController {
     this.stop();this.generation++;
     this.sourceId=source.id;
     if(!this.records[source.id]||this.records[source.id].revision!==source.meta.revision) this.records[source.id]={config:this.defaults(source,input),revision:source.meta.revision,accepted:null,pointsAuto:true,stage:"geometry"};
-    this.snapshots=null;this.proposal=null;
+    this.snapshots=null;this.proposal=null;this.rawTransform=null;
     this.resultData=null;this.resultId=this.record.resultId||null;
     this.stage=this.record.stage||"geometry";
-    this.view="raw";this.scene.roi=null;this.fit();
+    this.view="raw";
     this.fill();this.updateJobs(this.jobs);
     if(this.mode==="split_correlation") {
-      await this.showRaw(input);await this.ensureGeometry();
+      this.inputChanged(input);
     }
   }
   async setMode(mode) {
     this.mode=mode;this.stop();
-    $("split-workspace").hidden=mode!=="split_correlation";
+    $("module-preview-tools").hidden=mode!=="split_correlation";
+    $("split-pixel").hidden=mode!=="split_correlation";
     document.querySelector(".workspace").dataset.analysis=mode;
     document.body.dataset.analysis=mode;
     if(mode==="split_correlation") {
       await this.contextChanged();
-      if(this.cfg) {await this.showRaw(this.rawSnapshot||this.context.input);await this.ensureGeometry();this.flow.render();this.modulePanel();if(this.resultId&&!this.resultData)await this.loadResult(this.resultId,false);}
+      if(this.cfg) {this.inputChanged(this.context.input);this.flow.render();this.modulePanel();}
       else this.updateStatus();
     }
   }
-  serialize() {return {records:clone(this.records),resultId:this.resultId||null,layout:$("split-layout").value};}
+  serialize() {return {records:clone(this.records),resultId:this.resultId||null};}
   restore(value) {
     if(value?.records&&typeof value.records==="object") {
       const fingerprint=JSON.stringify(value);
@@ -220,8 +210,6 @@ export class SplitController {
       this.restoredFingerprint=fingerprint;
       this.records=clone(value.records);this.sourceId=null;
       this.resultId=value.resultId||null;
-      const layout=["both","data","result"].includes(value.layout)?value.layout:"both";
-      $("split-layout").value=layout;document.querySelector(".split-views").dataset.layout=layout;
     }
   }
   signature() {return JSON.stringify({source:this.sourceId,config:this.cfg});}
@@ -237,10 +225,23 @@ export class SplitController {
     $("split-module-instance").textContent=node?`实例 ${node.id.slice(0,8)} · v${node.version||"1.0"}${node.enabled?"":" · 已停用"}`:"在模块流程中添加或选择算法，然后编辑该实例的参数。";
   }
   previewError(error) {const el=$("split-preview-error");el.hidden=!error;el.textContent=error?`流程预览：${error.message||error}。原始帧仍可定位和播放。`:"";}
+  previewTransform() {
+    return this.view!=="raw"&&this.rawTransform?.sourceId===this.context.source?.id?this.rawTransform:{zoom:this.scene.zoom,panX:this.scene.panX,panY:this.scene.panY};
+  }
+  inputChanged(snapshot) {
+    if(!snapshot)return;
+    const keep=this.view==="raw"&&this.scene.width===snapshot.base_shape[1]&&this.scene.height===snapshot.base_shape[0];
+    const raw=this.rawTransform?.sourceId===this.context.source?.id?this.rawTransform:null;
+    if(!keep)Object.assign(this.scene,raw?{zoom:raw.zoom,panX:raw.panX,panY:raw.panY}:{zoom:1,panX:0,panY:0});
+    this.rawSnapshot=snapshot;this.view="raw";$("split-view").value="raw";$("split-empty").hidden=true;
+    this.scene.width=snapshot.base_shape[1];this.scene.height=snapshot.base_shape[0];
+    const tool=$("split-tool").value;this.scene.roi=["left","right"].includes(tool)?clone(this.cfg?.geometry?.[tool]||null):!this.activeNode("alignment")&&tool==="roi"?clone(this.cfg?.roi):null;
+    this.scene.tool=["left","right"].includes(tool)||tool==="roi"&&!this.activeNode("alignment")?"roi":"pan";
+    $("split-view-caption").textContent=`${snapshot.shape[1]} × ${snapshot.shape[0]} · 原始帧 ${snapshot.ref.index==null?"未知":snapshot.ref.index+1}${snapshot.ref.time==null?"":` · ${number(snapshot.ref.time)} s`}`;
+    $("input-label").textContent="原始数据";
+  }
   async showRaw(snapshot) {
-    if(!snapshot)return;const keep=this.view==="raw"&&this.scene.width===snapshot.base_shape[1]&&this.scene.height===snapshot.base_shape[0];this.rawSnapshot=snapshot;this.view="raw";$("split-view").value="raw";$("split-empty").hidden=true;
-    this.scene.width=snapshot.base_shape[1];this.scene.height=snapshot.base_shape[0];const tool=$("split-tool").value;this.scene.roi=["left","right"].includes(tool)?clone(this.cfg?.geometry?.[tool]||null):!this.activeNode("alignment")&&tool==="roi"?clone(this.cfg?.roi):null;if(!keep){this.scene.zoom=1;this.scene.panX=this.scene.panY=0;}
-    await this.viewer.set(snapshot);this.draw();$("split-view-caption").textContent=`${snapshot.shape[1]} × ${snapshot.shape[0]} · 原始帧 ${snapshot.ref.index==null?"未知":snapshot.ref.index+1}${snapshot.ref.time==null?"":` · ${number(snapshot.ref.time)} s`}`;
+    if(!snapshot)return;this.inputChanged(snapshot);if(this.viewer.snapshot!==snapshot)await this.viewer.set(snapshot);this.draw();
   }
   changed(geometry=false) {
     if(geometry&&this.record) {this.record.accepted=null;this.record.calibrationIndex=null;}
@@ -248,7 +249,6 @@ export class SplitController {
   }
   updateStatus() {
     const source=this.context.source,corr=this.activeNode("correlation"),stats=this.activeNode("statistics"),alignment=this.activeNode("alignment"),error=this.flow.validate();
-    $("split-source-name").textContent=source?.display_name||source?.meta.name||"请选择输入来源";
     let type="sensor";for(const n of this.cfg?.workflow||[]){if(!n.enabled)continue;const out=this.context.modules?.[n.algorithm]?.output;if(out&&out!=="same")type=out;}
     const incomplete=type==="pair"?"流程输出为双路，请添加选择幅面或二阶关联模块":null;
     const missingLut=(this.cfg?.workflow||[]).some(n=>n.enabled&&this.record?.customLutNodes?.includes(n.id)&&!n.parameters.lut_path);
@@ -268,7 +268,6 @@ export class SplitController {
     if(!this.cfg) {this.updateStatus();return;}
     this.flow.sync();const c=this.cfg,g=this.selectedNode?.algorithm==="alignment"?this.selectedNode.parameters:c.geometry,p=this.selectedNode?.algorithm==="calibration"?this.selectedNode.parameters:c.photometry,n=this.context.source.meta.frame_count||1;
     $("split-center").value=c.center+1;$("split-center").max=n;
-    $("split-scrubber").max=n;$("split-scrubber").value=c.center+1;
     if(g) {
       $("split-line-top").value=g.midline[0];$("split-line-bottom").value=g.midline[1];
       $("split-dx").value=g.dx;$("split-dy").value=g.dy;
@@ -328,13 +327,14 @@ export class SplitController {
   }
   async updateGeometry(suggest=false,calibrate=false) {
     if(!this.cfg) throw Error("请先导入并选择灰度序列");
+    this.bridge.stopPreview();
     this.readFields();
     const generation=++this.generation;
     const g=this.cfg.geometry;
-    const response=await api("split/geometry",{source_id:this.sourceId,index:Math.max(0,Math.min(this.context.source.meta.frame_count-1,this.cfg.center)),...(suggest?{midline:g?.midline||[this.context.source.meta.shape[1]/2,this.context.source.meta.shape[1]/2],threshold:Number($("split-black-threshold").value)}:{geometry:g}),photometry:this.cfg.photometry,calibrate,workflow_config:!suggest?{workflow:this.cfg.workflow}:null});
+    const response=await api("split/geometry",{source_id:this.sourceId,index:this.context.input?.ref.index??0,...(suggest?{midline:g?.midline||[this.context.source.meta.shape[1]/2,this.context.source.meta.shape[1]/2],threshold:Number($("split-black-threshold").value)}:{geometry:g}),photometry:this.cfg.photometry,calibrate,workflow_config:!suggest?{workflow:this.cfg.workflow}:null});
     if(generation!==this.generation) return;
     const changed=JSON.stringify(this.snapshots?.geometry||this.cfg.geometry)!==JSON.stringify(response.geometry);
-    this.cfg.geometry=response.geometry;const alignment=this.activeNode("alignment");if(alignment)alignment.parameters=response.geometry;this.record.previewInitialized=true;this.rawSnapshot=response.raw;this.previewError(null);
+    this.cfg.geometry=response.geometry;const alignment=this.activeNode("alignment");if(alignment)alignment.parameters=response.geometry;this.record.previewInitialized=true;this.rawSnapshot=this.context.input;this.previewError(null);
     if(changed) {this.record.accepted=null;this.cfg.roi=null;this.cfg.points=[];this.record.pointsAuto=true;}
     this.snapshots=response;
     if(response.mapping&&this.record.pointsAuto&&!this.cfg.points.length) this.cfg.points=[[Math.floor(response.mapping.shape[1]/2),Math.floor(response.mapping.shape[0]/2)]];
@@ -344,14 +344,15 @@ export class SplitController {
       $("split-quality").textContent=`建议偏移 X ${number(this.proposal.dx)}，Y ${number(this.proposal.dy)} · 峰值/RMS ${number(this.proposal.peak_to_rms)}。应用后检查叠加，再接受标定。`;
     }
     this.fill();this.changed();
-    if(!["result","curve"].includes(this.view)) {if(response[this.view])await this.showView(this.view);else await this.showRaw(response.raw);}
+    if(this.view==="raw")await this.showRaw(this.context.input);
+    else if(response[this.view])await this.showView(this.view);
     return response;
   }
   async setStage(stage) {
     if(stage==="result"){this.bridge.openParameters?.();$("split-results-tools").open=true;return;}
     const algorithm={geometry:"alignment",preprocess:"calibration",trial:"correlation"}[stage];
     const node=this.cfg?.workflow?.find(n=>n.algorithm===algorithm);if(node){this.record.selectedModule=node.id;this.fill();this.bridge.openParameters?.();}
-    if(stage==="trial"){$("split-run-context").open=true;if(this.snapshots?.left)await this.showView("left");}
+    if(stage==="trial"){$("split-run-context").open=true;await this.ensureGeometry();if(this.snapshots?.left)await this.showView("left");}
     if(stage==="geometry"&&this.rawSnapshot)await this.showRaw(this.rawSnapshot);
     if(stage==="flow")this.flow.render();this.bridge.changed();
   }
@@ -360,14 +361,16 @@ export class SplitController {
     if(view==="curve") return this.showCurve();
     if(view==="statistics") return this.showStatistics();
     if(view==="raw")return this.showRaw(this.rawSnapshot||this.context.input);
-    if(!this.snapshots?.[view])await this.updateGeometry();
+    if(!this.snapshots?.[view]||this.snapshots.raw.ref.index!==this.context.input?.ref.index)await this.updateGeometry();
     if(!this.snapshots?.[view])throw Error("该预览不可用，请检查当前流程并更新预览");
+    if(this.view==="raw")this.rawTransform={sourceId:this.context.source.id,zoom:this.scene.zoom,panX:this.scene.panX,panY:this.scene.panY};
     this.view=view;$("split-view").value=view;$("split-empty").hidden=true;
     const snapshot=this.snapshots[view];
     this.scene.width=snapshot.base_shape[1];this.scene.height=snapshot.base_shape[0];
-    this.scene.roi=$("split-tool").value==="roi"&&view!=="raw"?clone(this.cfg.roi):null;this.autoFit=true;this.scene.zoom=1;this.scene.panX=this.scene.panY=0;
+    this.scene.roi=$("split-tool").value==="roi"&&view!=="raw"?clone(this.cfg.roi):null;this.scene.zoom=1;this.scene.panX=this.scene.panY=0;
     await this.viewer.set(snapshot);this.setTool($("split-tool").value);this.draw();
-    $("split-view-caption").textContent=`${snapshot.shape[1]} × ${snapshot.shape[0]} · ${view==="raw"?"传感器坐标":"左幅参考坐标"}`;
+    $("split-view-caption").textContent=`${snapshot.shape[1]} × ${snapshot.shape[0]} · 帧 ${snapshot.ref.index+1} · 左幅参考坐标`;
+    $("input-label").textContent=$("split-view").selectedOptions[0].textContent;
   }
   setTool(tool) {
     if(!this.cfg)return;
@@ -397,10 +400,9 @@ export class SplitController {
     }
   }
   draw() {
-    if(this.autoFit)this.fitTransform();
     this.viewer.draw();
     if(!this.viewer.snapshot||!this.cfg?.geometry||!this.activeNode("alignment"))return;
-    const ctx=$("split-canvas").getContext("2d"),s=this.viewer.scale();
+    const ctx=this.viewer.canvas.getContext("2d"),s=this.viewer.scale();
     ctx.lineWidth=1.5/s;ctx.font=`${11/s}px Segoe UI`;
     if(this.view==="raw") {
       for(const [role,color] of [["left","#f1a3a0"],["right","#8bddbd"]]) {
@@ -421,7 +423,7 @@ export class SplitController {
   fitTransform() {
     this.scene.zoom=1;this.scene.panX=this.scene.panY=0;
     if(this.view==="result"&&this.viewer.snapshot) {
-      const frame=this.viewer.snapshot,r=$("split-canvas").getBoundingClientRect();
+      const frame=this.viewer.snapshot,r=this.viewer.canvas.getBoundingClientRect();
       const target=Math.min((r.width-40)/frame.shape[1],(r.height-50)/frame.shape[0]);
       this.scene.zoom=Math.min(30,target/this.viewer.scale());
       const scale=this.viewer.scale(),[x,y]=frame.origin;
@@ -429,27 +431,23 @@ export class SplitController {
       this.scene.panY=(this.scene.height/2-y-frame.shape[0]/2)*scale;
     }
   }
-  fit() {this.autoFit=true;this.draw();}
+  fit() {this.fitTransform();this.draw();}
   async seek(index) {
     if(!this.cfg)return;if(!Number.isInteger(index)||index<0||index>=this.context.source.meta.frame_count)throw Error("帧号超出来源范围");
-    const wanted=this.view,id=this.sourceId,generation=++this.generation,transform={zoom:this.scene.zoom,panX:this.scene.panX,panY:this.scene.panY},shape=[this.scene.width,this.scene.height],autoFit=this.autoFit;this.cfg.center=index;$("split-center").value=index+1;$("split-scrubber").value=index+1;
-    const raw=await api(`sources/${id}/frame`,{action:"index",index});if(id!==this.sourceId||generation!==this.generation)return;
-    this.snapshots=null;await this.showRaw(raw);if(wanted!=="raw")try{await this.updateGeometry();if(this.snapshots?.[wanted])await this.showView(wanted);}catch(error){this.previewError(error);}
-    if(this.view===wanted&&this.scene.width===shape[0]&&this.scene.height===shape[1]){Object.assign(this.scene,transform);this.autoFit=autoFit;this.draw();}
+    this.cfg.center=index;$("split-center").value=index+1;this.bridge.stopPreview();
+    await this.bridge.seek({action:"index",index});
     this.windowNote();this.changed();
   }
-  stop() {clearTimeout(this.playTimer);this.playing=null;$("split-play").textContent="播放";$("split-result-play").textContent="播放结果";}
-  async play(result) {
+  stop() {clearTimeout(this.playTimer);this.playing=null;$("split-result-play").textContent="播放结果";}
+  async playResult() {
     if(this.playing) {this.stop();return;}
-    if(result&&!this.resultData?.run.array_shape) throw Error("请选择时间序列系数图");
-    this.playing=result?"result":"input";
-    const button=$(result?"split-result-play":"split-play");button.textContent="暂停";
+    if(!this.resultData?.run.array_shape) throw Error("请选择时间序列系数图");
+    this.playing="result";$("split-result-play").textContent="暂停";
     const mode=this.playing;
     const next=async()=>{
       if(this.playing!==mode) return;
       try {
-        if(result) {if((this.timeIndex||0)+1>=this.resultData.run.array_shape[0]){this.stop();return;}this.timeIndex=(this.timeIndex||0)+1;$("split-result-time").value=this.timeIndex;await this.showSlice();}
-        else {if(this.cfg.center+1>=this.context.source.meta.frame_count){this.stop();return;}await this.seek(this.cfg.center+1);}
+        if((this.timeIndex||0)+1>=this.resultData.run.array_shape[0]){this.stop();return;}this.timeIndex=(this.timeIndex||0)+1;$("split-result-time").value=this.timeIndex;await this.showSlice();
       } catch(e){this.stop();this.bridge.report(e.message,true);return;}
       if(this.playing===mode) this.playTimer=setTimeout(next,90);
     };
@@ -509,7 +507,7 @@ export class SplitController {
     const data=await api(`split/jobs/${id}/statistics`,{view:$("split-stat-view").value,index:this.cfg?.center??0});
     this.resultView="statistics";$("split-curve").hidden=true;$("split-result-empty").hidden=true;
     this.resultScene.width=data.frame.base_shape[1];this.resultScene.height=data.frame.base_shape[0];
-    await this.resultViewer.set(data.frame);this.fitResult();
+    this.bridge.resultShown(data.frame);await this.resultViewer.set(data.frame);this.fitResult();
     const current=this.cfg?this.taskConfig("statistics"):null;
     const upstream=cfg=>(cfg.workflow||[]).filter(n=>n.enabled).slice(0,(cfg.workflow||[]).filter(n=>n.enabled).findIndex(n=>n.algorithm==="statistics")+1);
     const canonical=v=>Array.isArray(v)?v.map(canonical):v&&typeof v==="object"?Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k])])):v;
@@ -522,7 +520,7 @@ export class SplitController {
     if(!id) return;
     this.stop();this.resultId=id;
     if(this.record) this.record.resultId=id;
-    const known=this.jobs.find(j=>j.id===id);if(known&&known.mode!=="split")return this.loadFrameResult(id);
+    const known=this.jobs.find(j=>j.id===id)||await api(`jobs/${id}`);if(known.mode!=="split")return this.loadFrameResult(id);
     const data=await api(`split/jobs/${id}`);
     if(this.resultId!==id) return;
     const saved=this.record?.resultViews?.[id];
@@ -555,7 +553,7 @@ export class SplitController {
     if(!frame){const state=await api("state"),source=state.sources.find(s=>s.role==="result"&&s.run_id===id);if(source)frame=await api(`sources/${source.id}/frame`,{action:"open"});}
     if(!frame)throw Error("该逐帧结果的缓存不可用，请从处理结果打开已保存序列");
     this.resultId=id;this.resultData=null;if(this.record)this.record.resultId=id;this.resultView="frame";$("split-curve").hidden=true;$("split-result-empty").hidden=true;$("split-result-nav").hidden=true;$("split-result-title").textContent=job.name;
-    this.resultScene.width=frame.base_shape[1];this.resultScene.height=frame.base_shape[0];await this.resultViewer.set(frame);this.fitResult();$("split-result-caption").textContent=`逐帧模块结果 · ${frame.shape[1]} × ${frame.shape[0]}`;$("split-result-note").textContent="完整运行的序列与来源记录保存在处理结果中。";
+    this.resultScene.width=frame.base_shape[1];this.resultScene.height=frame.base_shape[0];this.bridge.resultShown(frame);await this.resultViewer.set(frame);this.fitResult();$("split-result-caption").textContent=`逐帧模块结果 · ${frame.shape[1]} × ${frame.shape[0]}`;$("split-result-note").textContent="完整运行的序列与来源记录保存在处理结果中。";
     $("split-result-summary").textContent=job.summary||"逐帧模块处理";$("split-result-name").value=job.name;$("split-promote").disabled=true;$("split-show-map").hidden=true;$("split-show-curve").hidden=true;document.querySelectorAll("[data-split-export]").forEach(b=>b.disabled=true);
   }
   saveResultView() {
@@ -574,7 +572,7 @@ export class SplitController {
     const fit=this.resultView!=="result"||this.displayResultId!==id;
     this.resultView="result";$("split-curve").hidden=true;$("split-result-empty").hidden=true;
     this.resultScene.width=data.frame.base_shape[1];this.resultScene.height=data.frame.base_shape[0];
-    await this.resultViewer.set(data.frame);this.displayResultId=id;if(fit)this.fitResult();else this.drawResult();
+    this.bridge.resultShown(data.frame);await this.resultViewer.set(data.frame);this.displayResultId=id;if(fit)this.fitResult();else this.drawResult();
     const ref=data.window_ref;
     $("split-result-caption").textContent=`中心帧 ${ref.center_index+1} · τ ${ref.lag_frames>=0?"+":""}${ref.lag_frames} 帧 · ${data.valid_pixels.toLocaleString()} 有效像素`;
     $("split-result-note").textContent=`左窗 ${ref.left_start+1}～${ref.left_end} · 右窗 ${ref.right_start+1}～${ref.right_end} · 实际时差 ${number(ref.lag_seconds)} s · 有效样本 ${data.count_min}～${data.count_max}`;
@@ -583,7 +581,7 @@ export class SplitController {
   showCurve() {
     const data=this.resultData?.curve_result;
     if(!data) {this.bridge.report("选定中心帧和点 / ROI，点击“固定帧曲线”计算该结果",true);return;}
-    this.resultView="curve";$("split-curve").hidden=false;$("split-result-empty").hidden=true;
+    this.bridge.resultShown(null);this.resultView="curve";$("split-curve").hidden=false;$("split-result-empty").hidden=true;
     const refs=data.window_refs,curves=data.curves,time=$("split-curve-axis").value==="time";
     const available=refs.every(r=>r.lag_seconds!=null);
     $("split-curve-axis").querySelector('option[value="time"]').disabled=!available;
@@ -659,7 +657,7 @@ export class SplitController {
     this.resultAutoFit=true;
     const scene=this.resultScene,frame=this.resultViewer.snapshot;
     scene.zoom=1;scene.panX=scene.panY=0;
-    const box=$("split-result-canvas").getBoundingClientRect();
+    const box=this.resultViewer.canvas.getBoundingClientRect();
     if(box.width<1||box.height<1)return;
     const target=Math.min((box.width-40)/frame.shape[1],(box.height-50)/frame.shape[0]);
     scene.zoom=Math.max(.08,Math.min(30,target/this.resultViewer.scale()));

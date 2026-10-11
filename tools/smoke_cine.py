@@ -179,6 +179,7 @@ def main():
                 page.locator('#split-window').fill('4');page.locator('#split-window').dispatch_event('change')
                 expect(page.locator('#split-trial')).to_be_disabled()
                 page.locator('#split-view').select_option('raw')
+                page.locator('#split-open-context').click()
                 index=min(len(times)-1,trigger_index+10)
                 page.locator('#split-center').fill(str(index+1));page.locator('#split-center').dispatch_event('change')
                 page.locator('#split-seek').click()

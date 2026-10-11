@@ -22,7 +22,7 @@ export class Viewer {
         const next = this.scale();
         scene.panX += (native.x - scene.width / 2) * (old - next);
         scene.panY += (native.y - scene.height / 2) * (old - next);
-        callbacks.redraw();
+        callbacks.redraw(this);
       },
       { passive: false },
     );
@@ -80,7 +80,7 @@ export class Viewer {
           scene.panY = this.drag.y + p.y - this.drag.point.y;
         }
         if (drag.action !== "pan") callbacks.roiPreview?.();
-        callbacks.redraw();
+        callbacks.redraw(this);
       } else if (this.snapshot) {
         const hit =
           scene.tool === "roi" ? hitROI(scene.roi, n, 7 / this.scale()) : null;
@@ -113,7 +113,7 @@ export class Viewer {
       if (this.drag) {
         scene.roi = this.drag.initialROI;
         callbacks.roiPreview?.();
-        callbacks.redraw();
+        callbacks.redraw(this);
       }
       this.drag = null;
     });

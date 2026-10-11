@@ -3,7 +3,7 @@ const clamp=(n,min,max)=>Math.min(Math.max(n,min),Math.max(min,max));
 const divider=6,rail=34,columnKeys=["flow","parameters"];
 const columnDefault={flow:240,parameters:310},columnMin={flow:190,parameters:240},columnMax={flow:460,parameters:580};
 const dockDefaults=()=>({flowWidth:null,parametersWidth:null,flow:false,parameters:false});
-const defaults=()=>({schema:2,library:null,tasks:null,compare:.5,splitCompare:.5,general:dockDefaults(),split:dockDefaults()});
+const defaults=()=>({schema:3,library:null,tasks:null,compare:.5,general:dockDefaults(),split:dockDefaults()});
 
 // Fit visible columns without replacing their saved, expanded width preferences.
 function fitColumns(keys,widths,budget){
@@ -20,7 +20,6 @@ export class WorkbenchLayout {
     this.addHandle(this.root,"dock","vertical","调整右侧处理面板宽度");
     this.addHandle(this.root,"tasks","horizontal","调整任务记录高度");
     this.addHandle(document.querySelector("#viewers"),"compare","vertical","调整原始数据与结果视窗宽度",document.querySelector("#result-pane"));
-    this.addHandle(document.querySelector(".split-views"),"splitCompare","vertical","调整数据预览与处理结果视窗宽度",document.querySelector(".split-result-window"));
     document.querySelectorAll("[data-resize]").forEach(el=>this.bindHandle(el));
     document.querySelectorAll("[data-dock-toggle]").forEach(button=>{
       button.onclick=()=>{const mode=button.closest("[data-dock-stack]").dataset.dockStack,key=button.dataset.dockToggle;this.state[mode][key]=!this.state[mode][key];this.apply();this.changed();};
@@ -63,7 +62,7 @@ export class WorkbenchLayout {
       if(c.open.length<2)return {value:c.widths.flow,min:c.widths.flow,max:c.widths.flow,sign:1};
       return {value:c.widths.flow,min:Math.max(columnMin.flow,total-columnMax.parameters),max:Math.min(columnMax.flow,total-columnMin.parameters),sign:1};
     }
-    const host=document.querySelector(key==="compare"?"#viewers":".split-views");
+    const host=document.querySelector("#viewers");
     return {value:this.state[key],min:.2,max:.8,sign:1,total:Math.max(1,host.clientWidth-divider)};
   }
   setValue(key,value){
@@ -84,7 +83,7 @@ export class WorkbenchLayout {
       const mode=key.startsWith("split")?"split":"general",c=this.columns(mode,this.geometry().available),widths=fitColumns(columnKeys,columnDefault,c.total-c.gap);
       for(const name of columnKeys)this.state[mode][`${name}Width`]=widths[name];
     }
-    else this.state[key]=["compare","splitCompare"].includes(key) ? .5 : null;
+    else this.state[key]=key==="compare" ? .5 : null;
     this.apply();this.changed();
   }
   bindHandle(el){
@@ -99,9 +98,9 @@ export class WorkbenchLayout {
       el.onpointerup=end;el.onpointercancel=end;el.onlostpointercapture=end;
     };
     el.onkeydown=e=>{
-      if(e.key==="Home"){e.preventDefault();this.resetValue(key);return;}
+      if(e.key==="Home"){e.preventDefault();e.stopPropagation();this.resetValue(key);return;}
       const keys=vertical?["ArrowLeft","ArrowRight"]:["ArrowUp","ArrowDown"],index=keys.indexOf(e.key);if(index<0)return;
-      e.preventDefault();const m=this.metrics(key),step=m.total ? .02 : (e.shiftKey?30:10);
+      e.preventDefault();e.stopPropagation();const m=this.metrics(key),step=m.total ? .02 : (e.shiftKey?30:10);
       this.setValue(key,clamp(m.value+(index===0?-1:1)*step*m.sign,m.min,m.max));this.changed();
     };
     el.ondblclick=()=>this.resetValue(key);
@@ -114,7 +113,6 @@ export class WorkbenchLayout {
     const geometry=this.geometry(),lib=geometry.library,dock=geometry.dock,focused=this.root.classList.contains("library-collapsed")&&this.root.classList.contains("processing-collapsed"),tasks=focused?0:this.root.classList.contains("task-collapse")?43:this.metrics("tasks").value;
     for(const [key,value]of Object.entries({"library-track":lib,"library-divider":lib?divider:0,"dock-track":dock,"dock-divider":dock?divider:0,"task-track":tasks,"task-divider":focused||this.root.classList.contains("task-collapse")?0:divider}))this.root.style.setProperty(`--${key}`,`${value}px`);
     this.root.style.setProperty("--compare-left",this.state.compare);this.root.style.setProperty("--compare-right",1-this.state.compare);
-    this.root.style.setProperty("--split-left",`${this.state.splitCompare}fr`);this.root.style.setProperty("--split-right",`${1-this.state.splitCompare}fr`);
     for(const mode of["general","split"]){
       const host=document.querySelector(`[data-dock-stack="${mode}"]`),s=this.state[mode],c=this.columns(mode,geometry.available);
       host.style.setProperty("--flow-track",`${c.widths.flow}px`);host.style.setProperty("--parameter-track",`${c.widths.parameters}px`);host.style.setProperty("--panel-divider",`${c.gap}px`);
@@ -129,9 +127,9 @@ export class WorkbenchLayout {
   serialize(){return {...structuredClone(this.state),tasksCollapsed:this.root.classList.contains("task-collapse")};}
   restore(value){
     const s=defaults();if(!value||typeof value!=="object"){this.state=s;this.root.classList.remove("task-collapse");this.apply();return;}
-    for(const key of["library","tasks","compare","splitCompare"])if(Number.isFinite(value[key])){const ratio=["compare","splitCompare"].includes(key);s[key]=clamp(value[key],ratio ? .2 : 80,ratio ? .8 : 520);}
+    for(const key of["library","tasks","compare"])if(Number.isFinite(value[key])){const ratio=key==="compare";s[key]=clamp(value[key],ratio ? .2 : 80,ratio ? .8 : 520);}
     // Old stacked panels saved one width and a height share; neither is a column width.
-    for(const mode of["general","split"]){const v=value[mode];if(!v||typeof v!=="object")continue;for(const key of columnKeys){if(value.schema===2&&Number.isFinite(v[`${key}Width`]))s[mode][`${key}Width`]=clamp(v[`${key}Width`],columnMin[key],columnMax[key]);s[mode][key]=v[key]===true;}}
+    for(const mode of["general","split"]){const v=value[mode];if(!v||typeof v!=="object")continue;for(const key of columnKeys){if([2,3].includes(value.schema)&&Number.isFinite(v[`${key}Width`]))s[mode][`${key}Width`]=clamp(v[`${key}Width`],columnMin[key],columnMax[key]);s[mode][key]=v[key]===true;}}
     this.state=s;this.root.classList.toggle("task-collapse",value.tasksCollapsed===true);this.apply();
   }
   reset(){this.state=defaults();this.root.classList.remove("library-collapsed","processing-collapsed","task-collapse");this.apply();this.changed();document.dispatchEvent(new Event("workbench-layout"));}
