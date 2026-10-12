@@ -62,7 +62,7 @@ WORKBENCH = {
     "point_extract": dict(description="获取直接输入指定像素随 T/Q 的信号。",parameters=[field("x","X","int",0,minimum=0),field("y","Y","int",0,minimum=0),field("output","数据流作用","str","main",choices=["main","side"])]),
     "line_extract": dict(description="提取横纵便捷线，或按端点及插值采样任意直线，R 为距离位置轴。",parameters=[field("mode","直线定义","str","axis",choices=["axis","segment"]),field("axis","保留方向","str","X",choices=["X","Y"]),field("index","固定另一轴位置（从0起）","int",0,minimum=0),*[field(k,label,"float",0.,minimum=0) for k,label in (("x0","起点 X"),("y0","起点 Y"),("x1","终点 X"),("y1","终点 Y"))],field("samples","沿线样本数","int",64,minimum=2,maximum=100000),field("interpolation","沿线插值","str","nearest",choices=["nearest","bilinear"]),field("output","数据流作用","str","side",choices=["main","side"])]),
     "axis_slice": dict(description="按明确轴选一个截面，不重新解释 T/Q。",parameters=[field("axis","截面轴","str","T",choices=["T","Q","P","C","X","Y","R","B","N"]),field("index","位置（从0起）","int",0,minimum=0),field("output","数据流作用","str","side",choices=["main","side"])]),
-    "distribution": dict(description="对每个上游样本产生固定箱边界的有限值分布。",parameters=[field("bins","箱数","int",64,minimum=2,maximum=4096),field("minimum","下界","float",0.),field("maximum","上界","float",65535.),field("output","数据流作用","str","side",choices=["main","side"])]),
+    "distribution": dict(description="对每个上游样本产生固定箱边界的频数；自动边界使用上游完整范围的有限值最小 / 最大值。",parameters=[field("bins","箱数","int",64,minimum=2,maximum=4096),field("minimum","下界","float",0.,nullable=True),field("maximum","上界","float",65535.,nullable=True),field("output","数据流作用","str","side",choices=["main","side"])]),
     "data_tap": dict(description="获取直接上游真实数据用于预览或文件导出，主流原样通过。",parameters=[field("name","输出名称","str","截流输出"),field("destination","交付方式","str","both",choices=["preview","file","both"]),field("export_format","导出格式","str","dataset",choices=["dataset","npy","csv","tiff"])])}
 for _key,_value in WORKBENCH.items():
     _value.update(name=_key,inputs=["sensor","pair","moments","map"],output="same")
@@ -74,6 +74,12 @@ for _key,_analysis in (("correlation_map","map"),("correlation_curve","curve")):
 
 CORRELATIONS = {"correlation","correlation_map","correlation_curve"}
 MODIFIERS = {"region_reduce","point_extract","line_extract","axis_slice","distribution"}
+
+
+def needs_full_sequence(nodes):
+    return any(n["enabled"] and (n["algorithm"] in {"time_sample","time_smooth","time_bin"}
+               or n["algorithm"]=="distribution" and any(n["parameters"].get(k) is None for k in ("minimum","maximum")))
+               for n in nodes)
 REFERENCABLE = {"intensity":{"gain","offset"},"affine":{"gain","offset"},"threshold":{"threshold"},"curve":{"input_max","gamma"},"gaussian":{"sigma"},"fixed_normalize":{"scale"},"parameter_binding":{"value"}}
 
 
@@ -213,7 +219,7 @@ def normalize_nodes(nodes, *, check_types=True, input_type="sensor", input_kind=
                 raise ValueError("时间裁剪终点必须在起点之后")
             if algorithm=="time_smooth" and merged["window"]%2!=1:
                 raise ValueError("时间平滑窗口必须为奇数")
-            if algorithm=="distribution" and merged["maximum"]<=merged["minimum"]:
+            if algorithm=="distribution" and merged["minimum"] is not None and merged["maximum"] is not None and merged["maximum"]<=merged["minimum"]:
                 raise ValueError("分布上界须大于下界")
             if algorithm=="data_tap" and (not isinstance(merged["name"],str) or not 1<=len(merged["name"].strip())<=120):
                 raise ValueError("截流输出名称需为1至120个字符")

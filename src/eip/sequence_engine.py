@@ -22,7 +22,7 @@ from eip.domain import Selection, StepSpec
 from eip.module_contracts import compile_flow, source_contract, roi_bounds, correlation_layout, Contract
 from eip.module_engine import IdentityPhotometry
 from eip.module_ops import intensity_curve
-from eip.module_registry import normalize_nodes, module_spec, CORRELATIONS, MODIFIERS, is_reference
+from eip.module_registry import normalize_nodes, module_spec, CORRELATIONS, MODIFIERS, is_reference, needs_full_sequence
 
 
 def reduce_finite(a, axes, mode, q=.5):
@@ -145,7 +145,7 @@ class Source:
 
 
 class SequenceEngine:
-    def __init__(self,reader,nodes,context=None,*,workdir,center=None,single=False,input_kind="image",dependencies=()):
+    def __init__(self,reader,nodes,context=None,*,workdir,center=None,single=False,input_kind="image",dependencies=(),range_cache=None):
         self.context = context or RunContext()
         self.source = Source(reader,self.context,workdir,input_kind)
         self.center,self.single = center,single
@@ -160,6 +160,7 @@ class SequenceEngine:
         self.last_correlation = {}
         self.resolved_bindings = {}
         self._sides = []
+        self.range_cache = range_cache
         retained = 0
         try:
             for i,n in enumerate(self.nodes):
@@ -179,7 +180,7 @@ class SequenceEngine:
                     if not indices:
                         raise ValueError("时间裁剪后没有样本")
                     op["indices"] = indices
-                single_here = single and not any(m["algorithm"] in {"time_sample","time_smooth","time_bin"} for m in self.nodes[i+1:])
+                single_here = single and not needs_full_sequence(self.nodes[i+1:])
                 stage_plan = compile_flow([n],c,center=center,single=single_here,following_nodes=[*self.nodes[i+1:],*self.dependencies],validate_bindings=False)
                 stage = stage_plan["output"]
                 after = type(c)(**{k:tuple(stage[k]) if k in {"shape","origin"} else stage[k] for k in type(c).__dataclass_fields__})
@@ -207,7 +208,9 @@ class SequenceEngine:
                 elif a=="line_extract":
                     self.mappings[n["id"]]=dict(axis="R",unit="pixel",coordinates=list(range(c.shape[c.axes.index(p["axis"])])),source_axis=p["axis"],fixed_index=p["index"],origin=list(c.origin))
                 elif a=="distribution":
-                    self.mappings[n["id"]]=dict(axis="B",edges=np.linspace(p["minimum"],p["maximum"],p["bins"]+1).tolist(),count_unit="finite_values")
+                    self.mappings[n["id"]]=dict(axis="B",count_unit="finite_values")
+                    if p["minimum"] is not None and p["maximum"] is not None:
+                        self.mappings[n["id"]]["edges"]=np.linspace(p["minimum"],p["maximum"],p["bins"]+1).tolist()
                 elif n.get("manifest"):
                     self.instances[i] = Pipeline([StepSpec(**dict(n,parameters=p))],self.context)
                 elif a in {"intensity","affine","box_blur","threshold","gaussian","curve"}:
@@ -313,6 +316,56 @@ class SequenceEngine:
         selected=p["index"] if op["algorithm"]=="axis_slice" and p["axis"]==self.contracts[i].sequence_axis else index
         return dict(self.ref(i,selected),sample_index=index,side_output=identifier,selection=p)
 
+    def _histogram_edges(self,i):
+        op = self.operations[i]
+        p, mapping = op["parameters"], self.mappings[op["node"]["id"]]
+        if "edges" in mapping:
+            return mapping["edges"]
+        contract = self.contracts[i]
+        fingerprint = hashlib.sha256(json.dumps(dict(
+            source_revision=self.source.reader.meta.revision,upstream=self.nodes[:i],
+            contract=contract.record(),dependencies=self.dependencies,center=self.center,single=self.single,
+            seed=self.context.seed),sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+        detected = self.range_cache.get(fingerprint) if self.range_cache is not None else None
+        if detected is None:
+            minimum,maximum = None,None
+            self.context.log(f"分布统计：正在自动识别边界（{contract.length} 个上游样本）")
+            interval = max(1,contract.length//20)
+            for sample in range(contract.length):
+                self.context.check_cancelled()
+                value = self.get(i,sample)
+                finite = value[np.isfinite(value)]
+                if finite.size:
+                    low,high = float(finite.min()),float(finite.max())
+                    minimum = low if minimum is None else min(minimum,low)
+                    maximum = high if maximum is None else max(maximum,high)
+                if (sample+1)%interval==0 or sample+1==contract.length:
+                    self.context.log(f"分布边界识别：{sample+1}/{contract.length}")
+            if minimum is None:
+                raise ValueError("分布自动边界无法识别：上游范围没有有限值，请手动设置上下界")
+            detected = dict(minimum=minimum,maximum=maximum,samples=contract.length)
+            if self.range_cache is not None:
+                self.range_cache[fingerprint] = detected
+                while len(self.range_cache)>16:
+                    self.range_cache.popitem(last=False)
+        elif self.range_cache is not None:
+            self.range_cache.move_to_end(fingerprint)
+        lower = detected["minimum"] if p["minimum"] is None else p["minimum"]
+        upper = detected["maximum"] if p["maximum"] is None else p["maximum"]
+        if lower==upper:
+            padding = max(.5,abs(lower)*1e-6)
+            if p["minimum"] is None:
+                lower -= padding
+            if p["maximum"] is None:
+                upper += padding
+        if not np.isfinite([lower,upper]).all() or lower>=upper:
+            raise ValueError("分布自动边界与手动边界不兼容：上界须大于下界")
+        mapping.update(edges=np.linspace(lower,upper,p["bins"]+1).tolist(),
+                       bounds_mode=dict(minimum="auto" if p["minimum"] is None else "manual",
+                                        maximum="auto" if p["maximum"] is None else "manual"),
+                       detected=detected,range_scope="complete_upstream_sequence")
+        return mapping["edges"]
+
     def _modifier_value(self,i,index):
         op=self.operations[i]; a,p=op["algorithm"],op["parameters"]; c=self.contracts[i]
         if a=="axis_slice" and p["axis"]==c.sequence_axis:
@@ -347,7 +400,8 @@ class SequenceEngine:
         if a=="axis_slice":
             return np.take(value,p["index"],axis=c.axes.index(p["axis"]))
         if a=="distribution":
-            return np.histogram(value[np.isfinite(value)],bins=p["bins"],range=(p["minimum"],p["maximum"]))[0].astype(np.int64)
+            edges = self._histogram_edges(i)
+            return np.histogram(value[np.isfinite(value)],bins=p["bins"],range=(edges[0],edges[-1]))[0].astype(np.int64)
         raise ValueError("未知修饰操作")
 
     @property

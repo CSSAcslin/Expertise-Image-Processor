@@ -30,7 +30,7 @@ ENTRIES = {
     "point_extract": ("modifier", "point", "点信号提取", "B=A[...,y,x,...]", "去除 Y/X，保留 T 或 Q 及显式通道；坐标为直接上游。"),
     "line_extract": ("modifier", "line", "直线截面提取", "p_j=p₀+j(p₁−p₀)/(N−1); B_j=sample(A,p_j)", "横纵便捷线或任意端点线段；R 为像素距离，最近邻或明确双线性。"),
     "axis_slice": ("modifier", "slice", "按轴截面", "B=take(A,index,axis)", "按明确轴与从 0 起位置提取；T/Q 单样本截面改为 N 记录轴。"),
-    "distribution": ("modifier", "histogram", "分布统计", "H[b]=count(e_b≤finite(A)<e_(b+1))", "固定等宽箱；末箱包含最大边界；超界值不计入，保留范围记录。"),
+    "distribution": ("modifier", "histogram", "分布统计", "H[b]=count(e_b≤finite(A)<e_(b+1))", "上下界可独立手动设置或自动识别上游完整范围的有限值极值；整段固定等宽箱，末箱含右边界。常量数据自动边界向外扩展；无有限值时自动识别报错。"),
     "data_tap": ("modifier", "export", "数据截流导出", "main=A; captured=A", "获取直接上游真实数据；主流透传，不更改轴、dtype 或来源。"),
     "parameter_binding": ("modifier", "variable", "参数传递", "main=A; value=v", "只发布数值标量；允许常量或已启用前序模块的明确端口，禁止循环与任意代码。"),
 }
@@ -142,7 +142,7 @@ def enrich(spec):
         ]
     if spec["id"]=="distribution":
         symbols += [{"symbol":"H_b", "meaning":"落入第 b 个固定箱的有限值数量；末箱含右边界", "unit":"计数"},
-                    {"symbol":"e_b", "meaning":"由最小值、最大值及箱数确定的固定等宽箱边界", "unit":"上游单位"},
+                    {"symbol":"e_b", "meaning":"由手动值或上游完整范围自动识别的有限值极值及箱数确定，整段共用固定边界", "unit":"上游单位"},
                     {"symbol":"V", "meaning":"当前样本中的有限值集合，超范围值不计入任何箱", "unit":"值集合"}]
     symbols += [{"symbol":SYMBOLS.get(p["key"],p["key"]),"meaning":p["label"],"unit":p.get("unit","")} for p in spec.get("parameters",[]) if p["kind"] in {"int","float"}]
     if spec["id"] in {"region_reduce","sequence_statistics","statistics","gaussian"}:

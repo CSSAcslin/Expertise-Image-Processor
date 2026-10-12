@@ -6,6 +6,7 @@ the job queue, exports a dataset, or occupies the original-data preview worker.
 from __future__ import annotations
 
 from dataclasses import replace
+from collections import OrderedDict
 import multiprocessing
 import tempfile
 import threading
@@ -25,6 +26,7 @@ def inspection_entry(commands, results, folder):
     from eip.sequence_engine import SequenceEngine
 
     reader, key = None, None
+    range_cache = OrderedDict()
     try:
         while True:
             command = commands.get()
@@ -37,6 +39,7 @@ def inspection_entry(commands, results, folder):
                     reader, key = None, None
                     reader = open_source(source)
                     key = source.key
+                    range_cache.clear()
                 if reader.meta.revision != command["revision"]:
                     raise ValueError("来源已改变，请重新导入")
                 with tempfile.TemporaryDirectory(prefix="stage-", dir=folder) as workdir:
@@ -44,6 +47,7 @@ def inspection_entry(commands, results, folder):
                         reader, command["nodes"], workdir=workdir, single=True,
                         input_kind=command.get("input_kind", "image"),
                         dependencies=command.get("dependencies", []),
+                        range_cache=range_cache,
                     )
                     try:
                         side_id, index = command.get("side_output"), command["index"]

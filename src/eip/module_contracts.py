@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass, replace
 import math
 import numpy as np
 
-from eip.module_registry import normalize_nodes, module_spec, CORRELATIONS, MODIFIERS, is_reference
+from eip.module_registry import normalize_nodes, module_spec, CORRELATIONS, MODIFIERS, is_reference, needs_full_sequence
 
 CONTRACT_VERSION = 3
 
@@ -283,8 +283,8 @@ def compile_flow(nodes, source, *, center=None, single=False, strict=True, follo
                         raise ValueError("标准 g² 需要对齐双路强度矩阵 PYX 或双路标量 P")
                     if p.get("roi_estimator")!="pixel_mean":
                         raise ValueError("区域总强度请用关联之前的 ROI 求和模块表达；关联不再隐含空间归约")
-                    downstream_time = any(m["enabled"] and m["algorithm"] in {"time_sample","time_smooth","time_bin"} for m in canonical[i+1:])
-                    lags,centers,_,_ = correlation_layout(c,p,center,single and not downstream_time)
+                    downstream_sequence = needs_full_sequence(canonical[i+1:])
+                    lags,centers,_,_ = correlation_layout(c,p,center,single and not downstream_sequence)
                     c = replace(c,axes=c.axes[1:],shape=c.shape[1:],length=len(lags) if p["analysis"]=="curve" else None if centers is None else len(centers),sequence_axis="Q" if p["analysis"]=="curve" else "T",semantic="g2",dtype="float64",statistics=False,meaning=f"regional_{c.spatial_operation}_signal_g2" if c.spatial_operation else "pixel_g2")
                     if p["analysis"]=="curve" and c.spatial:
                         warning="当前 τ 扫描仍输出逐像素矩阵；需要单条曲线时，请在关联前归约区域信号，或在关联后对像素 g² 添加空间归约。"
