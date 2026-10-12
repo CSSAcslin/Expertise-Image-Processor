@@ -20,6 +20,7 @@ from eip.readers import open_source
 from eip.processing import statistics
 from eip.sequence_engine import SequenceEngine
 from eip.sequence_storage import plot_signals
+from eip.sequence_delivery import persist_side_outputs
 
 
 def process_sequence_job(payload,emit,cancelled):
@@ -87,7 +88,10 @@ def process_sequence_job(payload,emit,cancelled):
                             if out==0 and c.spatial:
                                 axes = c.axes.removeprefix("P")
                                 first = arr[0] if c.paired else arr
-                                tifffile.imwrite(part/"first.tif",first,photometric="rgb" if axes=="YXC" else "minisblack",metadata=dict(axes="YXS" if axes=="YXC" else "YX",contract=output_c.record(),reference=ref))
+                                bgr = axes=="YXC" and c.color_order=="BGR"
+                                shown = first[...,::-1] if bgr else first
+                                image_contract = replace(output_c,color_order="RGB").record() if bgr else output_c.record()
+                                tifffile.imwrite(part/"first.tif",shown,photometric="rgb" if axes=="YXC" else "minisblack",metadata=dict(axes="YXS" if axes=="YXC" else "YX",contract=image_contract,source_contract=output_c.record(),color_conversion="BGR to RGB" if bgr else None,reference=ref))
                                 item["artifacts"].append("first.tif")
                             item["completed_frames"] = out+1
                             emit(dict(type="progress",source=position,completed=out+1,total=len(indices),name=reader.meta.name))
@@ -99,6 +103,7 @@ def process_sequence_job(payload,emit,cancelled):
                         folder.mkdir()
                         for key in ("mean","variance","count","scales"):
                             np.save(folder/f"{key}.npy",stats[key],allow_pickle=False)
+                    persist_side_outputs(engine,part,payload,item,context,emit)
                     verify = open_source(source_from_dict(source_value))
                     try:
                         if verify.meta.revision!=reader.meta.revision:
@@ -114,7 +119,7 @@ def process_sequence_job(payload,emit,cancelled):
                     item.update(status="succeeded",contract=output_c.record(),base_shape=[c.shape[c.axes.index(a)] for a in "YX"] if c.spatial else [],origin=list(c.origin),result_kind="label" if c.semantic=="label" else "coefficient" if c.semantic in {"g2","processed_g2"} else "image",modules=engine.plan,mappings=engine.mappings,calibrations=calibrations)
                     # This manifest is written only after all numeric samples and
                     # references succeeded. Partial datasets cannot be promoted.
-                    write_json(part/"dataset.json",dict(schema_version=1,status="succeeded",contract=output_c.record(),run_id=payload["id"],source=source_value))
+                    write_json(part/"dataset.json",dict(schema_version=1,status="succeeded",contract=output_c.record(),run_id=payload["id"],source=source_value,temporary=payload["mode"]=="trial"))
                     if signal:
                         plot_signals(part,output_c.record())
                         item["artifacts"].extend(["curve.png","curve.svg"])
@@ -125,6 +130,14 @@ def process_sequence_job(payload,emit,cancelled):
                 item.update(status="failed",error=str(error))
                 emit(dict(type="log",message=str(error)))
             finally:
+                if item["status"] != "succeeded":
+                    for side in item.get("side_outputs",[]):
+                        if side["status"] == "succeeded":
+                            side.update(status="incomplete",error="所属来源未完整完成，截流输出未发布")
+                        folder = part/side["output_directory"]
+                        (folder/"dataset.json").unlink(missing_ok=True)
+                        (folder/"export.zip").unlink(missing_ok=True)
+                        write_json(folder/"delivery.json",side)
                 if engine:
                     engine.close()
                 if reader:

@@ -20,7 +20,8 @@ def signal_preview(values):
     low,high = (float(valid.min()),float(valid.max())) if valid.size else (0.,1.)
     if low==high:
         low,high = low-1,high+1
-    points = [(int(65+i*510/max(1,len(values)-1)),int(260-180*(float(v)-low)/(high-low))) for i,v in enumerate(values) if np.isfinite(v)]
+    selected = np.unique(np.linspace(0,max(0,len(values)-1),min(len(values),2048),dtype=int))
+    points = [(int(65+i*510/max(1,len(values)-1)),int(260-180*(float(values[i])-low)/(high-low))) for i in selected if np.isfinite(values[i])]
     if len(points)>1:
         draw.line(points,fill=(96,210,209),width=3)
     for x,y in points:
@@ -65,7 +66,7 @@ class DatasetReader:
         axes = self.contract["axes"]
         if axes.startswith("P"):
             value,axes = value[0],axes[1:]
-        if "Y" not in axes:
+        if not ("Y" in axes and "X" in axes):
             value = signal_preview(value)
         ref = self.sample_ref(index)
         # The source ordinal is exact for the saved sequence, while the original
@@ -74,7 +75,9 @@ class DatasetReader:
 
     def read_at_time(self,time):
         if self.contract["sequence_axis"]!="T":
-            raise ValueError("此结果的样本轴是 τ，不能按采集时间定位")
+            axis = self.contract["sequence_axis"]
+            label = "Q（延迟）" if axis=="Q" else f"{axis}（记录）"
+            raise ValueError(f"此结果的样本轴是 {label}，不能按采集时间定位")
         best = None
         for i in range(self.count):
             t = self.sample_ref(i).get("time")
@@ -101,7 +104,10 @@ def plot_signals(directory,contract):
     from matplotlib import pyplot as plt
     directory = Path(directory)
     values = np.load(directory/"values.npy",mmap_mode="r",allow_pickle=False)
-    indices = np.unique(np.r_[np.arange(0,len(values),max(1,int(np.ceil(len(values)/20000)))),len(values)-1])
+    count = max(1,int(np.prod(contract["shape"])))
+    selected_columns = np.unique(np.linspace(0,count-1,min(count,64),dtype=int))
+    budget = min(20000,max(1,200000//len(selected_columns)))
+    indices = np.unique(np.r_[np.arange(0,len(values),max(1,int(np.ceil(len(values)/budget)))),len(values)-1])
     chosen = set(indices.tolist())
     xs,actual = [],True
     with (directory/"references.jsonl").open(encoding="utf-8") as file:
@@ -109,22 +115,28 @@ def plot_signals(directory,contract):
             if i not in chosen:
                 continue
             ref = json.loads(line)
-            x = ref.get("correlation",{}).get("lag_samples") if contract["sequence_axis"]=="Q" else ref.get("time")
+            axis = contract["sequence_axis"]
+            x = ref.get("correlation",{}).get("lag_samples") if axis=="Q" else ref.get("time") if axis=="T" else i
             if x is None:
                 actual = False
             xs.append(x)
     if not actual:
         xs = (indices+1).tolist()
     fig,ax = plt.subplots(figsize=(9,4.8),layout="constrained")
-    columns = values[indices].reshape(len(indices),-1)
-    for i in range(columns.shape[1]):
-        ax.plot(xs,columns[:,i],label=f"channel {i+1}",linewidth=1.2)
-    ax.set_xlabel("Signed lag (upstream samples)" if contract["sequence_axis"]=="Q" else "Actual time (s)" if actual else "Edited sample")
+    columns = np.array([values[i].reshape(-1)[selected_columns] for i in indices])
+    if contract["sequence_axis"]=="N" and len(values)==1 and count>1:
+        positions = np.unique(np.linspace(0,count-1,min(count,20000),dtype=int))
+        ax.plot(positions,values[0].reshape(-1)[positions],linewidth=1.2)
+        ax.set_xlabel(f"Component index (axes {contract['axes']})")
+    else:
+        for i,component in enumerate(selected_columns):
+            ax.plot(xs,columns[:,i],label=f"component {component}",linewidth=1.2)
+        ax.set_xlabel("Signed lag (upstream samples)" if contract["sequence_axis"]=="Q" else "Actual time (s)" if contract["sequence_axis"]=="T" and actual else "Edited sample" if contract["sequence_axis"]=="T" else f"Record ({contract['sequence_axis']})")
     ax.set_ylabel(contract["semantic"])
     ax.grid(alpha=.2)
-    if len(indices)<len(values):
-        ax.set_title(f"Plot: {len(indices)} / {len(values)} samples; full data in CSV / NPY",fontsize=10)
-    if columns.shape[1]>1:
+    if len(indices)<len(values) or len(selected_columns)<count:
+        ax.set_title(f"Plot: {len(indices)} / {len(values)} samples, {len(selected_columns)} / {count} components; full data in NPY",fontsize=10)
+    if 1<columns.shape[1]<=16 and contract["sequence_axis"]!="N":
         ax.legend()
     for ext in ("png","svg"):
         fig.savefig(directory/f"curve.{ext}",dpi=160)

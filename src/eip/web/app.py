@@ -143,6 +143,35 @@ def create_app(workspace: Path | None = None, restore_session: Path | None = Non
     def module_plan(value: dict):
         return workbench().module_plan(value)
 
+    @app.post("/api/modules/migrate")
+    def module_migrate(value: dict):
+        from eip.module_registry import migrate_workbench_nodes, normalize_nodes, is_reference
+        steps = value.get("steps",[])
+        # Validate the draft structure without requiring an attached source or
+        # executing a plugin. Incomplete numerical connections remain editable.
+        normalized,_,_ = normalize_nodes(steps,check_types=False)
+        nodes,report = migrate_workbench_nodes(normalized)
+        normalized,_,_ = normalize_nodes(nodes,check_types=False)
+        providers = {}
+        for node in normalized:
+            if node["enabled"]:
+                for value in node["parameters"].values():
+                    if not is_reference(value):
+                        continue
+                    reference = value["ref"]
+                    provider = providers.get(reference["node_id"])
+                    if provider is None or not provider["enabled"]:
+                        raise ValueError("参数引用只能指向此前已启用的模块实例")
+                    port = reference["port"]
+                    if port.startswith("parameter:"):
+                        parameter = provider["parameters"].get(port.partition(":")[2])
+                        if not is_reference(parameter) and (isinstance(parameter,bool) or not isinstance(parameter,(int,float))):
+                            raise ValueError("引用的参数端口不是数值参数")
+                    elif not (provider["algorithm"]=="sequence_statistics" and port in {"mean","variance","count","scale"} or provider["algorithm"]=="parameter_binding" and port=="value"):
+                        raise ValueError("参数引用的结果端口不存在或不支持数值绑定")
+            providers[node["id"]] = node
+        return dict(nodes=normalized,report=report)
+
     @app.get("/api/jobs/{identifier}/sequence")
     def sequence_result(identifier: str):
         return workbench().sequence_result(identifier)
@@ -150,6 +179,10 @@ def create_app(workspace: Path | None = None, restore_session: Path | None = Non
     @app.post("/api/jobs/{identifier}/sequence")
     def sequence_slice(identifier: str,value: dict):
         return workbench().sequence_result(identifier,value)
+
+    @app.post("/api/jobs/{identifier}/sequence/promote")
+    def sequence_promote(identifier: str,value: dict):
+        return workbench().sequence_promote(identifier,value)
 
     @app.post("/api/sequence/restore")
     def restore_sequence(value: dict):
@@ -161,12 +194,22 @@ def create_app(workspace: Path | None = None, restore_session: Path | None = Non
         return {"ok": True}
 
     @app.get("/api/jobs/{identifier}/download")
-    def download(identifier: str, file: str = "manifest", source: int = 0):
+    def download(identifier: str, file: str = "manifest", source: int = 0, side_output: str | None = None):
         job = workbench().job(identifier)
         if not job.get("directory"):
             raise ValueError("任务尚未生成输出")
         directory = Path(job["directory"])
-        if file == "manifest":
+        if side_output:
+            if job.get("engine")!="sequence" or job["status"] not in {"succeeded","completed_with_errors"}:
+                raise ValueError("截流输出尚未完整保存")
+            _,result,directory = workbench()._sequence_output(job,dict(source=source,side_output=side_output))
+            names = {"manifest":"delivery.json","array":"values.npy","csv":"export.csv" if result.get("export_format")=="csv" else "measurements.csv","image":"export.tif","references":"references.jsonl","export":result.get("export_file")}
+            if file not in names or not names[file]:
+                raise ValueError("此截流未生成所选导出文件")
+            if Path(names[file]).name!=names[file] or names[file] in {".",".."}:
+                raise ValueError("截流导出文件记录无效")
+            path = directory/names[file]
+        elif file == "manifest":
             path = directory / "run.json"
         elif file in {"csv", "image", "array", "png", "svg", "references"}:
             run = job.get("run", {})
@@ -241,7 +284,7 @@ def create_app(workspace: Path | None = None, restore_session: Path | None = Non
 
     @app.post("/api/project/load")
     def load_project(value: dict):
-        return workbench().load_project(value["path"])
+        return workbench().load_project(value["path"],migrate=bool(value.get("migrate",False)))
 
     @app.post("/api/demo")
     def demo():

@@ -28,7 +28,7 @@ from eip.readers import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 from eip.modes.split_correlation.runner import split_job_entry
 from eip.web.split import SplitService
 from eip.web.records import display_name, automatic_name, saved_split_summary
-from eip.module_registry import catalog, normalize_nodes, temporal, output_shape
+from eip.module_registry import catalog, normalize_nodes, temporal, output_shape, migrate_workbench_nodes
 from eip.module_contracts import compile_flow, source_contract
 from eip.sequence_processing import sequence_job_entry
 
@@ -113,7 +113,8 @@ class FrameStore:
         display = DisplaySettings(**(settings or {}))
         low, high = display_range(pixels) if display.low is None or display.high is None else (display.low, display.high)
         display = DisplaySettings(low, high, display.gamma, display.colormap)
-        rgb = labels_to_display(pixels) if record["kind"] == "label" else to_display(pixels, display)
+        shown = pixels[...,::-1] if record.get("metadata",{}).get("color_order")=="BGR" and pixels.ndim==3 and pixels.shape[-1]==3 else pixels
+        rgb = labels_to_display(shown) if record["kind"] == "label" else to_display(shown, display)
         if record["kind"] == "coefficient" and pixels.ndim == 2:
             rgb[~np.isfinite(pixels)] = [128,64,148]
         image = Image.fromarray(rgb)
@@ -224,10 +225,12 @@ class Workbench:
         if event["type"] != "frame":
             raise ValueError("数据源没有可显示帧")
         token = self.frames.add(event["pixels"], event["frame"], extra.get("origin", [0, 0]), extra.get("base_shape", event["pixels"].shape[:2]), extra.get("result_kind", "image"))
+        if event.get("contract"):
+            self.frames.annotate(token,color_order=event["contract"].get("color_order","RGB"))
         snapshot = self.frames.render(token)
         if event.get("contract"):
             snapshot.update(contract=event["contract"],signal_values=event.get("signal_values"))
-            self.frames.annotate(token,contract=event["contract"],signal_values=event.get("signal_values"))
+            self.frames.annotate(token,contract=event["contract"],signal_values=event.get("signal_values"),color_order=event["contract"].get("color_order","RGB"))
         thumbnail = self.frames.render(token, maximum=160)["image"]
         identifier = extra.pop("identifier", f"result_{source.key}" if role == "result" else source.key)
         entry = {"id": identifier, "source": asdict(source), "meta": event["meta"], "role": role, "thumbnail": thumbnail, **extra}
@@ -241,6 +244,8 @@ class Workbench:
         entry = self.get_source(identifier)
         if entry["role"] != "result":
             raise ValueError("请选择正式保存的处理结果")
+        if entry.get("side_output"):
+            return self.sequence_promote(entry["run_id"],dict(source=entry["source_position"],side_output=entry["side_output"],target="input"))
         output_path = Path(entry["source"]["path"])
         manifest = (output_path.parent.parent if entry["source"]["kind"]=="dataset" else output_path.parent) / "run.json"
         run = json.loads(manifest.read_text(encoding="utf-8"))
@@ -311,10 +316,12 @@ class Workbench:
         if event["meta"]["revision"] != source["meta"]["revision"]:
             raise ValueError("来源已变化，请重新打开")
         token = self.frames.add(event["pixels"], event["frame"], source.get("origin", [0, 0]), source.get("base_shape", event["pixels"].shape[:2]), source.get("result_kind", "image"))
+        if event.get("contract"):
+            self.frames.annotate(token,color_order=event["contract"].get("color_order","RGB"))
         snapshot = self.frames.render(token, value.get("display"))
         if event.get("contract"):
             snapshot.update(contract=event["contract"],signal_values=event.get("signal_values"))
-            self.frames.annotate(token,contract=event["contract"],signal_values=event.get("signal_values"))
+            self.frames.annotate(token,contract=event["contract"],signal_values=event.get("signal_values"),color_order=event["contract"].get("color_order","RGB"))
         return snapshot
 
     def register(self, path):
@@ -434,30 +441,77 @@ class Workbench:
         items = job["run"]["results"]
         if value is None:
             return dict(id=identifier,name=job["name"],mode=job["mode"],results=items)
-        position = value.get("source",0)
-        if type(position) is not int or not 0<=position<len(items) or items[position]["status"]!="succeeded":
-            raise ValueError("该来源没有完整结果")
-        item = items[position]
+        _,item,path = self._sequence_output(job,value)
         from eip.sequence_storage import DatasetReader
-        reader = DatasetReader(SourceSpec(str(Path(job["directory"])/item["output_directory"]/"dataset.json"),"dataset"))
+        reader = DatasetReader(SourceSpec(str(path/"dataset.json"),"dataset"))
         try:
             c = item["contract"]
-            if "Y" not in c["axes"]:
-                indices = sorted(set([*range(0,c["length"],max(1,math.ceil(c["length"]/2000))),c["length"]-1]))
+            if not ("Y" in c["axes"] and "X" in c["axes"]):
+                columns = max(1,int(np.prod(c["shape"])))
+                selected_columns = np.unique(np.linspace(0,columns-1,min(columns,4096),dtype=int))
+                max_rows = min(2000,max(1,200000//len(selected_columns)))
+                indices = sorted(set([*range(0,c["length"],max(1,math.ceil(c["length"]/max_rows))),c["length"]-1]))
                 refs = [reader.sample_ref(i) for i in indices]
-                values = reader.values[indices].reshape(len(indices),-1)
-                return dict(kind="signals",contract=c,indices=indices,references=refs,values=[[float(v) if np.isfinite(v) else None for v in row] for row in values],downsampled=len(indices)<c["length"],total=c["length"])
+                values = [reader.read_sample(i).reshape(-1)[selected_columns] for i in indices]
+                return dict(kind="signals",contract=c,indices=indices,column_indices=selected_columns.tolist(),references=refs,values=[[float(v) if np.isfinite(v) else None for v in row] for row in values],downsampled=len(indices)<c["length"] or len(selected_columns)<columns,total=c["length"],temporary=job["mode"]=="trial",name=item.get("name",job["name"]),side_output=value.get("side_output"))
             index,channel = value.get("index",0),value.get("channel",0)
-            if type(index) is not int or not 0<=index<c["length"] or type(channel) is not int or channel not in {0,1}:
+            channels = c["shape"][0] if c["axes"].startswith("P") else 1
+            if type(index) is not int or not 0<=index<c["length"] or type(channel) is not int or not 0<=channel<channels:
                 raise ValueError("结果样本或幅面超出范围")
             pixels = reader.read_sample(index)
             if c["axes"].startswith("P"):
                 pixels = pixels[channel]
             ref = reader.sample_ref(index)
             token = self.frames.add(pixels,ref,[0,0],pixels.shape[:2],item["result_kind"])
-            return dict(kind="image",contract=c,frame=self.frames.render(token,value.get("display")),reference=ref)
+            self.frames.annotate(token,color_order=c.get("color_order","RGB"))
+            return dict(kind="image",contract=c,frame=self.frames.render(token,value.get("display")),reference=ref,temporary=job["mode"]=="trial",name=item.get("name",job["name"]),side_output=value.get("side_output"))
         finally:
             reader.close()
+
+    def _sequence_output(self,job,value):
+        position = value.get("source",0)
+        items = job.get("run",{}).get("results",[])
+        if type(position) is not int or not 0<=position<len(items) or items[position]["status"]!="succeeded":
+            raise ValueError("该来源没有完整结果")
+        parent = items[position]
+        if Path(parent["output_directory"]).name!=parent["output_directory"]:
+            raise ValueError("结果目录记录无效")
+        path = Path(job["directory"])/parent["output_directory"]
+        item = parent
+        if value.get("side_output"):
+            item = next((side for side in parent.get("side_outputs",[]) if side["id"]==value["side_output"]),None)
+            if not item or item["status"]!="succeeded":
+                raise ValueError("该截流输出不存在或未完整完成")
+            if Path(item["output_directory"]).name!=item["output_directory"]:
+                raise ValueError("截流目录记录无效")
+            path = path/item["output_directory"]
+        if not path.resolve().is_relative_to(Path(job["directory"]).resolve()):
+            raise ValueError("结果目录超出运行目录")
+        return position,item,path
+
+    def sequence_promote(self,identifier,value):
+        """Explicitly add a saved intermediate result to either shared viewer."""
+        job = self.job(identifier)
+        if job.get("engine")!="sequence" or job["status"] not in {"succeeded","completed_with_errors"}:
+            raise ValueError("请选择已完成的模块流程")
+        if job["mode"]!="run":
+            raise ValueError("试算截流是临时结果，不能作为正式数据来源；请执行正式运行")
+        position,item,path = self._sequence_output(job,value)
+        target = value.get("target","input")
+        if target not in {"input","result"}:
+            raise ValueError("预览目标需为 input 或 result")
+        parent = job["run"]["results"][position]
+        manifest = Path(job["directory"])/"run.json"
+        input_id = job["source_ids"][position] if position<len(job["source_ids"]) else None
+        provenance = job["run"]["spec"].get("provenance",[])
+        previous = provenance[position].get("lineage",[]) if position<len(provenance) else []
+        if len(previous)>=32:
+            raise ValueError("当前来源链最多支持 32 个阶段")
+        lineage = [*previous,dict(run_id=identifier,manifest=str(manifest),manifest_sha256=sha256_file(manifest),parent_source_id=input_id,parent_source=parent["source"],output_directory=str(path),timestamp_source="module_reference",side_output=value.get("side_output"),node_id=item.get("node_id"),port=item.get("port"),contract=item["contract"],modules=item.get("upstream_modules",parent.get("modules",{})),sample_indices=item.get("sample_indices"),temporary=False)]
+        extra = dict(run_id=identifier,display_name=item.get("name",job["name"]),result_kind=item["result_kind"],origin=item.get("origin",[0,0]),base_shape=item.get("base_shape"),source_position=position,side_output=value.get("side_output"),run_manifest=str(manifest),temporary=False,lineage=lineage)
+        if target=="result":
+            extra["input_id"] = input_id
+        return self.open(asdict(SourceSpec(str(path/"dataset.json"),"dataset")),role=target,**extra)
 
     def restore_sequence(self,path):
         from datetime import datetime
@@ -479,6 +533,13 @@ class Workbench:
                 raise ValueError("运行记录的结果目录无效")
             reader = DatasetReader(SourceSpec(str(path.parent/item["output_directory"]/"dataset.json"),"dataset"))
             reader.close()
+            for side in item.get("side_outputs",[]):
+                if side.get("status")!="succeeded":
+                    continue
+                if Path(side["output_directory"]).name!=side["output_directory"]:
+                    raise ValueError("截流运行记录的目录无效")
+                reader = DatasetReader(SourceSpec(str(path.parent/item["output_directory"]/side["output_directory"]/"dataset.json"),"dataset"))
+                reader.close()
         ids = [p["source_id"] for p in payload.get("provenance",[])]
         job = dict(id=identifier,mode=payload["mode"],engine="sequence",contract_version=3,name=run.get("display_name",identifier),source_name=good[0]["data_spec"]["name"],source_ids=ids,source_count=len(payload["sources"]),status=run["status"],completed=sum(r["completed_frames"] for r in good),total=None,logs=[],payload=payload,run=run,directory=str(path.parent),result_available=True,created=datetime.fromisoformat(run["created_at"]).timestamp(),summary=f"{len(payload['steps'])} 个模块 · {good[0]['contract']['label']}")
         self.enqueue(identifier,job,queue_job=False)
@@ -486,7 +547,25 @@ class Workbench:
             for position,item in enumerate(run["results"]):
                 if item["status"]=="succeeded" and not any(s.get("run_id")==identifier and Path(s["source"]["path"]).parent.name==item["output_directory"] for s in self.sources.values()):
                     self.open(asdict(SourceSpec(str(path.parent/item["output_directory"]/"dataset.json"),"dataset")),role="result",input_id=ids[position] if position<len(ids) else None,result_kind=item["result_kind"],run_id=identifier,display_name=job["name"])
+            self._publish_sequence_sides(job)
         return dict(id=identifier,engine="sequence")
+
+    def _publish_sequence_sides(self,job):
+        if job["mode"]!="run":
+            return
+        for position,item in enumerate(job["run"]["results"]):
+            if item["status"]!="succeeded":
+                continue
+            for side in item.get("side_outputs",[]):
+                if side["status"]!="succeeded" or side.get("kind")!="data_tap" or side.get("destination","preview") not in {"preview","both"}:
+                    continue
+                path = Path(job["directory"])/item["output_directory"]/side["output_directory"]/"dataset.json"
+                if any(entry["role"]=="input" and Path(entry["source"]["path"])==path for entry in self.sources.values()):
+                    continue
+                try:
+                    self.sequence_promote(job["id"],dict(source=position,side_output=side["id"],target="input"))
+                except Exception as error:
+                    job["logs"].append(f"截流已保存，加入数据预览失败：{side['name']} · {error}")
 
     def enqueue(self,identifier,job,*,queue_job=True):
         with self.lock:
@@ -621,6 +700,7 @@ class Workbench:
                             self.open(asdict(SourceSpec(str(path),"dataset")),role="result",input_id=job["source_ids"][position],result_kind=item["result_kind"],run_id=job["id"],display_name=job["name"])
                         except Exception as error:
                             job["logs"].append(f"结果已保存，自动预览失败：{error}")
+                    self._publish_sequence_sides(job)
             elif kind == "completed":
                 event["run"]["display_name"] = job["name"]
                 write_json(Path(event["directory"])/"run.json",event["run"])
@@ -666,8 +746,15 @@ class Workbench:
         self.validate_steps(view.get("steps", []),check_types=view.get("web_module_contract")!=3)
         value = {**view, "schema_version": 1, "sources": [entry["source"] for entry in self.sources.values() if entry["role"] == "input"], "results": [{"source": entry["source"], "id": entry["id"], "run_id": entry.get("run_id"), "display_name": entry.get("display_name"), "result": True, "input_key": entry.get("input_id"), "origin": entry.get("origin", [0, 0]), "base_shape": entry.get("base_shape"), "result_kind": entry.get("result_kind", "image")} for entry in self.sources.values() if entry["role"] == "result"], "split_result_paths": [str(Path(job["directory"])/"run.json") for job in self.jobs.values() if job["mode"]=="split" and job["status"]=="succeeded"]}
         value["source_entries"] = [{key: entry[key] for key in ["source", "id", "lineage", "parent_result_id", "display_name", "result_kind"] if key in entry} for entry in self.sources.values() if entry["role"] == "input"]
+        for saved,entry in zip(value["results"],(entry for entry in self.sources.values() if entry["role"]=="result")):
+            saved.update({key:entry[key] for key in ("side_output","source_position","run_manifest","temporary","lineage") if key in entry})
+        for saved,entry in zip(value["source_entries"],(entry for entry in self.sources.values() if entry["role"]=="input")):
+            saved.update({key:entry[key] for key in ("side_output","source_position","run_manifest","temporary","run_id") if key in entry})
         value["sequence_result_paths"] = [str(Path(j["directory"])/"run.json") for j in self.jobs.values() if j.get("engine")=="sequence" and j["status"] in {"succeeded","completed_with_errors"}]
         target = Path(path).resolve()
+        migration = getattr(self,"project_migration",None)
+        if migration and target==Path(migration["original_path"]):
+            raise ValueError("迁移后的项目请保存为新文件，原项目保留不覆盖")
         if target.suffix != ".json":
             raise ValueError("项目文件请使用 .json 后缀")
         if any(target == Path(entry["source"]["path"]) for entry in self.sources.values()):
@@ -678,11 +765,19 @@ class Workbench:
         self.project_path = str(target)
         return {"path": str(target)}
 
-    def load_project(self, path):
+    def load_project(self, path, *, migrate=False):
         with self.lock:
-            if self.active or self.pending:
+            if self.pending or self.active and self.jobs[self.active["id"]]["status"] in {"queued","running","cancelling"}:
                 raise ValueError("请等待或取消任务后再切换项目")
         value = read_project(Path(path))
+        migration = None
+        if migrate and value.get("workbench_schema",0)<2:
+            migrated,report = migrate_workbench_nodes(value["steps"])
+            if report:
+                original = Path(path).resolve()
+                copied = original.with_name(f"{original.stem}.workbench-{uuid.uuid4().hex[:8]}.json")
+                migration = dict(original_path=str(original),original_sha256=sha256_file(original),path=str(copied),report=report)
+                value = dict(value,steps=migrated,web_module_contract=3,workbench_schema=2,migration=migration)
         if len(value["sources"]) > 32:
             raise ValueError("项目加载最多支持 32 个输入来源")
         for step in value["steps"]:
@@ -699,7 +794,7 @@ class Workbench:
                 detail = details[position] if position < len(details) else {}
                 if detail and detail["source"] != source:
                     raise ValueError("项目来源与来源详情顺序不一致")
-                extra = {key: detail[key] for key in ["lineage", "parent_result_id", "display_name", "result_kind"] if key in detail}
+                extra = {key: detail[key] for key in ["lineage", "parent_result_id", "display_name", "result_kind","side_output","source_position","run_manifest","temporary","run_id"] if key in detail}
                 if detail.get("id"):
                     extra["identifier"] = detail["id"]
                 self.open(source, **extra)
@@ -707,14 +802,17 @@ class Workbench:
                 if Path(result["source"]["path"]).exists():
                     original = self.sources.get(result.get("input_key"))
                     base_shape = result.get("base_shape") or (original["meta"]["shape"][:2] if original else None)
-                    extra = {key: result[key] for key in ["run_id", "display_name"] if result.get(key)}
+                    extra = {key: result[key] for key in ["run_id", "display_name","side_output","source_position","run_manifest","temporary","lineage"] if key in result}
                     if result.get("id"):
                         extra["identifier"] = result["id"]
                     self.open(result["source"], role="result", input_id=result.get("input_key"), origin=result.get("origin", [0, 0]), **({"base_shape": base_shape} if base_shape else {}), result_kind=result.get("result_kind", "image"), **extra)
         except Exception:
             self.sources = previous
             raise
-        self.project_path = str(Path(path).resolve())
+        if migration:
+            write_json(Path(migration["path"]),value)
+        self.project_migration = migration
+        self.project_path = migration["path"] if migration else str(Path(path).resolve())
         for result_path in value.get("split_result_paths",[]):
             if Path(result_path).is_file():
                 self.split.restore(result_path)

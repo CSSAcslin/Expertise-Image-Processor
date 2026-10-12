@@ -57,7 +57,8 @@ def preview_entry(commands, results):
             event = {"id": command["id"], "type": "frame", "action": action, "source": command["source"], "meta": asdict(reader.meta), "pixels": frame.pixels, "frame": asdict(frame.ref)}
             if getattr(reader.meta,"contract",None):
                 event["contract"] = reader.meta.contract
-                if "Y" not in reader.meta.contract["axes"]:
+                axes = reader.meta.contract["axes"]
+                if not ("Y" in axes and "X" in axes):
                     import numpy as np
                     arr = np.asarray(reader.read_sample(frame.ref.index))
                     event["signal_values"] = [float(v) if np.isfinite(v) else None for v in arr.reshape(-1)]
