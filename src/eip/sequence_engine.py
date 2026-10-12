@@ -19,10 +19,10 @@ import numpy as np
 
 from eip.algorithms import BuiltinAlgorithm, Pipeline, RunContext
 from eip.domain import Selection, StepSpec
-from eip.module_contracts import compile_flow, source_contract, roi_bounds, correlation_layout
+from eip.module_contracts import compile_flow, source_contract, roi_bounds, correlation_layout, Contract
 from eip.module_engine import IdentityPhotometry
 from eip.module_ops import intensity_curve
-from eip.module_registry import normalize_nodes
+from eip.module_registry import normalize_nodes, module_spec, CORRELATIONS, MODIFIERS, is_reference
 
 
 def reduce_finite(a, axes, mode, q=.5):
@@ -158,10 +158,13 @@ class SequenceEngine:
         self.cache = Cache(min([n.get("execution",{}).get("memory_mb",256) for n in self.nodes] or [256])*1024**2//3)
         self.mappings,self.backends = {},{}
         self.last_correlation = {}
+        self.resolved_bindings = {}
+        self._sides = []
         retained = 0
         try:
             for i,n in enumerate(self.nodes):
-                a,p = n["algorithm"],n["parameters"]
+                a = n["algorithm"]
+                p = self._resolve_parameters(n,i)
                 c = self.contracts[-1]
                 op = dict(algorithm=a,parameters=p,node=n)
                 if a=="time_crop" and p["unit"]=="seconds":
@@ -177,7 +180,8 @@ class SequenceEngine:
                         raise ValueError("时间裁剪后没有样本")
                     op["indices"] = indices
                 single_here = single and not any(m["algorithm"] in {"time_sample","time_smooth","time_bin"} for m in self.nodes[i+1:])
-                stage = compile_flow([n],c,center=center,single=single_here,following_nodes=[*self.nodes[i+1:],*self.dependencies])["output"]
+                stage_plan = compile_flow([n],c,center=center,single=single_here,following_nodes=[*self.nodes[i+1:],*self.dependencies],validate_bindings=False)
+                stage = stage_plan["output"]
                 after = type(c)(**{k:tuple(stage[k]) if k in {"shape","origin"} else stage[k] for k in type(c).__dataclass_fields__})
                 if "indices" in op:
                     after = replace(after,length=len(op["indices"]))
@@ -191,26 +195,41 @@ class SequenceEngine:
                     from eip.modes.split_correlation.config import PhotometryConfig
                     from eip.modes.split_correlation.photometry import Photometry
                     self.instances[i] = Photometry(PhotometryConfig.from_dict(dict(p,normalization="none")))
-                elif a=="correlation":
+                elif a in CORRELATIONS:
                     from eip.modes.split_correlation.backend import Backend
                     lags,centers,_,_ = correlation_layout(c,p,center,single_here)
                     op.update(lags=lags,centers=centers)
                     self.backends[i] = Backend(n.get("execution",{}).get("backend","cpu"),n.get("execution",{}).get("memory_mb",256)*1024**2)
                     self.mappings[n["id"]] = dict(lag_units="upstream_samples",window_units="upstream_samples",lags=lags,centers=dict(start=centers.start,stop=centers.stop,step=centers.step))
+                elif a=="line_extract" and p["mode"]=="segment":
+                    length=float(np.hypot(p["x1"]-p["x0"],p["y1"]-p["y0"]))
+                    self.mappings[n["id"]]=dict(axis="R",unit="pixel",coordinates=np.linspace(0,length,p["samples"]).tolist(),endpoints=[[p["x0"],p["y0"]],[p["x1"],p["y1"]]],interpolation=p["interpolation"])
+                elif a=="line_extract":
+                    self.mappings[n["id"]]=dict(axis="R",unit="pixel",coordinates=list(range(c.shape[c.axes.index(p["axis"])])),source_axis=p["axis"],fixed_index=p["index"],origin=list(c.origin))
+                elif a=="distribution":
+                    self.mappings[n["id"]]=dict(axis="B",edges=np.linspace(p["minimum"],p["maximum"],p["bins"]+1).tolist(),count_unit="finite_values")
                 elif n.get("manifest"):
-                    self.instances[i] = Pipeline([StepSpec(**n)],self.context)
+                    self.instances[i] = Pipeline([StepSpec(**dict(n,parameters=p))],self.context)
                 elif a in {"intensity","affine","box_blur","threshold","gaussian","curve"}:
                     self.instances[i] = BuiltinAlgorithm(a)
                     self.instances[i].prepare(p,self.context)
                 self.operations.append(op)
                 self.contracts.append(after)
+                for side in stage_plan["stages"][0].get("side_outputs",[]):
+                    record=side["contract"]
+                    side_c=Contract(**{k:tuple(record[k]) if k in {"shape","origin"} else record[k] for k in Contract.__dataclass_fields__})
+                    port=side["port"]
+                    port_name={"mean":"均值","variance":"方差","count":"有效样本数","scale":"固定尺度","value":"变量值"}.get(port)
+                    title=module_spec(n)[0]["name"]+(f" · {port_name}" if port_name else "")
+                    self._sides.append(dict(id=f"{n['id']}:{port}",node_id=n["id"],port=port,name=p.get("name") or n.get("name") or title,contract=side_c,kind=a,stage=i,destination=p.get("destination","result"),export_format=p.get("export_format","dataset")))
                 # Temporary arrays as well as caches must fit the chosen budget.
                 elements = int(np.prod(c.shape,dtype=np.int64))
-                multiplier = 1 if a in {"time_crop","time_sample","select_channel"} else 3 if a in {"affine","intensity","curve","threshold","spatial_roi"} else 12 if a=="correlation" else p.get("window",1)+4 if a=="time_smooth" and p["mode"]=="quantile" else 8
-                working = elements*8*multiplier
+                multiplier = 12 if a=="line_extract" and p["mode"]=="segment" else 1 if a in {"time_crop","time_sample","select_channel","data_tap","parameter_binding"} else 3 if a in {"affine","intensity","curve","threshold","spatial_roi","roi_crop",*MODIFIERS} else 12 if a in CORRELATIONS else p.get("window",1)+4 if a=="time_smooth" and p["mode"]=="quantile" else 8
+                side_elements=max([int(np.prod(s["contract"].shape)) for s in self._sides if s["node_id"]==n["id"]] or [0])
+                working=max(elements,int(np.prod(after.shape)),side_elements)*8*multiplier
                 if working>n.get("execution",{}).get("memory_mb",256)*1024**2*2/3:
                     raise ValueError(f"{a} 工作数组超过该流程内存预算；请先裁剪 ROI、减小窗口或增加执行内存")
-                if a=="statistics":
+                if a in {"statistics","sequence_statistics"}:
                     retained += elements*20
                 if retained+working+self.cache.budget>self.budget:
                     raise ValueError("重复统计保留数组与工作数组合计超过流程预算；请减少统计节点、先裁剪或提高内存预算")
@@ -227,10 +246,109 @@ class SequenceEngine:
             before = self.contracts[active]
             if n["enabled"]:
                 active += 1
-                upstream.append(n)
+                upstream.append({key:value for key,value in n.items() if key!="name"})
             fingerprint = hashlib.sha256(json.dumps(dict(source_revision=self.source.reader.meta.revision,contract_version=3,upstream=upstream,preview_dependencies=self.dependencies),sort_keys=True,ensure_ascii=False,separators=(",",":")).encode()).hexdigest()
-            stages.append(dict(id=n["id"],algorithm=n["algorithm"],enabled=n["enabled"],input=before.record(),output=self.contracts[active].record(),upstream_fingerprint=fingerprint))
-        return dict(self.plan,stages=stages,output=self.contracts[-1].record(),preview_dependencies=list(self.dependencies))
+            stages.append(dict(id=n["id"],algorithm=n["algorithm"],enabled=n["enabled"],input=before.record(),output=self.contracts[active].record(),upstream_fingerprint=fingerprint,side_outputs=[dict(port=s["port"],contract=s["contract"].record()) for s in self._sides if s["node_id"]==n["id"]]))
+        return dict(self.plan,stages=stages,output=self.contracts[-1].record(),preview_dependencies=list(self.dependencies),resolved_bindings=self.resolved_bindings)
+
+    def _resolve_parameters(self,node,position):
+        from copy import deepcopy
+        p=deepcopy(node["parameters"])
+        for key,value in list(p.items()):
+            if not is_reference(value):
+                continue
+            ref=value["ref"]
+            previous=next((i for i,n in enumerate(self.nodes[:position]) if n["id"]==ref["node_id"]),None)
+            if previous is None:
+                raise ValueError("参数引用必须指向已启用的前序模块")
+            op=self.operations[previous]
+            port=ref["port"]
+            if port.startswith("parameter:"):
+                resolved=op["parameters"][port.partition(":")[2]]
+            elif op["algorithm"]=="parameter_binding" and port=="value":
+                resolved=op["parameters"]["value"]
+            elif op["algorithm"]=="sequence_statistics" and port in {"mean","variance","count","scale"}:
+                resolved=self.fit(previous)["scales" if port=="scale" else port]
+            else:
+                raise ValueError("参数端口不存在")
+            resolved=np.asarray(resolved)
+            if resolved.size!=1 and not (node["algorithm"]=="fixed_normalize" and key=="scale"):
+                raise ValueError("该参数只接受数值标量")
+            p[key]=resolved.item() if resolved.size==1 else resolved
+            self.resolved_bindings.setdefault(node["id"],{})[key]=dict(reference=ref,value=resolved.tolist())
+        check=dict(p)
+        if node["algorithm"]=="fixed_normalize" and isinstance(check.get("scale"),np.ndarray):
+            scale=check["scale"]
+            if not np.isfinite(scale).all() or (scale<=0).any():
+                raise ValueError("引用的固定尺度必须为有限正数")
+            check["scale"]=1.
+        normalize_nodes([dict(node,parameters=check)],check_types=False)
+        return p
+
+    def side_outputs(self):
+        return [dict(s) for s in self._sides]
+
+    def get_side_output(self,identifier,index):
+        side=next((s for s in self._sides if s["id"]==identifier),None)
+        if side is None:
+            raise KeyError(identifier)
+        if not 0<=index<side["contract"].length:
+            raise IndexError("侧输出样本超出范围")
+        i=side["stage"]; op=self.operations[i]; a,p=op["algorithm"],op["parameters"]
+        if a=="sequence_statistics":
+            value=self.fit(i)["scales" if side["port"]=="scale" else side["port"]]
+            return np.asarray(value).reshape(side["contract"].shape)
+        if a=="parameter_binding":
+            return np.asarray(p["value"],dtype=np.float64)
+        if a=="data_tap":
+            return self.get(i,index)
+        return self._modifier_value(i,index)
+
+    def side_ref(self,identifier,index):
+        side=next(s for s in self._sides if s["id"]==identifier)
+        i=side["stage"]; op=self.operations[i]
+        if op["algorithm"] in {"sequence_statistics","parameter_binding"}:
+            return dict(index=None,time=None,sample_index=index,side_output=identifier,upstream_samples=self.contracts[i].length)
+        p=op["parameters"]
+        selected=p["index"] if op["algorithm"]=="axis_slice" and p["axis"]==self.contracts[i].sequence_axis else index
+        return dict(self.ref(i,selected),sample_index=index,side_output=identifier,selection=p)
+
+    def _modifier_value(self,i,index):
+        op=self.operations[i]; a,p=op["algorithm"],op["parameters"]; c=self.contracts[i]
+        if a=="axis_slice" and p["axis"]==c.sequence_axis:
+            return self.get(i,p["index"])
+        value=self.get(i,index)
+        if a=="region_reduce":
+            if c.paired and p["validity"]=="joint":
+                value=np.where(np.isfinite(value).all(axis=0)[None,...],value,np.nan)
+            return reduce_finite(value,tuple(c.axes.index(axis) for axis in "YX"),p["mode"],p["quantile"])[0]
+        if a=="point_extract":
+            slices=[slice(None)]*value.ndim
+            slices[c.axes.index("Y")],slices[c.axes.index("X")]=p["y"],p["x"]
+            return value[tuple(slices)]
+        if a=="line_extract":
+            if p["mode"]=="axis":
+                return np.take(value,p["index"],axis=c.axes.index("Y" if p["axis"]=="X" else "X"))
+            ys=np.linspace(p["y0"],p["y1"],p["samples"]); xs=np.linspace(p["x0"],p["x1"],p["samples"])
+            matrix=np.moveaxis(value,(c.axes.index("Y"),c.axes.index("X")),(-2,-1))
+            if p["interpolation"]=="nearest":
+                line=matrix[...,np.floor(ys+.5).astype(int),np.floor(xs+.5).astype(int)]
+            else:
+                y0=np.floor(ys).astype(int); x0=np.floor(xs).astype(int); y1=np.minimum(y0+1,matrix.shape[-2]-1); x1=np.minimum(x0+1,matrix.shape[-1]-1)
+                dy,dx=ys-y0,xs-x0
+                line=np.zeros((*matrix.shape[:-2],p["samples"]),dtype=np.float64)
+                valid=np.ones_like(line,dtype=bool)
+                for yy,xx,weight in ((y0,x0,(1-dy)*(1-dx)),(y0,x1,(1-dy)*dx),(y1,x0,dy*(1-dx)),(y1,x1,dy*dx)):
+                    sample=matrix[...,yy,xx]
+                    valid &= np.isfinite(sample)|(weight==0)
+                    line += np.where(weight==0,0,sample*weight)
+                line=np.where(valid,line,np.nan)
+            return np.moveaxis(line,-1,c.axes.index("Y"))
+        if a=="axis_slice":
+            return np.take(value,p["index"],axis=c.axes.index(p["axis"]))
+        if a=="distribution":
+            return np.histogram(value[np.isfinite(value)],bins=p["bins"],range=(p["minimum"],p["maximum"]))[0].astype(np.int64)
+        raise ValueError("未知修饰操作")
 
     @property
     def output(self):
@@ -272,16 +390,25 @@ class SequenceEngine:
             elif a=="statistics":
                 stats = self.fit(i)
                 value = self.get(i,index)/stats["scales"]
-            elif a=="correlation":
+            elif a in {"data_tap","sequence_statistics","parameter_binding"}:
+                value=self.get(i,index)
+            elif a=="fixed_normalize":
+                scale=np.asarray(p["scale"],dtype=np.float64)
+                if not np.isfinite(scale).all() or (scale<=0).any():
+                    raise ValueError("固定尺度必须为有限正数")
+                value=np.asarray(self.get(i,index),dtype=np.float64)/scale
+            elif a in MODIFIERS:
+                value=self.get(i,index) if p["output"]=="side" else self._modifier_value(i,index)
+            elif a in CORRELATIONS:
                 value = self.correlate(i,index)[0]
             else:
                 value = self.get(i,index)
-                if a=="spatial_roi":
+                if a in {"spatial_roi","roi_crop"}:
                     x,y,w,h = roi_bounds(before,p)
                     slices = [slice(None)]*len(before.shape)
                     slices[before.axes.index("Y")],slices[before.axes.index("X")] = slice(y,y+h),slice(x,x+w)
                     value = value[tuple(slices)].copy()
-                    if p["mode"]!="pixels":
+                    if p.get("mode","pixels")!="pixels":
                         if before.paired and p["validity"]=="joint":
                             value = np.where(np.isfinite(value).all(axis=0)[None,...],value,np.nan)
                         value,_ = reduce_finite(value,tuple(before.axes.index(axis) for axis in "YX"),p["mode"],p["quantile"])
@@ -289,6 +416,16 @@ class SequenceEngine:
                     value = np.stack(self.instances[i].apply(value,IdentityPhotometry()))
                 elif a=="select_channel":
                     value = value[0 if p["channel"]=="left" else 1]
+                elif a=="grayscale":
+                    rgb=value[...,:3].astype(np.float64)
+                    if before.color_order=="BGR":
+                        rgb=rgb[...,::-1]
+                    value=rgb.mean(axis=-1) if p["method"]=="mean" else np.sum(rgb*np.array([.2126,.7152,.0722]),axis=-1)
+                elif a=="color_convert":
+                    if "C" not in before.axes:
+                        value=np.repeat(value[...,None],3,axis=-1)
+                    elif before.color_order!=p["mode"].upper():
+                        value=value[...,::-1].copy()
                 elif a=="calibration":
                     photo = self.instances[i]
                     if before.paired:
@@ -298,7 +435,7 @@ class SequenceEngine:
                         # these exact input coordinates; no hidden middle split.
                         future = [*self.nodes[i+1:],*[n for n in self.dependencies if n["enabled"]]]
                         following = next((o for o in future if o["algorithm"]=="alignment"),None)
-                        if following is None or any(o["algorithm"]=="spatial_roi" for o in future[:future.index(following)]):
+                        if following is None or any(o["algorithm"] in {"spatial_roi","roi_crop"} for o in future[:future.index(following)]):
                             raise ValueError("不同左右暗场需紧邻后续配准，或把校准移到配准后")
                         line = np.interp(np.arange(value.shape[0])[:,None],[0,max(1,value.shape[0]-1)],following["parameters"]["midline"])
                         value = np.where(np.arange(value.shape[1])[None,:]<line,photo.apply(value,"left"),photo.apply(value,"right"))
@@ -312,7 +449,7 @@ class SequenceEngine:
                         return self.instances[i].execute(arr) if n.get("manifest") else self.instances[i].process(arr,self.context)
                     value = np.stack([apply(arr) if n["target"] in {"both",side} else arr for arr,side in zip(value,("left","right"))]) if before.paired else apply(value)
             precision = n.get("execution",{}).get("precision","native")
-            if precision!="native":
+            if precision!="native" and a not in {"data_tap","sequence_statistics","parameter_binding"} and not (a in MODIFIERS and p["output"]=="side"):
                 value = np.asarray(value,dtype=precision)
         value = np.asarray(value)
         if value.shape!=c.shape:
@@ -403,7 +540,7 @@ class SequenceEngine:
             first,last = self.ref(i,start),self.ref(i,start+size-1)
             spans = [v.get("source_span",[v.get("source_sample",0),v.get("source_sample",0)+1]) for v in (first,last)]
             r = dict(r,source_span=[min(v[0] for v in spans),max(v[1] for v in spans)],contribution=dict(module_id=n["id"],upstream_start=start,upstream_stop=start+size,operation=a,source_span_is_envelope=True))
-        elif a=="correlation":
+        elif a in CORRELATIONS:
             center,lag = (op["centers"][0],op["lags"][index]) if p["analysis"]=="curve" else (op["centers"][index],op["lags"][0])
             r = self.ref(i,center)
             half = p["window"]//2
@@ -417,6 +554,8 @@ class SequenceEngine:
                     minimum = delta if minimum is None else min(minimum,delta)
                     maximum = delta if maximum is None else max(maximum,delta)
             r = dict(r,correlation=dict(module_id=n["id"],center_sample=center,lag_samples=lag,window=p["window"],left_start=center-half,left_stop=center+half+1,right_start=center-half+lag,right_stop=center+half+1+lag,lag_seconds=total/p["window"] if known==p["window"] else None,lag_seconds_min=minimum,lag_seconds_max=maximum,known_pairs=known))
+        elif a=="axis_slice" and op["parameters"]["output"]=="main" and op["parameters"]["axis"]==self.contracts[i].sequence_axis:
+            r=dict(self.ref(i,op["parameters"]["index"]),selection=dict(axis=op["parameters"]["axis"],index=op["parameters"]["index"]))
         else:
             r = self.ref(i,index)
         return dict(r,sample_index=index)

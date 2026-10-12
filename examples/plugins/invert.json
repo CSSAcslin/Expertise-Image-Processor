@@ -7,6 +7,25 @@
   "entry_point": "invert.py:Invert",
   "execution_scope": "frame",
   "output_kind": "image",
+  "category": "intermediate",
+  "icon": "curve",
+  "documentation": {
+    "summary": "逐元素数值反相，输出 float32。",
+    "input": "每帧 YX 或 YXC 数值图像，保持空间尺寸。",
+    "output": "同形状 float32 图像。",
+    "formula": {
+      "latex": "B=\\operatorname{float32}(r-\\operatorname{float32}(A))",
+      "expression": "B = float32(reference − float32(A))",
+      "symbols": [
+        {"symbol": "A", "meaning": "直接上游输入像素", "unit": "输入单位"},
+        {"symbol": "r", "meaning": "固定反相参考值 reference", "unit": "输入单位"},
+        {"symbol": "B", "meaning": "反相后像素", "unit": "输入单位"}
+      ],
+      "domain": "逐帧 YX / YXC；reference 为有限数值。",
+      "validity": "NumPy 浮点运算；输入 NaN 保持 NaN，不补值。",
+      "boundary": "输入先转 float32，再执行 NumPy 减法；保留空间尺寸，不裁剪负值，不将输出强制转换回输入整数类型；显示设置不参与计算。"
+    }
+  },
   "parameters": [
     {"key": "reference", "label": "反相参考值", "kind": "float", "default": 65535.0, "minimum": -1000000000, "maximum": 1000000000}
   ]

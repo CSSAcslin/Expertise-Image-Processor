@@ -53,6 +53,9 @@ class AlgorithmSpec:
     code_hash: str | None = None
     execution_scope: str = "frame"
     output_kind: str = "image"
+    category: str = "algorithm"
+    icon: str = "plugin"
+    documentation: dict = field(default_factory=dict)
 
     def defaults(self) -> dict:
         return {parameter.key: parameter.default for parameter in self.parameters}
@@ -85,7 +88,9 @@ def load_manifest(path: str) -> AlgorithmSpec:
     if len({p.key for p in parameters}) != len(parameters) or len(parameters) > 32:
         raise ValueError("插件参数重复或超过 32 项")
     digest = hashlib.sha256(file.read_bytes() + module_path.read_bytes()).hexdigest()
-    spec = AlgorithmSpec(value["id"], value["name"], value.get("description", ""), parameters, value.get("version", "1.0"), str(file), digest, value.get("execution_scope", "frame"), value.get("output_kind", "image"))
+    if value.get("category","algorithm") not in {"intermediate","algorithm","modifier"} or not isinstance(value.get("documentation",{}),dict) or not isinstance(value.get("icon","plugin"),str):
+        raise ValueError("插件分类或文档描述无效")
+    spec = AlgorithmSpec(value["id"], value["name"], value.get("description", ""), parameters, value.get("version", "1.0"), str(file), digest, value.get("execution_scope", "frame"), value.get("output_kind", "image"),value.get("category","algorithm"),value.get("icon","plugin"),value.get("documentation",{}))
     if spec.execution_scope != "frame":
         raise ValueError("当前执行器支持逐帧插件；时序/整体算法需后续执行器适配")
     if spec.output_kind not in {"image", "label"}:

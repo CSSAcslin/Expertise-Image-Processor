@@ -49,15 +49,50 @@ STRUCTURAL["correlation"]["parameters"].append(field("center", "固定中心样�
 STRUCTURAL["statistics"].update(name="上游序列统计与固定尺度",inputs=["sensor","pair"],description="统计本节点直接收到的完整时间序列；此前的裁剪、抽样、合帧及空间归约都参与计算。")
 STRUCTURAL["calibration"]["inputs"] = ["sensor","pair"]
 
+WORKBENCH = {
+    "roi_crop": dict(description="裁剪直接输入的矩形空间区域。", parameters=[deepcopy(p) for p in AXIS_MODULES["spatial_roi"]["parameters"][:4]]),
+    "region_reduce": dict(description="对当前完整空间区域求均值、总和或分位值。", parameters=[
+        field("mode","区域运算","str","mean",choices=["mean","sum","quantile"]), field("quantile","分位 q","float",.5,minimum=0,maximum=1),
+        field("validity","双路有效像素","str","joint",choices=["joint","independent"]), field("output","数据流作用","str","main",choices=["main","side"])]),
+    "sequence_statistics": dict(description="扫描直接上游完整 T 序列，主流透传并产生统计端口。", parameters=[field("normalization","尺度统计","str","fixed_rms",choices=["none","fixed_rms"])]),
+    "fixed_normalize": dict(description="使用明确固定尺度归一，可引用前序统计的 scale 端口。",parameters=[field("scale","固定尺度","float",1.,minimum=1e-15)]),
+    "parameter_binding": dict(description="主流透传，发布命名数值变量，可取常量或前序参数 / 统计端口。",parameters=[field("name","变量名","str","value"),field("value","变量值","float",1.),field("unit","单位","str","")]),
+    "grayscale": dict(description="将明确 RGB 颜色分量转换为灰度。",parameters=[field("method","灰度定义","str","luma",choices=["luma","mean"])]),
+    "color_convert": dict(description="灰度扩展为 RGB，或明确调整 RGB/BGR 排列。",parameters=[field("mode","输出排列","str","rgb",choices=["rgb","bgr"])]),
+    "point_extract": dict(description="获取直接输入指定像素随 T/Q 的信号。",parameters=[field("x","X","int",0,minimum=0),field("y","Y","int",0,minimum=0),field("output","数据流作用","str","main",choices=["main","side"])]),
+    "line_extract": dict(description="提取横纵便捷线，或按端点及插值采样任意直线，R 为距离位置轴。",parameters=[field("mode","直线定义","str","axis",choices=["axis","segment"]),field("axis","保留方向","str","X",choices=["X","Y"]),field("index","固定另一轴位置（从0起）","int",0,minimum=0),*[field(k,label,"float",0.,minimum=0) for k,label in (("x0","起点 X"),("y0","起点 Y"),("x1","终点 X"),("y1","终点 Y"))],field("samples","沿线样本数","int",64,minimum=2,maximum=100000),field("interpolation","沿线插值","str","nearest",choices=["nearest","bilinear"]),field("output","数据流作用","str","side",choices=["main","side"])]),
+    "axis_slice": dict(description="按明确轴选一个截面，不重新解释 T/Q。",parameters=[field("axis","截面轴","str","T",choices=["T","Q","P","C","X","Y","R","B","N"]),field("index","位置（从0起）","int",0,minimum=0),field("output","数据流作用","str","side",choices=["main","side"])]),
+    "distribution": dict(description="对每个上游样本产生固定箱边界的有限值分布。",parameters=[field("bins","箱数","int",64,minimum=2,maximum=4096),field("minimum","下界","float",0.),field("maximum","上界","float",65535.),field("output","数据流作用","str","side",choices=["main","side"])]),
+    "data_tap": dict(description="获取直接上游真实数据用于预览或文件导出，主流原样通过。",parameters=[field("name","输出名称","str","截流输出"),field("destination","交付方式","str","both",choices=["preview","file","both"]),field("export_format","导出格式","str","dataset",choices=["dataset","npy","csv","tiff"])])}
+for _key,_value in WORKBENCH.items():
+    _value.update(name=_key,inputs=["sensor","pair","moments","map"],output="same")
+for _key,_analysis in (("correlation_map","map"),("correlation_curve","curve")):
+    WORKBENCH[_key] = deepcopy(STRUCTURAL["correlation"])
+    for _p in WORKBENCH[_key]["parameters"]:
+        if _p["key"]=="analysis":
+            _p["default"]=_analysis
+
+CORRELATIONS = {"correlation","correlation_map","correlation_curve"}
+MODIFIERS = {"region_reduce","point_extract","line_extract","axis_slice","distribution"}
+REFERENCABLE = {"intensity":{"gain","offset"},"affine":{"gain","offset"},"threshold":{"threshold"},"curve":{"input_max","gamma"},"gaussian":{"sigma"},"fixed_normalize":{"scale"},"parameter_binding":{"value"}}
+
+
+def is_reference(value):
+    return isinstance(value,dict) and set(value)=={"ref"}
+
 
 def catalog(plugins=()):
     result = {}
     for spec in (*BUILTINS, *[s for s in plugins if s.manifest]):
         result[spec.id] = dict(asdict(spec), inputs=["sensor", "pair", "map"], output="same", repeatable=True)
-    for key, spec in {**STRUCTURAL, **AXIS_MODULES}.items():
-        result[key] = dict(deepcopy(spec), id=key, version="1.0", manifest=None, code_hash=None, execution_scope="sequence" if key in {"statistics", "correlation", "time_crop", "time_sample", "time_smooth", "time_bin"} else "frame", output_kind="image", repeatable=True)
+    for key, spec in {**STRUCTURAL, **AXIS_MODULES, **WORKBENCH}.items():
+        result[key] = dict(deepcopy(spec), id=key, version="1.0", manifest=None, code_hash=None, execution_scope="sequence" if key in {"statistics", "sequence_statistics", *CORRELATIONS, "time_crop", "time_sample", "time_smooth", "time_bin", "data_tap", "axis_slice"} else "frame", output_kind="image", repeatable=True)
     for spec in result.values():
         spec["defaults"] = defaults(spec)
+        spec["bindable_parameters"] = sorted({p["key"] for p in spec["parameters"] if p["kind"] in {"int","float"}} if spec.get("manifest") else REFERENCABLE.get(spec["id"],set()))
+        from eip.module_documentation import enrich
+        enrich(spec)
+        spec["ports"] = ([dict(id=port,kind="statistic",dtype="uint32" if port=="count" else "float64") for port in ("mean","variance","count","scale")] if spec["id"]=="sequence_statistics" else [dict(id="value",kind="scalar",dtype="float64")] if spec["id"]=="parameter_binding" else [dict(id="data",kind="upstream" if spec["id"]=="data_tap" else "output")])
     return result
 
 
@@ -82,7 +117,7 @@ def new_node(algorithm, shape=None, frames=None, plugins=()):
         h, w = shape[:2]
         mid = max(1, w//2)
         p.update(left=dict(x=0, y=0, width=mid, height=h), right=dict(x=mid, y=0, width=max(1, w-mid), height=h), midline=[mid, mid])
-    if algorithm == "correlation" and frames:
+    if algorithm in CORRELATIONS and frames:
         lag = min(10, max(0, (frames-3)//4))
         window = min(101, max(1, frames-2*lag))
         if window%2 == 0:
@@ -133,6 +168,13 @@ def normalize_nodes(nodes, *, check_types=True, input_type="sensor", input_kind=
         node.setdefault("manifest", spec["manifest"])
         node.setdefault("code_hash", spec["code_hash"])
         algorithm = node["algorithm"]
+        bindings = {key:deepcopy(value) for key,value in p.items() if is_reference(value)}
+        for key,binding in bindings.items():
+            ref = binding["ref"]
+            allowed_bindings={item["key"] for item in spec["parameters"] if item["kind"] in {"int","float"}} if spec.get("manifest") else REFERENCABLE.get(algorithm,set())
+            if key not in allowed_bindings or not isinstance(ref,dict) or set(ref)!={"node_id","port"} or not all(isinstance(ref[k],str) and ref[k] for k in ref):
+                raise ValueError("参数引用需为可绑定数值参数及前序实例的明确端口")
+            p[key] = deepcopy(spec["defaults"][key])
         execution = node.get("execution", {})
         if not isinstance(execution, dict) or set(execution)-{"backend", "memory_mb", "precision"}:
             raise ValueError("模块执行设置无效")
@@ -141,12 +183,12 @@ def normalize_nodes(nodes, *, check_types=True, input_type="sensor", input_kind=
         integer(execution.get("memory_mb", 256), "模块内存预算", 16)
         if execution.get("memory_mb", 256)>4096:
             raise ValueError("模块内存预算不能超过 4096 MiB")
-        if execution.get("backend")=="gpu" and algorithm!="correlation":
+        if execution.get("backend")=="gpu" and algorithm not in CORRELATIONS:
             raise ValueError("此模块当前支持 CPU；GPU 仅用于二阶关联")
         node["execution"] = deepcopy(execution)
-        if algorithm in {*STRUCTURAL,*AXIS_MODULES} and node["target"] != "both":
+        if algorithm in {*STRUCTURAL,*AXIS_MODULES,*WORKBENCH} and node["target"] != "both":
             raise ValueError("双路结构与时序模块作用于完整输入；左 / 右路范围仅适用于逐帧算法")
-        if algorithm in AXIS_MODULES:
+        if algorithm in AXIS_MODULES or algorithm in WORKBENCH and algorithm not in CORRELATIONS:
             if set(p)-set(spec["defaults"]):
                 raise ValueError("空间 / 时间编辑模块包含未知参数")
             merged = deepcopy(spec["defaults"])
@@ -163,12 +205,18 @@ def normalize_nodes(nodes, *, check_types=True, input_type="sensor", input_kind=
                     v = finite(item, parameter["label"])
                     if v<parameter.get("minimum", -float("inf")) or v>parameter.get("maximum", float("inf")):
                         raise ValueError(f"{parameter['label']} 超出允许范围")
+                elif parameter["kind"]=="str" and not isinstance(item,str):
+                    raise ValueError(f"{parameter['label']} 必须为文字")
                 if parameter.get("choices") and item not in parameter["choices"]:
                     raise ValueError(f"{parameter['label']} 选项无效")
             if algorithm=="time_crop" and (merged["last"] is not None and merged["last"]<merged["first"] or merged["end"] is not None and merged["end"]<=merged["start"]):
                 raise ValueError("时间裁剪终点必须在起点之后")
             if algorithm=="time_smooth" and merged["window"]%2!=1:
                 raise ValueError("时间平滑窗口必须为奇数")
+            if algorithm=="distribution" and merged["maximum"]<=merged["minimum"]:
+                raise ValueError("分布上界须大于下界")
+            if algorithm=="data_tap" and (not isinstance(merged["name"],str) or not 1<=len(merged["name"].strip())<=120):
+                raise ValueError("截流输出名称需为1至120个字符")
             node["parameters"] = merged
         elif frame_spec:
             node["parameters"] = validate_parameters(frame_spec, p)
@@ -202,18 +250,23 @@ def normalize_nodes(nodes, *, check_types=True, input_type="sensor", input_kind=
                 integer(merged[key], key)
             if merged["analysis"] not in {"map", "curve"} or merged["roi_estimator"] not in {"pixel_mean", "intensity_sum"}:
                 raise ValueError("关联输出或 ROI 估计方式无效")
+            if algorithm in {"correlation_map","correlation_curve"} and merged["analysis"]!=("map" if algorithm=="correlation_map" else "curve"):
+                raise ValueError("关联输出与此模块入口不一致")
             if merged["lag_list"] is not None:
                 if not isinstance(merged["lag_list"], (list, tuple)) or len(merged["lag_list"])>4096:
                     raise ValueError("延迟列表需为最多 4096 项的列表")
                 for q in merged["lag_list"]:
                     integer(q, "延迟")
             node["parameters"] = merged
+        node["parameters"].update(bindings)
+        if (algorithm in {"data_tap","sequence_statistics","parameter_binding"} or algorithm in MODIFIERS and node["parameters"]["output"]=="side") and execution.get("precision","native")!="native":
+            raise ValueError("透传 / 旁路模块不修改主流数值精度；请在实际变换模块设置精度")
         if node["enabled"] and check_types:
             if state not in spec["inputs"]:
                 raise ValueError(f"第 {position+1} 个模块「{spec['name']}」无法接收数据类型 {state}；请调整顺序或补充需要的输入模块")
             if node["target"]!="both" and state!="pair":
                 raise ValueError("左 / 右路作用范围仅适用于已对齐双路")
-            if algorithm in {"statistics", "correlation"} and labelled:
+            if algorithm in {"statistics", "sequence_statistics", *CORRELATIONS} and labelled:
                 raise ValueError("标签图不能隐式当作光强计算 g²；请调整阈值模块的位置")
             if spec["output"]!="same":
                 state = spec["output"]
@@ -225,7 +278,51 @@ def normalize_nodes(nodes, *, check_types=True, input_type="sensor", input_kind=
 
 
 def temporal(nodes):
-    return any(n.get("enabled", True) and n["algorithm"] in {"statistics", "correlation", "time_crop", "time_sample", "time_smooth", "time_bin"} for n in nodes)
+    return any(n.get("enabled", True) and n["algorithm"] in {"statistics", "sequence_statistics", *CORRELATIONS, "time_crop", "time_sample", "time_smooth", "time_bin", "data_tap", "axis_slice"} for n in nodes)
+
+
+def migrate_nodes(nodes):
+    """Create an editable canonical copy; never reinterpret completed datasets."""
+    result = []
+    for raw in nodes:
+        n = deepcopy(raw)
+        a,p = n["algorithm"],n.setdefault("parameters",{})
+        if a=="spatial_roi":
+            mode = p.get("mode","pixels")
+            crop = deepcopy(n)
+            crop.update(algorithm="roi_crop",parameters={k:p.get(k,catalog()["roi_crop"]["defaults"][k]) for k in ("x","y","width","height")})
+            if mode=="pixels":
+                result.append(crop)
+            else:
+                crop["id"] = f"{n.get('id') or uuid.uuid4().hex}-crop"
+                result.append(crop)
+                n.update(algorithm="region_reduce",parameters=dict(mode=mode,quantile=p.get("quantile",.5),validity=p.get("validity","joint"),output="main"))
+                result.append(n)
+        elif a=="statistics":
+            stats = deepcopy(n)
+            stats.update(id=f"{n.get('id') or uuid.uuid4().hex}-stats",algorithm="sequence_statistics",parameters=dict(normalization=p.get("normalization","none")))
+            stats.setdefault("execution",{})["precision"]="native"
+            result.append(stats)
+            n.update(algorithm="fixed_normalize",parameters=dict(scale={"ref":{"node_id":stats["id"],"port":"scale"}}))
+            result.append(n)
+        elif a=="correlation":
+            n["algorithm"]="correlation_curve" if p.get("analysis")=="curve" else "correlation_map"
+            result.append(n)
+        else:
+            result.append(n)
+    return result
+
+
+def migrate_workbench_nodes(nodes):
+    migrated=migrate_nodes(nodes)
+    report=[]
+    if any(n.get("algorithm")=="spatial_roi" for n in nodes):
+        report.append("旧 ROI 已拆为裁剪 / 区域归约，原坐标、有效像素规则与顺序保留。")
+    if any(n.get("algorithm")=="statistics" for n in nodes):
+        report.append("旧统计已拆为序列统计 / 显式固定尺度归一，保留原 float64 与固定尺度。")
+    if any(n.get("algorithm")=="correlation" for n in nodes):
+        report.append("关联输出已转换为固定延迟图或延迟扫描的独立模块入口。")
+    return migrated,report
 
 
 def output_shape(nodes, shape):
