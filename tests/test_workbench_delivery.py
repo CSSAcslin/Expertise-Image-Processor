@@ -90,6 +90,31 @@ def test_csv_signal_and_dataset_package(client, tmp_path):
     response = client.post(f"/api/jobs/{job['id']}/sequence/promote", json=dict(side_output=first["id"]))
     assert response.status_code == 200, response.text
     assert response.json()["source"]["role"] == "input"
+    assert len(response.json()["frame"]["base_shape"]) == 2
+    assert response.json()["frame"]["contract"]["shape"] == []
+    for kind in ("csv", "png", "svg"):
+        response = client.get(f"/api/jobs/{job['id']}/download", params=dict(file=kind, side_output=first["id"]))
+        assert response.status_code == 200, response.text
+    assert b"value" in client.get(f"/api/jobs/{job['id']}/download", params=dict(file="csv", side_output=first["id"])).content
+
+
+def test_profile_returns_exact_requested_sample_and_real_component_axes(client, tmp_path):
+    values = np.arange(7 * 3 * 4, dtype=np.uint16).reshape(7, 3, 4)
+    entry = source(client, tmp_path, values)
+    line = new_node("line_extract")
+    line["parameters"].update(axis="X", index=1, output="side")
+    job = run(client, entry, [line])
+    assert job["status"] == "succeeded", job
+    side = job["run"]["results"][0]["side_outputs"][0]
+    response = client.post(f"/api/jobs/{job['id']}/sequence", json=dict(side_output=side["id"], index=5, profile=True))
+    assert response.status_code == 200, response.text
+    profile = response.json()
+    assert profile["profile"] and profile["indices"] == [5]
+    assert profile["contract"]["axes"] == "R" and profile["contract"]["sequence_axis"] == "T"
+    assert profile["references"][0]["index"] == 5 and not profile["downsampled"]
+    np.testing.assert_array_equal(profile["values"][0], values[5, 1])
+    response = client.post(f"/api/jobs/{job['id']}/sequence", json=dict(side_output=side["id"], index=7, profile=True))
+    assert response.status_code == 400
 
 
 def test_trial_is_temporary_and_not_promotable(client, tmp_path):

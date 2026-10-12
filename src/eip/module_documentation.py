@@ -83,7 +83,7 @@ VALIDITY = {
     "grayscale":"任一参与颜色分量非有限时结果非有限；忽略alpha。", "color_convert":"重排 / 复制，不改变原值有效性。",
 }
 VALIDITY["correlation_map"]=VALIDITY["correlation_curve"]=VALIDITY["correlation"]
-SYMBOLS={"gain":"g","offset":"b","sigma":"σ","radius":"r","threshold":"θ","input_max":"M","gamma":"γ","quantile":"q","window":"W","map_lag":"q / τ","stride":"S","scale":"s","bins":"N","minimum":"e₀","maximum":"eₙ","samples":"N","step":"s","size":"B","offset":"o / b"}
+SYMBOLS={"gain":"g","offset":"o / b","sigma":"σ","radius":"r","threshold":"θ","input_max":"M","gamma":"γ","quantile":"q","window":"W","map_lag":"q / τ","stride":"S","scale":"s","bins":"N","minimum":"e₀","maximum":"eₙ","samples":"N","step":"s","size":"B","center":"c"}
 
 IO = {
     "calibration":("强度 / 传感器码值 T(P)YX(C) 或 T(P)(C)","同轴同形状 float64 强度；不接受标签 / g²"),
@@ -124,10 +124,31 @@ def enrich(spec):
     spec.update(category=category, icon=icon, name=name, legacy=spec["id"] in {"spatial_roi", "statistics", "correlation"})
     symbols = [{"symbol":"A / I", "meaning":"本模块直接上游数值", "unit":"上游单位"}, {"symbol":"B", "meaning":"本模块输出", "unit":"由输出契约确定"}]
     if spec["id"].startswith("correlation"):
-        symbols += [{"symbol":"W", "meaning":"平均窗口，奇数", "unit":"上游样本"}, {"symbol":"q / τ", "meaning":"有符号配对延迟", "unit":"上游样本"}, {"symbol":"c", "meaning":"窗口中心", "unit":"上游样本"}]
+        symbols = [
+            {"symbol":"Lᵢ / Rᵢ", "meaning":"直接上游左 / 右路在第 i 个样本的强度；空间矩阵逐像素计算，归约后的区域信号按该信号计算", "unit":"上游强度"},
+            {"symbol":"g²", "meaning":"标准二阶互关联；分子与分母使用同一有效配对集合", "unit":"无量纲"},
+            {"symbol":"W", "meaning":"以 c 为中心的完整平均窗口，奇数", "unit":"上游样本"},
+            {"symbol":"q / τ", "meaning":"右路索引 = 左路索引 + q；可为负、零或正值", "unit":"上游样本"},
+            {"symbol":"c", "meaning":"窗口中心，按编辑后的直接上游计数", "unit":"上游样本"},
+            {"symbol":"V_c", "meaning":"窗口中 Lᵢ 与 Rᵢ₊q 同时有限的配对集合；每个像素可不同", "unit":"样本集合"},
+            {"symbol":"⟨·⟩", "meaning":"在 V_c 内的算术平均；非对整段或不同集合分别平均", "unit":"由被平均量确定"},
+        ]
+    if spec["id"] in {"sequence_statistics","statistics"}:
+        symbols += [
+            {"symbol":"μ", "meaning":"每个位置沿完整直接上游序列的有限值均值", "unit":"上游强度"},
+            {"symbol":"M₂", "meaning":"有限值对均值的离差平方和", "unit":"强度平方"},
+            {"symbol":"σ²", "meaning":"总体方差 M₂ / n，非样本无偏方差", "unit":"强度平方"},
+            {"symbol":"s", "meaning":"固定涨落 RMS：各幅面内所有位置的 M₂ 总和除以有效计数总和后开方", "unit":"上游强度"},
+        ]
+    if spec["id"]=="distribution":
+        symbols += [{"symbol":"H_b", "meaning":"落入第 b 个固定箱的有限值数量；末箱含右边界", "unit":"计数"},
+                    {"symbol":"e_b", "meaning":"由最小值、最大值及箱数确定的固定等宽箱边界", "unit":"上游单位"},
+                    {"symbol":"V", "meaning":"当前样本中的有限值集合，超范围值不计入任何箱", "unit":"值集合"}]
     symbols += [{"symbol":SYMBOLS.get(p["key"],p["key"]),"meaning":p["label"],"unit":p.get("unit","")} for p in spec.get("parameters",[]) if p["kind"] in {"int","float"}]
     if spec["id"] in {"region_reduce","sequence_statistics","statistics","gaussian"}:
         symbols += [{"symbol":"V / valid","meaning":"本公式声明的有限值支持集合","unit":"无"},{"symbol":"n","meaning":"有效支持数量","unit":"样本或像素"}]
+    # Formula definitions take precedence over less specific parameter labels.
+    symbols = list({entry["symbol"]:entry for entry in reversed(symbols)}.values())[::-1]
     spec["formula"] = dict(latex=LATEX[spec["id"]], expression=expression, symbols=symbols, domain=spec.get("description", ""), validity=VALIDITY.get(spec["id"],"有限值参与统计 / 平滑；全部无效输出 NaN，具体集合和边界见公式及算法说明。"), boundary=boundary)
     input_,output_=IO.get(spec["id"],("数值矩阵 / 双路 / 标量 / 向量；64位整数不作隐式浮点计算","同轴同形状；实际dtype和语义见公式边界及实例契约"))
     spec["documentation"] = dict(summary=spec.get("description", ""), formula=deepcopy(spec["formula"]), input=input_, output=output_)

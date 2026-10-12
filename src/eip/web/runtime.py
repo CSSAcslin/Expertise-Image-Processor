@@ -224,7 +224,10 @@ class Workbench:
         event = self.preview.request(asdict(source))
         if event["type"] != "frame":
             raise ValueError("数据源没有可显示帧")
-        token = self.frames.add(event["pixels"], event["frame"], extra.get("origin", [0, 0]), extra.get("base_shape", event["pixels"].shape[:2]), extra.get("result_kind", "image"))
+        # Display geometry is distinct from a signal's genuine (possibly scalar)
+        # contract. Empty spatial metadata must not produce an undefined canvas.
+        extra["base_shape"] = extra.get("base_shape") or list(event["pixels"].shape[:2])
+        token = self.frames.add(event["pixels"], event["frame"], extra.get("origin", [0, 0]), extra["base_shape"], extra.get("result_kind", "image"))
         if event.get("contract"):
             self.frames.annotate(token,color_order=event["contract"].get("color_order","RGB"))
         snapshot = self.frames.render(token)
@@ -315,7 +318,7 @@ class Workbench:
             return {"eof": True}
         if event["meta"]["revision"] != source["meta"]["revision"]:
             raise ValueError("来源已变化，请重新打开")
-        token = self.frames.add(event["pixels"], event["frame"], source.get("origin", [0, 0]), source.get("base_shape", event["pixels"].shape[:2]), source.get("result_kind", "image"))
+        token = self.frames.add(event["pixels"], event["frame"], source.get("origin", [0, 0]), source.get("base_shape") or event["pixels"].shape[:2], source.get("result_kind", "image"))
         if event.get("contract"):
             self.frames.annotate(token,color_order=event["contract"].get("color_order","RGB"))
         snapshot = self.frames.render(token, value.get("display"))
@@ -446,14 +449,18 @@ class Workbench:
         reader = DatasetReader(SourceSpec(str(path/"dataset.json"),"dataset"))
         try:
             c = item["contract"]
+            index = value.get("index",0)
+            if type(index) is not int or not 0<=index<c["length"]:
+                raise ValueError("结果样本超出范围")
             if not ("Y" in c["axes"] and "X" in c["axes"]):
                 columns = max(1,int(np.prod(c["shape"])))
                 selected_columns = np.unique(np.linspace(0,columns-1,min(columns,4096),dtype=int))
                 max_rows = min(2000,max(1,200000//len(selected_columns)))
-                indices = sorted(set([*range(0,c["length"],max(1,math.ceil(c["length"]/max_rows))),c["length"]-1]))
+                profile = bool(value.get("profile")) or c["sequence_axis"]=="N"
+                indices = [index] if profile else sorted(set([*range(0,c["length"],max(1,math.ceil(c["length"]/max_rows))),c["length"]-1]))
                 refs = [reader.sample_ref(i) for i in indices]
                 values = [reader.read_sample(i).reshape(-1)[selected_columns] for i in indices]
-                return dict(kind="signals",contract=c,indices=indices,column_indices=selected_columns.tolist(),references=refs,values=[[float(v) if np.isfinite(v) else None for v in row] for row in values],downsampled=len(indices)<c["length"] or len(selected_columns)<columns,total=c["length"],temporary=job["mode"]=="trial",name=item.get("name",job["name"]),side_output=value.get("side_output"))
+                return dict(kind="signals",profile=profile,contract=c,indices=indices,column_indices=selected_columns.tolist(),references=refs,values=[[float(v) if np.isfinite(v) else None for v in row] for row in values],downsampled=(not profile and len(indices)<c["length"]) or len(selected_columns)<columns,total=c["length"],temporary=job["mode"]=="trial",name=item.get("name",job["name"]),side_output=value.get("side_output"))
             index,channel = value.get("index",0),value.get("channel",0)
             channels = c["shape"][0] if c["axes"].startswith("P") else 1
             if type(index) is not int or not 0<=index<c["length"] or type(channel) is not int or not 0<=channel<channels:

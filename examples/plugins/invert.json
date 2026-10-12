@@ -17,9 +17,21 @@
       "latex": "B=\\operatorname{float32}(r-\\operatorname{float32}(A))",
       "expression": "B = float32(reference − float32(A))",
       "symbols": [
-        {"symbol": "A", "meaning": "直接上游输入像素", "unit": "输入单位"},
-        {"symbol": "r", "meaning": "固定反相参考值 reference", "unit": "输入单位"},
-        {"symbol": "B", "meaning": "反相后像素", "unit": "输入单位"}
+        {
+          "symbol": "A",
+          "meaning": "直接上游输入像素",
+          "unit": "输入单位"
+        },
+        {
+          "symbol": "r",
+          "meaning": "固定反相参考值 reference",
+          "unit": "输入单位"
+        },
+        {
+          "symbol": "B",
+          "meaning": "反相后像素",
+          "unit": "输入单位"
+        }
       ],
       "domain": "逐帧 YX / YXC；reference 为有限数值。",
       "validity": "NumPy 浮点运算；输入 NaN 保持 NaN，不补值。",
@@ -27,6 +39,13 @@
     }
   },
   "parameters": [
-    {"key": "reference", "label": "反相参考值", "kind": "float", "default": 65535.0, "minimum": -1000000000, "maximum": 1000000000}
+    {
+      "key": "reference",
+      "label": "反相参考值",
+      "kind": "float",
+      "default": 65535.0,
+      "minimum": -1000000000,
+      "maximum": 1000000000
+    }
   ]
 }

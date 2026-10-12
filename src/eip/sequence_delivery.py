@@ -88,6 +88,24 @@ def persist_side_outputs(engine, directory, payload, item, context, emit):
             del values, offsets
             values = offsets = None
             side["artifacts"] = ["values.npy", "references.jsonl", "reference_offsets.npy", "measurements.csv", "delivery.json", "dataset.json"]
+            if contract.spatial:
+                axes = contract.axes.removeprefix("P")
+                shown = first[0] if contract.paired else first
+                bgr = axes=="YXC" and contract.color_order=="BGR"
+                tifffile.imwrite(folder/"first.tif",shown[...,::-1] if bgr else shown,
+                                 photometric="rgb" if axes=="YXC" else "minisblack",
+                                 metadata=dict(axes="YXS" if axes=="YXC" else axes,
+                                               contract=replace(actual,color_order="RGB").record() if bgr else actual.record(),
+                                               source_contract=actual.record(),side_output=side["id"]))
+                side["artifacts"].append("first.tif")
+            else:
+                from eip.sequence_storage import plot_signals
+                plot_signals(folder,actual.record())
+                side["artifacts"].extend(["curve.png","curve.svg"])
+                if int(np.prod(contract.shape))<=4096:
+                    numeric = dict(side,destination="file",export_format="csv",artifacts=[])
+                    _export_side(folder,numeric,context)
+                    side["artifacts"].append("export.csv")
             # A typed carrier exists even for preview-only delivery; it is not
             # promoted until the complete source/run has been published.
             write_json(folder / "dataset.json", dict(schema_version=1, status="succeeded", contract=actual.record(), run_id=payload["id"], source=item["source"], side_output=descriptor["id"], temporary=side["temporary"], upstream_modules=side["upstream_modules"]))
@@ -131,6 +149,9 @@ def _export_side(folder, side, context):
         return
     contract = side["contract"]
     values = np.load(folder / "values.npy", mmap_mode="r", allow_pickle=False)
+    if output_format == "csv" and (folder/"export.csv").is_file():
+        side["export_file"] = "export.csv"
+        return
     if output_format == "csv":
         shape, axes = contract["shape"], contract["axes"]
         names = ["_".join(f"{axis}{position}" for axis, position in zip(axes, index)) or "value" for index in np.ndindex(tuple(shape))]

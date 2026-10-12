@@ -203,7 +203,7 @@ def create_app(workspace: Path | None = None, restore_session: Path | None = Non
             if job.get("engine")!="sequence" or job["status"] not in {"succeeded","completed_with_errors"}:
                 raise ValueError("截流输出尚未完整保存")
             _,result,directory = workbench()._sequence_output(job,dict(source=source,side_output=side_output))
-            names = {"manifest":"delivery.json","array":"values.npy","csv":"export.csv" if result.get("export_format")=="csv" else "measurements.csv","image":"export.tif","references":"references.jsonl","export":result.get("export_file")}
+            names = {"manifest":"delivery.json","array":"values.npy","csv":"export.csv" if "export.csv" in result.get("artifacts",[]) else "measurements.csv","image":"first.tif","png":"curve.png","svg":"curve.svg","references":"references.jsonl","export":result.get("export_file")}
             if file not in names or not names[file]:
                 raise ValueError("此截流未生成所选导出文件")
             if Path(names[file]).name!=names[file] or names[file] in {".",".."}:
