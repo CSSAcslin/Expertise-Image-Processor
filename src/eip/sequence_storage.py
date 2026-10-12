@@ -97,7 +97,7 @@ class DatasetReader:
         self.values = self.offsets = None
 
 
-def plot_signals(directory,contract):
+def plot_signals(directory,contract,mappings=None,node_id=None):
     """Bounded static graphic; NPY and CSV always retain every numerical sample."""
     import matplotlib
     matplotlib.use("Agg")
@@ -105,6 +105,27 @@ def plot_signals(directory,contract):
     directory = Path(directory)
     values = np.load(directory/"values.npy",mmap_mode="r",allow_pickle=False)
     count = max(1,int(np.prod(contract["shape"])))
+    if contract["semantic"]=="distribution" and contract["axes"]=="B":
+        candidates = [(key,value) for key,value in (mappings or {}).items()
+                      if value.get("axis")=="B" and len(value.get("edges",[]))==count+1]
+        mapping = next((value for key,value in candidates if key==node_id),candidates[-1][1] if candidates else {})
+        edges = np.asarray(mapping.get("edges",np.arange(count+1)))
+        fig,ax = plt.subplots(figsize=(9,4.8),layout="constrained")
+        ax.bar(edges[:-1],values[0].reshape(-1),width=np.diff(edges),align="edge",color="#278b78")
+        ax.set_xlim(edges[0],edges[-1])
+        ax.set_ylim(bottom=0)
+        ax.set_xlabel("Intensity" if "edges" in mapping else "Bin index (intensity boundaries unavailable)")
+        ax.set_ylabel("Frequency")
+        ax.yaxis.get_major_locator().set_params(integer=True)
+        with (directory/"references.jsonl").open(encoding="utf-8") as file:
+            reference = json.loads(file.readline())
+        sample = reference.get("sample_index",0)+1
+        ax.set_title(f"Histogram: sample {sample}; {len(values)} stored samples in NPY / CSV",fontsize=10)
+        ax.grid(axis="y",alpha=.2)
+        for ext in ("png","svg"):
+            fig.savefig(directory/f"curve.{ext}",dpi=160)
+        plt.close(fig)
+        return
     selected_columns = np.unique(np.linspace(0,count-1,min(count,64),dtype=int))
     budget = min(20000,max(1,200000//len(selected_columns)))
     indices = np.unique(np.r_[np.arange(0,len(values),max(1,int(np.ceil(len(values)/budget)))),len(values)-1])

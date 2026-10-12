@@ -2,7 +2,7 @@
 
 本地专业图像与视频工作台。两个核心始终是 **视频数据预览** 与 **数据处理**。
 
-当前版本为 `0.7.1`，默认使用 **本机 Web 模块工作台**。模块流程是中心工作区，模块库按 **中间 / 算法 / 修饰** 三类组织；检查器分为参数、公式和输入输出，工作台运行设置独立。数据与结果使用独立视窗，支持页面内浮窗和停靠。27 个模块的公式、参数与边界见 [模块清单](docs/MODULE_INVENTORY_CURRENT.md)，操作与迁移见 [工作台说明](docs/MODULE_WORKBENCH_0_7_0.md)，本轮修复见 [0.7.1 交互更新](docs/GUI_FIXES_0_7_1.md)。原有 [空间 / 时间契约](docs/MODULE_CONTRACTS_0_6_0.md) 继续适用；重做规格见 [GUI 规划](docs/GUI_MODULE_WORKBENCH_REDESIGN_PLAN.md)，完整目标见 [FRAMEWORK_PLAN.md](FRAMEWORK_PLAN.md)。
+当前版本为 `0.7.2`，默认使用 **本机 Web 模块工作台**。模块流程是中心工作区，模块库按 **中间 / 算法 / 修饰** 三类组织；检查器分为参数、公式和输入输出，工作台运行设置独立。数据与结果使用独立视窗，支持页面内浮窗和停靠。27 个模块的公式、参数与边界见 [模块清单](docs/MODULE_INVENTORY_CURRENT.md)，操作与迁移见 [工作台说明](docs/MODULE_WORKBENCH_0_7_0.md)，本轮修复见 [0.7.2 分布统计直方图](docs/DISTRIBUTION_FIX_0_7_2.md)，前次交互更新见 [0.7.1](docs/GUI_FIXES_0_7_1.md)。原有 [空间 / 时间契约](docs/MODULE_CONTRACTS_0_6_0.md) 继续适用；重做规格见 [GUI 规划](docs/GUI_MODULE_WORKBENCH_REDESIGN_PLAN.md)，完整目标见 [FRAMEWORK_PLAN.md](FRAMEWORK_PLAN.md)。
 
 0.7.0 拆分 ROI 裁剪与区域归约、序列统计与固定尺度归一，提供固定延迟图 / 延迟扫描两个明确算法入口。新增点、线、按轴截面、分布、灰度 / 颜色转换、参数传递及 **数据截流导出**：获取直接前序输出，可导出到数据预览、类型化数据集、NPY、适用的 CSV / TIFF，主流程继续执行。旧项目迁移建立新副本，历史结果原义保留。
 

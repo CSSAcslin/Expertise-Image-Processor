@@ -217,9 +217,10 @@ async function previewModule(editor,side="input",drawing=false,point=false,tool=
     cancelInspection();generation=inspectionGeneration;
     stopPlay();const i=editor.nodes.indexOf(editor.selected),nodes=editor.nodes.slice(0,i+(side==="output"?1:0));
     let dependencies=[];if(nodes.some(n=>n.enabled&&n.algorithm==="calibration"&&n.parameters.black_left!==n.parameters.black_right)){const end=editor.nodes.findIndex((n,j)=>j>=nodes.length&&n.enabled&&n.algorithm==="alignment");if(end>=0)dependencies=structuredClone(editor.nodes.slice(nodes.length,end+1));}
-    const request={editor,nodeId:editor.selected.id,side,drawing,point,tool:tool||(drawing?"roi":null),sourceId:active.id,sampleIndex:editor.previewSample||0,prefix:JSON.stringify(nodes)},key=JSON.stringify([active.id,active.meta.revision,nodes,dependencies,editor.previewSample||0,display]);
+    const sideOutput=side==="output"&&editor.selected.enabled&&editor.selected.algorithm==="distribution"&&editor.selected.parameters.output==="side"?`${editor.selected.id}:data`:null;
+    const request={editor,nodeId:editor.selected.id,side,drawing,point,tool:tool||(drawing?"roi":null),sourceId:active.id,sampleIndex:editor.previewSample||0,prefix:JSON.stringify(nodes)},key=JSON.stringify([active.id,active.meta.revision,nodes,dependencies,editor.previewSample||0,display,sideOutput]);
     let data=stageSnapshot?.key===key&&originalViewer.snapshot===stageSnapshot.data.frame?stageSnapshot.data:null;
-    if(!data){inspectionRequest=crypto.randomUUID();$("inspection-state").hidden=false;$("inspection-message").textContent="正在读取此阶段 · 可继续预览原始数据";data=await api("modules/inspect",{inspection_id:inspectionRequest,source_id:active.id,steps:structuredClone(nodes),dependencies,sample_index:editor.previewSample||0,display});}
+    if(!data){inspectionRequest=crypto.randomUUID();$("inspection-state").hidden=false;$("inspection-message").textContent="正在读取此阶段 · 可继续预览原始数据";data=await api("modules/inspect",{inspection_id:inspectionRequest,source_id:active.id,steps:structuredClone(nodes),dependencies,sample_index:editor.previewSample||0,side_output:sideOutput,display});}
     if(generation!==inspectionGeneration||active?.id!==request.sourceId||editor.selected?.id!==request.nodeId||(editor.previewSample||0)!==request.sampleIndex)return;
     const current=editor.nodes.indexOf(editor.selected);if(JSON.stringify(editor.nodes.slice(0,current+(side==="output"?1:0)))!==request.prefix)return;
     stageSnapshot={key,data};await showStageResult(data,request);

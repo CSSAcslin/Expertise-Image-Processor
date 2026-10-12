@@ -46,17 +46,25 @@ def inspection_entry(commands, results, folder):
                         dependencies=command.get("dependencies", []),
                     )
                     try:
-                        c, index = engine.output, command["index"]
+                        side_id, index = command.get("side_output"), command["index"]
+                        side = next((s for s in engine.side_outputs() if s["id"]==side_id), None)
+                        if side_id and side is None:
+                            raise ValueError("此阶段没有指定的旁路输出")
+                        c = side["contract"] if side else engine.output
                         if not 0 <= index < c.length:
                             raise ValueError("检查样本号超出编辑后的输出范围")
-                        pixels = np.asarray(engine.get(len(engine.nodes), index))
+                        pixels = np.asarray(engine.get_side_output(side_id,index) if side else engine.get(len(engine.nodes),index))
                         if pixels.nbytes > 128 * 1024**2:
                             raise ValueError("单个检查样本超过 128 MiB，请先缩小空间范围")
                         if c.dtype == "dynamic":
                             c = replace(c, dtype=str(pixels.dtype))
-                        reference = engine.ref(len(engine.nodes), index)
+                        reference = engine.side_ref(side_id,index) if side else engine.ref(len(engine.nodes),index)
                         event = dict(id=identifier, contract=c.record(), reference=reference,
-                                     index=index, inspection=True, temporary=True, mappings=engine.mappings)
+                                     index=index, inspection=True, temporary=True, mappings=engine.mappings,
+                                     side_output=side_id, node_id=side["node_id"] if side else next((
+                                         n["id"] for n in reversed(engine.nodes)
+                                         if n["algorithm"]=="distribution" and n["parameters"]["output"]=="main"
+                                     ),None))
                         if c.spatial:
                             channel = command.get("channel", 0)
                             if c.paired:

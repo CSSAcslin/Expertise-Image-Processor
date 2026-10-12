@@ -121,7 +121,9 @@ def process_sequence_job(payload,emit,cancelled):
                     # references succeeded. Partial datasets cannot be promoted.
                     write_json(part/"dataset.json",dict(schema_version=1,status="succeeded",contract=output_c.record(),run_id=payload["id"],source=source_value,temporary=payload["mode"]=="trial"))
                     if signal:
-                        plot_signals(part,output_c.record())
+                        histogram_node = next((n["id"] for n in reversed(engine.nodes)
+                                               if n["algorithm"]=="distribution" and n["parameters"]["output"]=="main"),None)
+                        plot_signals(part,output_c.record(),engine.mappings,histogram_node)
                         item["artifacts"].extend(["curve.png","curve.svg"])
             except Cancelled:
                 item["status"] = "cancelled"

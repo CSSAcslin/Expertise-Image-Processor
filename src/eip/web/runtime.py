@@ -426,10 +426,15 @@ class Workbench:
         identifier = value.get("inspection_id")
         if identifier is not None and (not isinstance(identifier,str) or not 1<=len(identifier)<=80):
             raise ValueError("检查标识无效")
-        compile_flow(nodes,source_contract(entry["meta"],entry.get("result_kind","image")),single=True,following_nodes=dependencies)
+        plan = compile_flow(nodes,source_contract(entry["meta"],entry.get("result_kind","image")),single=True,following_nodes=dependencies)
+        side_output = value.get("side_output")
+        if side_output is not None and (not isinstance(side_output,str) or side_output not in {
+            f"{stage['id']}:{side['port']}" for stage in plan["stages"] for side in stage.get("side_outputs",[])
+        }):
+            raise ValueError("此阶段没有指定的旁路输出")
         return self.inspection.request(entry["source"],inspection_id=identifier,
                                        revision=entry["meta"]["revision"],nodes=list(nodes),
-                                       dependencies=list(dependencies),index=index,channel=channel,
+                                       dependencies=list(dependencies),index=index,channel=channel,side_output=side_output,
                                        input_kind=entry.get("result_kind","image"))
 
     def inspect_module(self, value):

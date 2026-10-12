@@ -100,7 +100,7 @@ def persist_side_outputs(engine, directory, payload, item, context, emit):
                 side["artifacts"].append("first.tif")
             else:
                 from eip.sequence_storage import plot_signals
-                plot_signals(folder,actual.record())
+                plot_signals(folder,actual.record(),engine.mappings,descriptor["node_id"])
                 side["artifacts"].extend(["curve.png","curve.svg"])
                 if int(np.prod(contract.shape))<=4096:
                     numeric = dict(side,destination="file",export_format="csv",artifacts=[])
