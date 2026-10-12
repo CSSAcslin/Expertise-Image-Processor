@@ -8,6 +8,7 @@ import { SequenceResults } from "./sequence.js";
 import { WorkbenchLayout } from "./layout.js";
 import { detailHTML, bindRename } from "./job-detail.js";
 import { PreviewEngine } from "./preview.js";
+import { setupWorkbench } from "./workbench.js";
 
 const $ = (id) => document.getElementById(id);
 const escape = (value) =>
@@ -18,7 +19,7 @@ const escape = (value) =>
         char
       ],
   );
-const icons = {
+const icons = { search:"M10 17a7 7 0 1 0 0-14 7 7 0 0 0 0 14Zm5-2 6 6", plugin:"M8 3v5H3v8h5v5h8v-5h5V8h-5V3Z", undo:"M9 5 3 11l6 6M3 11h11a6 6 0 0 1 6 6", redo:"m15 5 6 6-6 6M21 11H10a6 6 0 0 0-6 6", float:"M14 3h7v7M21 3l-9 9M11 3H3v18h18v-8", maximize:"M3 9V3h6M15 3h6v6M21 15v6h-6M9 21H3v-6", tap:"M3 5h18v4H3ZM12 9v10M8 15l4 4 4-4",
   plus: "M12 5v14M5 12h14",
   close: "m6 6 12 12M6 18 18 6",
   folder: "M3 7V5h7l2 2h9v13H3Z",
@@ -101,7 +102,7 @@ let selectionRequest = 0;
 function frameRequest(id, value, generation = sourceGeneration) {
   return preview.request(id,value,generation);
 }
-function splitActive(){return document.body.dataset.analysis==="split_correlation";}
+function splitActive(){return false;}
 const scene = {
   width: 640,
   height: 480,
@@ -113,6 +114,7 @@ const scene = {
 };
 let pixelTimer;
 const callbacks = {
+  geometry: value=>workbench.commitGeometry(value,axisEditing),
   redraw,
   fit,
   roi: () => {
@@ -182,27 +184,30 @@ const split = new SplitController({
   },
 });
 let generalSequenceContext=null;
-const generalEditor=new ModuleEditor({nodes:()=>steps,catalog:()=>state?.modules,source:()=>active,host:()=>$("steps"),status:()=>$("module-status"),inspector:()=>$("general-module-fields"),title:()=>$("general-module-title"),instance:()=>$("general-module-instance"),preview:previewModule,drawROI:drawModuleROI,inspect:(open=true)=>{if(open){layout.openParameters("general");$("general-module-inspector").scrollIntoView({block:"nearest"});}},selectionChanged:scheduleDraft,change:changed,afterRender:()=>{$("step-count").textContent=steps.length;},report:toast});
-const sequenceResults=new SequenceResults({report:toast,display:()=>resultDisplay,image:async snapshot=>{result=snapshot;resultOwner="sequence";formalResult=null;resultSignature=null;resultScene.width=snapshot.shape[1];resultScene.height=snapshot.shape[0];await resultViewer.set(snapshot);if($("display-target").value==="result")fillDisplayControls(snapshot,resultDisplay);},signals:()=>{resultOwner="sequence";result=null;formalResult=null;resultViewer.clear();if($("display-target").value==="result")fillDisplayControls(null,resultDisplay);},shown:()=>{resultOwner="sequence";$("stale").hidden=true;setMode("compare");redraw();},promote:async(id,position)=>{sources=(await api("state")).sources;const job=await api(`jobs/${id}`),path=job.directory+"/"+job.run.results[position].output_directory+"/dataset.json";const entry=sources.find(s=>s.role==="result"&&s.run_id===id&&s.source.path.replaceAll("\\","/")===path.replaceAll("\\","/"));if(!entry)throw Error("该结果未能自动加入来源，请查看任务日志");formalResult=entry;await promoteResult();}});
-$("general-module-inspector").after($("batch").closest("label"));
+const generalEditor=new ModuleEditor({nodes:()=>steps,catalog:()=>state?.modules,source:()=>active,host:()=>$("steps"),status:()=>$("module-status"),inspector:()=>$("general-module-fields"),title:()=>$("general-module-title"),instance:()=>$("general-module-instance"),preview:previewModule,drawROI:drawModuleROI,tools:moduleTools,inspect:(open=true)=>{if(open){layout.openParameters("general");$("general-module-inspector").scrollIntoView({block:"nearest"});}},selectionChanged:scheduleDraft,change:changed,afterRender:()=>{$("step-count").textContent=steps.length;},report:toast});
+const sequenceResults=new SequenceResults({report:toast,changed:scheduleDraft,promoted:async(opened,target)=>{sources=(await api("state")).sources;updateSources();if(target==="input")await selectSource(opened.source.id);},display:()=>resultDisplay,image:async snapshot=>{result=snapshot;resultOwner="sequence";formalResult=null;resultSignature=null;resultScene.width=snapshot.shape[1];resultScene.height=snapshot.shape[0];await resultViewer.set(snapshot);if($("display-target").value==="result")fillDisplayControls(snapshot,resultDisplay);},signals:()=>{resultOwner="sequence";result=null;formalResult=null;resultViewer.clear();if($("display-target").value==="result")fillDisplayControls(null,resultDisplay);},shown:()=>{resultOwner="sequence";$("stale").hidden=true;setMode("compare");redraw();},promote:async(id,position)=>{sources=(await api("state")).sources;const job=await api(`jobs/${id}`),path=job.directory+"/"+job.run.results[position].output_directory+"/dataset.json";const entry=sources.find(s=>s.role==="result"&&s.run_id===id&&s.source.path.replaceAll("\\","/")===path.replaceAll("\\","/"));if(!entry)throw Error("该结果未能自动加入来源，请查看任务日志");formalResult=entry;await promoteResult();}});
+
+const workbench=setupWorkbench({editor:generalEditor,layout,source:()=>active,input:()=>input,viewer:originalViewer,resultViewer,scene,resultScene,notify:toast,save:scheduleDraft,inspect:(side,tool=null)=>previewModule(generalEditor,side,!!tool,tool==="point",tool),raw:async()=>{axisEditing=null;axisStage=false;scene.annotation=null;scene.tool="pan";$("axis-stage-note").hidden=true;$("module-preview-tools").hidden=true;if(input)await setInput(input);},currentJobs:()=>jobs,poll:pollJobs,submit});
+function moduleTools(node,host,editor){workbench.moduleTools(node,host,editor);}
 async function submitModules(nodes,mode="run",name=null,extra={}){
   if(!active||!input)return;
   const response=await api("jobs",{contract_version:3,mode,name,source_ids:extra.source_ids||[active.id],steps:structuredClone(nodes),preview_dependencies:extra.dependencies||[],sample_index:extra.sample_index||0,output_dir:$("output-dir").value,config_revision:JSON.stringify(nodes)});
   if(extra.stage)stageRequests.set(response.id,extra.stage);
-  toast(mode==="trial"?"流程试算已加入后台；输出首样本，关联中心由模块参数决定":"模块流程已加入后台队列");await pollJobs();return response;
+  toast(mode==="trial"?"试算已排队":"流程已排队");await pollJobs();return response;
 }
-async function previewModule(editor,side="input",drawing=false,point=false){
+async function previewModule(editor,side="input",drawing=false,point=false,tool=null){
   try{
     if(!active||!editor.selected)throw Error("请先选择输入来源和模块");
     stopPlay();const i=editor.nodes.indexOf(editor.selected),nodes=editor.nodes.slice(0,i+(side==="output"?1:0));
     let dependencies=[];if(nodes.some(n=>n.enabled&&n.algorithm==="calibration"&&n.parameters.black_left!==n.parameters.black_right)){const end=editor.nodes.findIndex((n,j)=>j>=nodes.length&&n.enabled&&n.algorithm==="alignment");if(end>=0)dependencies=structuredClone(editor.nodes.slice(nodes.length,end+1));}
-    await submitModules(nodes,"trial",`${editor.specs[editor.selected.algorithm]?.name} · ${side==="input"?"输入":"输出"}检查`,{sample_index:editor.previewSample||0,dependencies,stage:{editor,nodeId:editor.selected.id,side,drawing,point,sourceId:active.id,prefix:JSON.stringify(nodes)}});
+    await submitModules(nodes,"trial",`${editor.specs[editor.selected.algorithm]?.name} · ${side==="input"?"输入":"输出"}检查`,{sample_index:editor.previewSample||0,dependencies,stage:{editor,nodeId:editor.selected.id,side,drawing,point,tool,sourceId:active.id,prefix:JSON.stringify(nodes)}});
   }catch(e){toast(e.message,true);}
 }
-async function drawModuleROI(editor=splitActive()?split.flow:generalEditor,point=false){
-  try{if(!active)throw Error("请先导入来源");if(editor.selected?.algorithm!=="spatial_roi"){editor.add("spatial_roi");}await previewModule(editor,"input",true,point);}catch(e){toast(e.message,true);}
+async function drawModuleROI(editor=generalEditor,point=false){
+  try{if(!active)throw Error("请先导入来源");if(!["roi_crop","spatial_roi"].includes(editor.selected?.algorithm)){editor.add(state.modules.roi_crop?"roi_crop":"spatial_roi");}await previewModule(editor,"input",true,point);}catch(e){toast(e.message,true);}
 }
 function commitModuleROI(roi=scene.roi,remember=true){
+  if(axisEditing?.tool&&!["roi","roi-new"].includes(axisEditing.tool)){workbench.commitRectangle(roi,axisEditing);return;}
   const bound=axisEditing,node=bound?.editor.nodes.find(n=>n.id===bound.nodeId);if(!node)return;
   const q=structuredClone(roi||{x:0,y:0,width:scene.width,height:scene.height});if(bound.point){q.width=q.height=1;node.parameters.mode="mean";}
   if(!validROI(q,scene.width,scene.height))throw Error("ROI 必须位于此模块输入的空间范围内");
@@ -216,21 +221,18 @@ async function showStageResult(job,request){
   const node=request.editor.nodes.find(n=>n.id===request.nodeId);if(!node)return;
   axisStage=true;axisEditing=request.drawing?request:null;stopPlay();scene.width=data.frame.shape[1];scene.height=data.frame.shape[0];scene.zoom=1;scene.panX=scene.panY=0;scene.tool=request.drawing?"roi":"pan";scene.roi=request.drawing?{x:node.parameters.x,y:node.parameters.y,width:node.parameters.width||scene.width-node.parameters.x,height:node.parameters.height||scene.height-node.parameters.y}:null;
   if(axisEditing)Object.assign(axisEditing,{undo:[],redo:[],committed:structuredClone(scene.roi)});
+  workbench.stageShown(data,request);
   updateROI();if(splitActive()){$("split-tool").value="pan";split.view="stage";}
-  await originalViewer.set(data.frame);$("axis-stage-note").hidden=false;$("axis-stage-caption").textContent=`${request.editor.specs[node.algorithm].name} · ${request.side==="input"?"此步输入":"此步输出"} · ${data.contract.label}${request.drawing?" · 拖动选区会修改此 ROI 实例":""}`;$("input-label").textContent="模块阶段检查";setMode("compare");redraw();
+  await originalViewer.set(data.frame);$("axis-stage-note").hidden=false;$("axis-stage-caption").textContent=`${request.editor.specs[node.algorithm].name} · ${request.side==="input"?"此步输入":"此步输出"} · ${data.contract.label}${request.drawing?" · 画布编辑当前实例":""}`;$("input-label").textContent="模块阶段检查";setMode("compare");redraw();
   if($("display-target").value==="input")fillDisplayControls(data.frame,display);
 }
 $("axis-restore-raw").onclick=safe(async()=>{axisEditing=null;axisStage=false;$("axis-stage-note").hidden=true;if(input)await setInput(input);});
 async function setAnalysisMode(mode) {
-  const previous=split.mode;$("analysis-mode").value=mode;
-  if(previous==="general"&&mode!==previous)generalROI=structuredClone(scene.roi);
-  if(previous==="split_correlation"&&mode==="general"&&input){await split.showRaw(input);scene.roi=structuredClone(generalROI);scene.tool="pan";$("input-label").textContent="原始数据";}
-  await split.setMode(mode);
-  $(mode==="split_correlation"?"split-flow-body":"general-flow-body").prepend($("algorithm-preset"));
+  $("analysis-mode").value=["split_correlation","split_curve"].includes(mode)?mode:"general";
+  document.body.dataset.analysis="general";
+  document.querySelector(".workspace").dataset.analysis="general";
   layout.apply();redraw();scheduleDraft();
-}
-$("analysis-mode").onchange=safe(()=>setAnalysisMode($("analysis-mode").value));
-function redraw(viewer) {
+}function redraw(viewer) {
   if(viewer===resultViewer&&resultOwner==="general")Object.assign(scene,{zoom:resultScene.zoom,panX:resultScene.panX,panY:resultScene.panY});
   if(splitActive()&&!axisStage)split.draw();else originalViewer.draw();
   if(resultOwner==="sequence")resultViewer.draw();else if(resultOwner==="split")split.drawResult();else{
@@ -387,7 +389,7 @@ function updateSources() {
   $("result-list").innerHTML = results.map(card).join("")+splitResults.map(j=>`<div class="split-result-card ${split.resultId===j.id?"selected":""}" data-split-result="${j.id}" tabindex="0" role="button" aria-label="打开处理结果 ${escape(j.name)}"><strong>${escape(j.name)}</strong><span class="source-kind">${({statistics:"全源统计",trial:"空间图试算",curve:"τ 扫描曲线",run:"空间系数图"}[j.task])}</span><small>${escape(j.summary||j.source_name||"")}</small><small>${new Date(j.created*1000).toLocaleString()} · ${escape(j.id.slice(0,6))}</small></div>`).join("");
   $("result-list").insertAdjacentHTML("beforeend",sequenceJobs.map(j=>`<div class="split-result-card" data-sequence-result="${j.id}" tabindex="0" role="button"><strong>${escape(j.name)}</strong><span class="source-kind">${j.mode==="trial"?"模块试算":"模块处理"}</span><small>${escape(j.summary||"")}</small><small>${new Date(j.created*1000).toLocaleString()} · ${escape(j.id.slice(0,6))}</small></div>`).join(""));
   document.querySelectorAll("[data-sequence-result]").forEach(el=>{el.onclick=safe(()=>sequenceResults.load(el.dataset.sequenceResult));el.onkeydown=e=>{if(e.key==="Enter")el.click();};});
-  document.querySelectorAll("[data-split-result]").forEach(el=>{el.onclick=safe(async()=>{sequenceResults.hide();await setAnalysisMode("split_correlation");await split.loadResult(el.dataset.splitResult);});el.onkeydown=e=>{if(e.key==="Enter")el.click();};});
+  document.querySelectorAll("[data-split-result]").forEach(el=>{el.onclick=safe(async()=>{sequenceResults.hide();await split.loadResult(el.dataset.splitResult);});el.onkeydown=e=>{if(e.key==="Enter")el.click();};});
   document.querySelectorAll("[data-source]").forEach((el) => {
     el.onclick = safe(() => selectSource(el.dataset.source));
     el.onkeydown = (e) => {
@@ -525,7 +527,7 @@ function drawHistogram(snapshot) {
     `有限样本直方图，${snapshot.histogram_samples ?? "采样"} 个样本`;
 }
 async function setInput(snapshot, reset = false) {
-  axisStage=false;axisEditing=null;$("axis-stage-note").hidden=true;
+  axisStage=false;axisEditing=null;scene.annotation=null;scene.tool="pan";$("module-preview-tools").hidden=true;$("axis-stage-note").hidden=true;
   $("input-label").textContent="原始数据";
   pixelGeneration++;
   input = snapshot;
@@ -833,7 +835,7 @@ function renderSteps() {
   $("step-count").textContent=steps.length;
   generalEditor.render();updateSummary();
 }
-function addStep(){generalEditor.add($("algorithm").value);$("step-count").textContent=steps.length;updateSummary();}
+function addStep(){workbench.openLibrary();}
 async function submit(mode) {
   if (!active || !input) return;
   const error=generalEditor.validate();if(error)throw Error(error);
@@ -854,12 +856,11 @@ const statusText = {
 async function pollJobs(initial = false) {
   const list = await api("jobs");
   jobs = list;
+  workbench.jobsChanged();
   updateSources();
   split.updateJobs(list);
   $("job-count").textContent = list.length;
-  $("queue-note").textContent = list.some((j) => j.status === "running")
-    ? "计算进行中 · 预览可继续"
-    : "后台计算，预览可继续";
+  $("queue-note").textContent = list.some((j) => j.status === "running") ? "计算中" : "就绪";
   $("job-list").innerHTML = list.length
     ? list
         .map(
@@ -1045,6 +1046,7 @@ async function submitDialog() {
       algorithms=Object.values(state.modules);
       updateAlgorithms();
       $("algorithm").value = spec.id;
+      generalEditor.renderLibrary();
       toast("已注册 " + spec.name);
     } else if (fileBrowser.mode === "output") {
       $("output-dir").value = fileBrowser.path;
@@ -1061,7 +1063,7 @@ async function submitDialog() {
       toast("项目已保存");
     } else if (fileBrowser.mode === "load") {
       if (!fileBrowser.selected.length) throw Error("请选择项目 JSON 文件");
-      const data = await api("project/load", { path: fileBrowser.selected[0] });
+      const data = await api("project/load", { path: fileBrowser.selected[0], migrate:true });
       stopPlay();
       pendingSeek = null;
       sourceGeneration++;
@@ -1122,7 +1124,7 @@ async function submitDialog() {
       }
       await restoreProjectOptions(data.view);
       changed();
-      toast("项目已恢复");
+      if(data.view.migration){$("project-title").textContent=data.state.project_path.split(/[\\/]/).pop();toast("旧项目已另存迁移副本；原文件保持完整");workbench.showMigration(data.view.migration);}else toast("项目已恢复");
     }
     $("file-dialog").close();
   } finally {
@@ -1132,12 +1134,13 @@ async function submitDialog() {
 function projectView() {
   stashView();
   return {
+    workbench_schema:2,
     web_module_contract:3,
     analysis_mode:$("analysis-mode").value,
     split_mode:split.serialize(),
     web_job_name:$("job-name").value,
     web_sequence_context:generalSequenceContext,
-    web_sequence_result:resultOwner==="sequence"&&sequenceResults.id?{id:sequenceResults.id,source:sequenceResults.source,index:sequenceResults.index,x:$("sequence-x").value,channel:$("sequence-channel").value}:null,
+    web_sequence_result:resultOwner==="sequence"&&sequenceResults.id?{id:sequenceResults.id,source:sequenceResults.source,index:sequenceResults.index,side_output:sequenceResults.sideOutput,plot_axis:$("sequence-plot-axis").value,series:$("sequence-series").value,x:$("sequence-x").value,channel:$("sequence-channel").value}:null,
     web_selected_module:generalEditor.selected?.id||null,
     web_docks:layout.serialize(),
     web_preview:{schema:1,view:$("viewers").dataset.mode},
@@ -1166,7 +1169,7 @@ async function restoreProjectOptions(view) {
   generalEditor.selectedId=view.web_selected_module||null;
   generalSequenceContext=view.web_sequence_context||null;
   $("job-name").value=view.web_job_name||"";
-  await setAnalysisMode(view.analysis_mode==="split_correlation"?"split_correlation":"general");
+  await setAnalysisMode(view.analysis_mode);
   if (["current", "all", "range"].includes(view.web_scope))
     $("scope").value = view.web_scope;
   $("range-fields").hidden = $("scope").value !== "range";
@@ -1186,23 +1189,29 @@ async function restoreProjectOptions(view) {
     try{await split.loadResult(view.split_mode.resultId,false);}catch(error){toast(`历史结果未能恢复：${error.message}；原始数据仍可预览`,true);}
   }
   if(active&&view.web_sequence_result&&(sequenceResults.id!==view.web_sequence_result.id||resultOwner!=="sequence")){
-    try{const saved=view.web_sequence_result;$("sequence-x").value=saved.x||"samples";$("sequence-channel").value=saved.channel||"0";await sequenceResults.load(saved.id,saved.source||0);sequenceResults.index=saved.index||0;await sequenceResults.show();}catch(error){toast(`模块结果未能恢复：${error.message}；可从处理结果列表重开`,true);}
+    try{const saved=view.web_sequence_result;$("sequence-x").value=saved.x||"samples";$("sequence-channel").value=saved.channel||"0";$("sequence-plot-axis").value=saved.plot_axis||"sequence";await sequenceResults.load(saved.id,saved.source||0,saved.side_output||null);sequenceResults.index=saved.index||0;$("sequence-channel").value=saved.channel||"0";await sequenceResults.show();$("sequence-series").value=saved.series||"0";if(sequenceResults.plotData)sequenceResults.plot(sequenceResults.plotData);}catch(error){toast(`模块结果未能恢复：${error.message}；可从处理结果列表重开`,true);}
   }
   const previewMode=view.web_preview?.view||({both:"compare",data:"input",result:"result"}[view.split_mode?.layout]);
   if(["input","compare","result"].includes(previewMode))setMode(previewMode);
-  migrateGeneralFlow(view);
+  await migrateGeneralFlow(view);
   generalEditor.render();
   updateSummary();
 }
-function migrateGeneralFlow(view){
-  if(view.web_module_contract===3||!active)return;
+async function migrateGeneralFlow(view){
+  if(view.workbench_schema>=2)return;
+  if(view.web_module_contract!==3&&!active)return;
+  if(view.web_module_contract!==3){
   if(!steps.some(n=>n.algorithm==="time_crop")){const time=moduleNode(state.modules.time_crop,active),range=view.web_range,ctx=view.web_sequence_context?.config;
     if(ctx)Object.assign(time.parameters,{first:(ctx.start||0)+1,last:ctx.end||null});
     else if(view.web_scope==="range"&&range){if(active.meta.kind==="video"&&!active.meta.frame_indexed)Object.assign(time.parameters,{unit:"seconds",start:Number(range[0]),end:Number(range[1])});else Object.assign(time.parameters,{first:Number(range[0]),last:Number(range[1])-1});}
     steps.unshift(time);
   }
   const q=view.web_roi;if(q&&!steps.some(n=>n.algorithm==="spatial_roi")){const roi=moduleNode(state.modules.spatial_roi,active);Object.assign(roi.parameters,q);steps.push(roi);}
-  scene.roi=null;generalROI=null;$("scope").value="all";view.web_module_contract=3;renderSteps();toast("旧配置已迁移：时间范围在起点，原输出 ROI 保留在链末；请检查模块形状与范围。");
+  scene.roi=null;generalROI=null;$("scope").value="all";view.web_module_contract=3;
+  }
+  const migrated=await api("modules/migrate",{steps});
+  steps=migrated.nodes;view.steps=structuredClone(steps);view.workbench_schema=2;
+  renderSteps();if(migrated.report.length)toast("旧流程草稿已迁移：ROI、统计和关联已拆分，原保存项目不变。");
 }
 let draftTimer,
   restoringDraft = false,
@@ -1305,7 +1314,7 @@ $("demo").onclick = safe(async () => {
     b.textContent = "体验示例数据 →";
   }
 });
-$("add-step").onclick = safe(addStep);
+$("add-step").onclick = ()=>workbench.openLibrary();
 $("fit").onclick = () => fit();
 $("actual").onclick = () => {
   const viewer=visibleViewer(),canvas=viewer.canvas,target=viewer===resultViewer&&resultOwner!=="general"?resultScene:scene;
@@ -1543,6 +1552,7 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+    if(!axisEditing){e.preventDefault();generalEditor.undo(e.shiftKey);return;}
     if(splitActive()&&!axisEditing)return;
     e.preventDefault();
     $(e.shiftKey ? "roi-redo" : "roi-undo").click();

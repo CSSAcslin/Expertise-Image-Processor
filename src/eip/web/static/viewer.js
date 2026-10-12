@@ -28,6 +28,7 @@ export class Viewer {
     );
     canvas.addEventListener("pointerdown", (e) => {
       if (!this.snapshot || (e.button !== 0 && e.button !== 1)) return;
+      if(scene.tool==="point"&&e.button===0){const p=this.native(this.point(e));if(p.x>=0&&p.y>=0&&p.x<scene.width&&p.y<scene.height){scene.annotation={kind:"point",x:Math.floor(p.x),y:Math.floor(p.y)};callbacks.geometry?.(scene.annotation);callbacks.redraw(this);}return;}
       canvas.setPointerCapture(e.pointerId);
       const point = this.point(e);
       this.drag = {
@@ -37,11 +38,13 @@ export class Viewer {
         y: scene.panY,
         initialROI: structuredClone(scene.roi),
         action:
+          scene.tool === "line" && !e.altKey && e.button === 0 ? "line" :
           scene.tool === "roi" && !e.altKey && e.button === 0
             ? hitROI(scene.roi, this.native(point), 7 / this.scale()) ||
               "create"
             : "pan",
       };
+      if(this.drag.action==="line"){const p=this.drag.native;scene.annotation={kind:"line",x0:p.x,y0:p.y,x1:p.x,y1:p.y};}
       if (this.drag.action === "create") {
         const n = this.drag.native;
         if (n.x < 0 || n.y < 0 || n.x > scene.width || n.y > scene.height) {
@@ -56,7 +59,8 @@ export class Viewer {
         n = this.native(p);
       if (this.drag) {
         const drag = this.drag;
-        if (drag.action === "create")
+        if(drag.action==="line"){scene.annotation={kind:"line",x0:drag.native.x,y0:drag.native.y,x1:Math.max(0,Math.min(scene.width-1,n.x)),y1:Math.max(0,Math.min(scene.height-1,n.y))};}
+        else if (drag.action === "create")
           scene.roi = createROI(drag.native, n, scene.width, scene.height);
         else if (drag.action === "move")
           scene.roi = moveROI(
@@ -105,7 +109,7 @@ export class Viewer {
       if (this.drag && this.drag.action !== "pan") {
         if (this.drag.action === "create" && !scene.roi)
           scene.roi = this.drag.initialROI;
-        callbacks.roi(scene.roi);
+        if(this.drag.action==="line")callbacks.geometry?.(scene.annotation);else callbacks.roi(scene.roi);
       }
       this.drag = null;
     });
@@ -180,6 +184,7 @@ export class Viewer {
       snap.shape[1],
       snap.shape[0],
     );
+    if(scene.annotation){const a=scene.annotation;ctx.strokeStyle="#e2c58b";ctx.fillStyle="#e2c58b";ctx.lineWidth=1.5/s;ctx.beginPath();if(a.kind==="point"){ctx.moveTo(a.x-8/s,a.y);ctx.lineTo(a.x+8/s,a.y);ctx.moveTo(a.x,a.y-8/s);ctx.lineTo(a.x,a.y+8/s);ctx.stroke();ctx.beginPath();ctx.arc(a.x,a.y,3/s,0,Math.PI*2);ctx.stroke();}else{ctx.moveTo(a.x0,a.y0);ctx.lineTo(a.x1,a.y1);ctx.stroke();for(const p of[{x:a.x0,y:a.y0},{x:a.x1,y:a.y1}])ctx.fillRect(p.x-3/s,p.y-3/s,6/s,6/s);}}
     if (scene.roi) {
       const q = scene.roi;
       ctx.strokeStyle = "#8ae6ce";
