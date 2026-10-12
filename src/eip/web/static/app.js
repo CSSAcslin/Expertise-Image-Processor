@@ -267,7 +267,7 @@ async function setAnalysisMode(mode) {
 function visibleViewer() {
   return $("viewers").dataset.mode === "result" ? resultViewer : originalViewer;
 }
-function updateZoomValue(){const zoom=visibleViewer()===resultViewer?plotZoom($("split-curve")):null;$("zoom-value").textContent=`${Math.round((zoom??visibleViewer().scale())*100)||100}%`;}
+function updateZoomValue(){const host=$("split-curve"),zoom=visibleViewer()===resultViewer?plotZoom(host):null,yZoom=zoom==null?null:plotZoom(host,"y");$("zoom-value").textContent=yZoom!=null&&Math.abs(yZoom-1)>1e-6?`X ${Math.round(zoom*100)}% · Y ${Math.round(yZoom*100)}%`:`${Math.round((zoom??visibleViewer().scale())*100)||100}%`;}
 $("split-curve").addEventListener("plotviewchange",updateZoomValue);
 function fit(viewer=visibleViewer()) {
   if(viewer===resultViewer&&fitPlot($("split-curve")))return;

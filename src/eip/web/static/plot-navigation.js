@@ -1,4 +1,4 @@
-// Display-only horizontal navigation, shared by all one-dimensional result plots.
+// Display-only axis navigation, shared by all one-dimensional result plots.
 const instances=new WeakMap(),clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
 // Keep adjacent tick labels distinct when zooming into a narrow interval.
 export const plotTick=(value,span)=>Number(value).toPrecision(clamp(Math.ceil(Math.log10(Math.max(Math.abs(value),1)/span))+2,4,15));
@@ -7,13 +7,13 @@ export const plotNavigation=host=>{
  return instances.get(host);
 };
 export const fitPlot=host=>{const nav=instances.get(host);if(!nav?.visible)return false;nav.fit();return true;};
-export const plotZoom=host=>{const nav=instances.get(host);return nav?.visible?(nav.full[1]-nav.full[0])/(nav.range[1]-nav.range[0]):null;};
+export const plotZoom=(host,axis="x")=>{const nav=instances.get(host);if(!nav?.visible)return null;const full=axis==="y"?nav.yFull:nav.full,range=axis==="y"?nav.yRange:nav.range;return (full[1]-full[0])/(range[1]-range[0]);};
 
 class PlotNavigation{
  constructor(host){
   this.host=host;
   host.classList.add("interactive-plot");
-  host.title="滚轮缩放横轴 · 左键拖动左右浏览 · 双击恢复全范围";
+  host.title="绘图区滚轮缩放横轴 · 纵轴刻度区滚轮缩放纵轴 · 左键拖动左右浏览 · 双击恢复全范围";
   host.addEventListener("wheel",e=>this.wheel(e),{passive:false});
   host.addEventListener("pointerdown",e=>{
    if(e.button!==0||!this.visible)return;
@@ -25,6 +25,7 @@ class PlotNavigation{
   host.addEventListener("pointermove",e=>{
    if(!this.visible)return;
    this.pointer={clientX:e.clientX,clientY:e.clientY};
+   const point=this.point(e);host.classList.toggle("plot-axis-y",!!point&&this.onYAxis(point));
    if(this.drag?.id===e.pointerId){
     const p=this.point(e);if(!p)return;
     this.drag.moved ||= Math.abs(e.clientX-this.drag.clientX)>3;
@@ -36,26 +37,31 @@ class PlotNavigation{
   host.addEventListener("click",e=>{if(this.suppressClick){this.suppressClick=false;e.preventDefault();e.stopImmediatePropagation();}},true);
   host.addEventListener("click",e=>{if(this.visible)this.select?.(e);});
   host.addEventListener("dblclick",e=>{if(this.visible){e.preventDefault();e.stopPropagation();this.fit();}});
-  host.addEventListener("pointerleave",()=>{if(!this.drag)this.pointer=null;});
+  host.addEventListener("pointerleave",()=>{host.classList.remove("plot-axis-y");if(!this.drag)this.pointer=null;});
  }
  get visible(){return !this.host.hidden&&!!this.host.querySelector("svg")&&!!this.box;}
- configure(key,full,redraw){
+ configure(key,full,redraw,vertical=[0,1]){
+  if(this.key!==key){this.yRange=[...vertical];this.yZoomed=false;}
+  else if(!this.yZoomed)this.yRange=[...vertical];
   if(this.key!==key||this.full?.some((v,i)=>v!==full[i])){
    this.range=[...full];this.pointer=null;this.drag=null;this.host.classList.remove("plot-dragging");
   }
-  this.key=key;this.full=full;this.redraw=redraw;
+  this.key=key;this.full=full;this.yFull=vertical;this.redraw=redraw;
   return this.range;
  }
  painted(box,hover,select){
   this.box=box;this.hover=hover;this.select=select;
   const svg=this.host.querySelector("svg");
   svg.dataset.xMin=this.range[0];svg.dataset.xMax=this.range[1];
+  svg.dataset.yMin=this.yRange[0];svg.dataset.yMax=this.yRange[1];
   if(this.pointer)this.hover?.(this.pointer);
   this.host.dispatchEvent(new Event("plotviewchange"));
  }
  point(e){const matrix=this.host.querySelector("svg")?.getScreenCTM();return matrix?new DOMPoint(e.clientX,e.clientY).matrixTransform(matrix.inverse()):null;}
- move(min,span){
-  min=clamp(min,this.full[0],this.full[1]-span);this.range=[min,min+span];
+ move(min,span,axis="x"){
+  const full=axis==="y"?this.yFull:this.full;
+  min=clamp(min,full[0],full[1]-span);
+  if(axis==="y"){this.yRange=[min,min+span];this.yZoomed=span<(full[1]-full[0])*(1-1e-12);}else this.range=[min,min+span];
   if(!this.frame)this.frame=requestAnimationFrame(()=>{this.frame=null;if(this.visible)this.redraw();});
  }
  wheel(e){
@@ -63,11 +69,13 @@ class PlotNavigation{
   const p=this.point(e);if(!p)return;
   e.preventDefault();if(this.drag)return;
   const delta=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?this.host.clientHeight:1);
-  const fullSpan=this.full[1]-this.full[0],oldSpan=this.range[1]-this.range[0];
+  const axis=this.onYAxis(p)?"y":"x",full=axis==="y"?this.yFull:this.full,range=axis==="y"?this.yRange:this.range;
+  const fullSpan=full[1]-full[0],oldSpan=range[1]-range[0];
   const span=clamp(oldSpan*Math.exp(clamp(delta,-1000,1000)*.0015),fullSpan/1000,fullSpan);
-  const anchor=clamp((p.x-this.box.left)/(this.box.right-this.box.left),0,1);
+  const anchor=clamp(axis==="y"?(this.box.bottom-p.y)/(this.box.bottom-this.box.top):(p.x-this.box.left)/(this.box.right-this.box.left),0,1);
   this.pointer={clientX:e.clientX,clientY:e.clientY};
-  this.move(this.range[0]+anchor*(oldSpan-span),span);
+  this.move(range[0]+anchor*(oldSpan-span),span,axis);
  }
- fit(){this.pointer=null;this.move(this.full[0],this.full[1]-this.full[0]);}
+ onYAxis(p){return p.x>=0&&p.x<=this.box.left&&p.y>=this.box.top&&p.y<=this.box.bottom;}
+ fit(){this.pointer=null;this.yRange=[...this.yFull];this.yZoomed=false;this.move(this.full[0],this.full[1]-this.full[0]);}
 }

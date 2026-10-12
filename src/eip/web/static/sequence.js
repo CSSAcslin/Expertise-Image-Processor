@@ -53,11 +53,12 @@ export class SequenceResults{
   host.dataset.plotOwner="sequence";
   const navigation=plotNavigation(host),key=JSON.stringify(["sequence",this.id,this.source,this.sideOutput,this.plotRevision,c.axes,component,physical]);
   // Index changes retain the view; data/port/axis changes start with the full domain.
-  [xmin,xmax]=navigation.configure(key,[xmin,xmax],()=>{if(this.plotData)this.plot(this.plotData);});
+  [xmin,xmax]=navigation.configure(key,[xmin,xmax],()=>{if(this.plotData)this.plot(this.plotData);},[ymin,ymax]);
+  [ymin,ymax]=navigation.yRange;
   const X=x=>L+(x-xmin)/(xmax-xmin)*(W-L-R),Y=y=>H-B-(y-ymin)/(ymax-ymin)*(H-T-B);
   let svg=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${histogram?"强度—频数直方图":esc(xLabel)+"数值曲线"}"><rect width="${W}" height="${H}" fill="#101923"/>`;
-  const ticks=[...new Set(Array.from({length:4},(_,k)=>histogram?Math.round(ymax*k/3):ymin+(ymax-ymin)*k/3))];
-  for(const y of ticks)svg+=`<path d="M${L},${Y(y)}H${W-R}" stroke="#2a394a"/><text x="${L-7}" y="${Y(y)+4}" text-anchor="end" fill="#a5bad0" font-size="10">${histogram?y:Number(y).toPrecision(4)}</text>`;
+  const ticks=[...new Set(Array.from({length:4},(_,k)=>{const v=ymin+(ymax-ymin)*k/3;return histogram&&ymax-ymin>=3?Math.round(v):v;}))].filter(y=>y>=ymin&&y<=ymax);
+  for(const y of ticks)svg+=`<path d="M${L},${Y(y)}H${W-R}" stroke="#2a394a"/><text class="plot-y-tick" x="${L-7}" y="${Y(y)+4}" text-anchor="end" fill="#a5bad0" font-size="10">${histogram&&Number.isInteger(y)?y:plotTick(y,ymax-ymin)}</text>`;
   for(let k=0;k<4;k++){const x=xmin+(xmax-xmin)*k/3;svg+=`<text class="plot-x-tick" x="${X(x)}" y="${H-B+19}" text-anchor="middle" fill="#a5bad0" font-size="10">${plotTick(x,xmax-xmin)}</text>`;}
   svg+=`<defs><clipPath id="sequence-plot-clip"><rect x="${L}" y="${T}" width="${W-L-R}" height="${H-T-B}"/></clipPath></defs>`;
   if(histogram)svg+=`<text x="${L}" y="14" fill="#bdd0e1" font-size="11">频数</text>`;

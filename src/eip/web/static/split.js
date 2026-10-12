@@ -34,14 +34,15 @@ export class SplitController{
     let lo=Math.min(...bounds),hi=Math.max(...bounds);if(hi-lo<1e-10){lo-=.05;hi+=.05;}else{const pad=(hi-lo)*.12;lo-=pad;hi+=pad;}
     let xmin=Math.min(...xs),xmax=Math.max(...xs);if(xmin===xmax){xmin-=1;xmax+=1;}
     const navigation=plotNavigation($("split-curve"));
-    [xmin,xmax]=navigation.configure(JSON.stringify(["split",this.resultId,time,factor]),[xmin,xmax],()=>this.showCurve(true));
+    [xmin,xmax]=navigation.configure(JSON.stringify(["split",this.resultId,time,factor]),[xmin,xmax],()=>this.showCurve(true),[lo,hi]);
+    [lo,hi]=navigation.yRange;
     const X=x=>72+(x-xmin)/(xmax-xmin)*620,Y=y=>350-(y-lo)/(hi-lo)*306;
     const colors=["#87dfc5","#e6b386","#9db4f3","#dc9dd9","#82cadd"];
     const parts=['<svg viewBox="0 0 720 425" role="img" aria-label="g² 随正负延迟变化曲线">'];
     for(let i=0;i<=5;i++) {const x=xmin+(xmax-xmin)*i/5;parts.push(`<line x1="${X(x)}" y1="44" x2="${X(x)}" y2="350" stroke="#25384a"/><text class="plot-x-tick" x="${X(x)}" y="372" text-anchor="middle" fill="#9ab0c8" font-size="11">${plotTick(x,xmax-xmin)}</text>`);}
-    for(let i=0;i<=4;i++) {const y=lo+(hi-lo)*i/4;parts.push(`<line x1="72" y1="${Y(y)}" x2="692" y2="${Y(y)}" stroke="#25384a"/><text x="63" y="${Y(y)+4}" text-anchor="end" fill="#9ab0c8" font-size="11">${esc(number(y))}</text>`);}
+    for(let i=0;i<=4;i++) {const y=lo+(hi-lo)*i/4;parts.push(`<line x1="72" y1="${Y(y)}" x2="692" y2="${Y(y)}" stroke="#25384a"/><text class="plot-y-tick" x="63" y="${Y(y)+4}" text-anchor="end" fill="#9ab0c8" font-size="11">${plotTick(y,hi-lo)}</text>`);}
     if(xmin<=0&&xmax>=0) parts.push(`<line x1="${X(0)}" y1="44" x2="${X(0)}" y2="350" stroke="#7597ad" stroke-dasharray="4 5"/>`);
-    if(reference!=null)parts.push(`<line x1="72" y1="${Y(reference)}" x2="692" y2="${Y(reference)}" stroke="#7597ad" stroke-dasharray="4 5"/>`);
+    if(reference!=null&&reference>=lo&&reference<=hi)parts.push(`<line x1="72" y1="${Y(reference)}" x2="692" y2="${Y(reference)}" stroke="#7597ad" stroke-dasharray="4 5"/>`);
     for(const [i,c] of curves.entries()) {
       let path="",connected=false;
       c.g2.forEach((v,j)=>{if(v==null){connected=false;return;}path+=`${connected?"L":"M"}${X(xs[j])},${Y(v)} `;connected=true;});
