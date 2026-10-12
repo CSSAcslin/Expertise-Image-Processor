@@ -1,4 +1,5 @@
 import { api,download } from "./api.js";
+import { plotNavigation, plotTick } from "./plot-navigation.js";
 const $=id=>document.getElementById(id),esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]),format=v=>v==null?"未知":Number(v).toPrecision(7),extrema=values=>values.reduce((b,v)=>v==null||!Number.isFinite(v)?b:[Math.min(b[0],v),Math.max(b[1],v)],[Infinity,-Infinity]);
 export class SequenceResults{
  constructor(bridge){this.bridge=bridge;this.generation=0;this.sideOutput=null;this.resize=new ResizeObserver(()=>{if(this.plotData&&!$("split-curve").hidden)this.plot(this.plotData);});this.resize.observe($("split-curve"));const wrap=fn=>async()=>{try{await fn();}catch(e){this.stop();bridge.report(e.message,true);}};
@@ -7,7 +8,7 @@ export class SequenceResults{
   const fields=document.createElement("div");fields.className="two-fields";fields.innerHTML='<label>信号视图<select id="sequence-plot-axis"><option value="sequence">沿样本 / 延迟轴</option><option value="component">当前截面 / 分量</option></select></label><label>显示分量<select id="sequence-series"></select></label>';$("sequence-x").parentElement.parentElement.after(fields);$("sequence-plot-axis").onchange=wrap(()=>this.show());$("sequence-series").onchange=()=>{if(this.plotData)this.plot(this.plotData);};
  }
  stop(){this.playing=false;clearTimeout(this.timer);$("sequence-play").textContent="播放结果";}
- hide(){this.stop();this.generation++;this.plotData=null;$("sequence-controls").hidden=true;$("sequence-nav").hidden=true;}
+ hide(){this.stop();this.generation++;this.plotRevision=(this.plotRevision||0)+1;this.plotData=null;$("sequence-controls").hidden=true;$("sequence-nav").hidden=true;}
  get item(){const parent=this.meta?.results[this.source];return this.sideOutput?parent?.side_outputs?.find(s=>s.id===this.sideOutput):parent;}
  preferredSideOutput(){const parent=this.meta.results[this.source],last=parent.modules?.nodes?.filter(n=>n.enabled).at(-1);return last?.algorithm==="distribution"?(parent.side_outputs||[]).find(s=>s.node_id===last.id&&s.contract?.semantic==="distribution"&&s.status==="succeeded")?.id||null:null;}
  artifactOptions(){const parent=this.meta.results[this.source];$("result-artifact").innerHTML=`<option value="">流程主输出 · ${esc(parent.contract.full_axes)}</option>`+(parent.side_outputs||[]).map(s=>`<option value="${esc(s.id)}" ${s.status!=="succeeded"?"disabled":""}>${esc(s.name||s.port||s.id)}${s.temporary?" · 临时":""}${s.status!=="succeeded"?" · "+esc(s.status):""}</option>`).join("");$("result-artifact").value=this.sideOutput||"";}
@@ -49,13 +50,19 @@ export class SequenceResults{
   if(!Number.isFinite(ymin)){ymin=0;ymax=1;}if(!Number.isFinite(xmin)){xmin=0;xmax=1;}if(xmin===xmax){xmin-=.5;xmax+=.5;}
   if(histogram){ymin=0;ymax=Math.max(1,Math.ceil(ymax*1.08));}else if(ymin===ymax){const p=Math.max(1e-6,Math.abs(ymin)*.02);ymin-=p;ymax+=p;}
   const host=$("split-curve"),W=Math.max(250,host.clientWidth-10),H=Math.max(150,host.clientHeight-10),L=W<400?52:64,R=18,T=25,B=46;
+  host.dataset.plotOwner="sequence";
+  const navigation=plotNavigation(host),key=JSON.stringify(["sequence",this.id,this.source,this.sideOutput,this.plotRevision,c.axes,component,physical]);
+  // Index changes retain the view; data/port/axis changes start with the full domain.
+  [xmin,xmax]=navigation.configure(key,[xmin,xmax],()=>{if(this.plotData)this.plot(this.plotData);});
   const X=x=>L+(x-xmin)/(xmax-xmin)*(W-L-R),Y=y=>H-B-(y-ymin)/(ymax-ymin)*(H-T-B);
   let svg=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${histogram?"强度—频数直方图":esc(xLabel)+"数值曲线"}"><rect width="${W}" height="${H}" fill="#101923"/>`;
   const ticks=[...new Set(Array.from({length:4},(_,k)=>histogram?Math.round(ymax*k/3):ymin+(ymax-ymin)*k/3))];
   for(const y of ticks)svg+=`<path d="M${L},${Y(y)}H${W-R}" stroke="#2a394a"/><text x="${L-7}" y="${Y(y)+4}" text-anchor="end" fill="#a5bad0" font-size="10">${histogram?y:Number(y).toPrecision(4)}</text>`;
-  for(let k=0;k<4;k++){const x=xmin+(xmax-xmin)*k/3;svg+=`<text x="${X(x)}" y="${H-B+19}" text-anchor="middle" fill="#a5bad0" font-size="10">${Number(x).toPrecision(4)}</text>`;}
+  for(let k=0;k<4;k++){const x=xmin+(xmax-xmin)*k/3;svg+=`<text class="plot-x-tick" x="${X(x)}" y="${H-B+19}" text-anchor="middle" fill="#a5bad0" font-size="10">${plotTick(x,xmax-xmin)}</text>`;}
+  svg+=`<defs><clipPath id="sequence-plot-clip"><rect x="${L}" y="${T}" width="${W-L-R}" height="${H-T-B}"/></clipPath></defs>`;
+  if(histogram)svg+=`<text x="${L}" y="14" fill="#bdd0e1" font-size="11">频数</text>`;
+  svg+='<g clip-path="url(#sequence-plot-clip)">';
   if(histogram){
-   svg+=`<text x="${L}" y="14" fill="#bdd0e1" font-size="11">频数</text>`;
    for(let i=0;i<xs.length;i++){
     const value=series[0][i];if(value==null||!Number.isFinite(value))continue;
     const bin=columnIndices[i],left=edges?.[bin]??bin,right=edges?.[bin+1]??bin+1,width=X(right)-X(left),gap=Math.min(1,width*.12);
@@ -68,9 +75,9 @@ export class SequenceResults{
     svg+=`<path d="${path}" fill="none" stroke="${colors[k%3]}" stroke-width="1.7"/>`;
    });
   }
-  svg+=`<text x="${(L+W-R)/2}" y="${H-6}" text-anchor="middle" fill="#bdd0e1" font-size="11">${esc(xLabel)}</text></svg>`;host.hidden=false;host.innerHTML=svg;this.plotData=data;
-  const inspect=i=>{$("sequence-readout").textContent=readIndex(i)+(data.downsampled?" · 显示抽样；导出包含完整数据":"")+(data.temporary?" · 临时试算":"");};inspect(0);
-  host.onpointermove=e=>{const r=host.querySelector("svg").getBoundingClientRect(),v=xmin+((e.clientX-r.left)/r.width*W-L)/(W-L-R)*(xmax-xmin);let nearest=0;for(let i=1;i<xs.length;i++)if(Math.abs(xs[i]-v)<Math.abs(xs[nearest]-v))nearest=i;inspect(nearest);};
+  svg+=`</g><text x="${(L+W-R)/2}" y="${H-6}" text-anchor="middle" fill="#bdd0e1" font-size="11">${esc(xLabel)}</text></svg>`;host.hidden=false;host.innerHTML=svg;this.plotData=data;
+  const inspect=i=>{if(xs.length)$("sequence-readout").textContent=readIndex(i)+(data.downsampled?" · 显示抽样；导出包含完整数据":"")+(data.temporary?" · 临时试算":"");};inspect(Math.max(0,xs.findIndex(x=>x>=xmin&&x<=xmax)));
+  navigation.painted({left:L,right:W-R,top:T,bottom:H-B},e=>{const p=navigation.point(e);if(!p)return;const v=xmin+(p.x-L)/(W-L-R)*(xmax-xmin);let nearest=0;for(let i=1;i<xs.length;i++)if(Math.abs(xs[i]-v)<Math.abs(xs[nearest]-v))nearest=i;inspect(nearest);});
  }
  async play(){if(this.playing){this.stop();return;}if(this.item.contract.sequence_axis!=="T")return;this.playing=true;$("sequence-play").textContent="暂停";const next=async()=>{if(!this.playing)return;if(this.index+1>=this.item.contract.length){this.stop();return;}this.index++;try{await this.show();}catch(e){this.stop();this.bridge.report(e.message,true);return;}if(this.playing)this.timer=setTimeout(next,90);};await next();}
 }

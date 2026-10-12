@@ -20,3 +20,4 @@ dialog{border:1px solid #465b70;border-radius:8px;background:#1b2532;color:#e3ec
 .inspection-state{display:flex;align-items:center;gap:6px;padding:6px 10px;background:#203b40;color:#b8e0d4;font-size:11px}.inspection-state span{flex:1}.inspection-state button{font-size:11px;padding:4px 6px}.flow-type{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.run-actions #run-current{padding:9px 10px}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
 #toast{z-index:1200;bottom:113px;pointer-events:none} .node-menu[open] summary{color:var(--accent)}
+.interactive-plot{touch-action:none;user-select:none;cursor:grab}.interactive-plot.plot-dragging{cursor:grabbing}

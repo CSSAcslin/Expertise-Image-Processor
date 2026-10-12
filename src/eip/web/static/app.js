@@ -10,6 +10,7 @@ import { detailHTML, bindRename } from "./job-detail.js";
 import { PreviewEngine } from "./preview.js";
 import { setupWorkbench } from "./workbench.js";
 import { svgIcon } from "./icons.js";
+import { fitPlot, plotZoom } from "./plot-navigation.js";
 
 const $ = (id) => document.getElementById(id);
 const escape = (value) =>
@@ -260,14 +261,16 @@ async function setAnalysisMode(mode) {
 }function redraw(viewer) {
   if(splitActive()&&!axisStage)split.draw();else originalViewer.draw();
   if(resultOwner==="split")split.drawResult();else resultViewer.draw();
-  $("zoom-value").textContent =
-    `${Math.round(visibleViewer().scale() * 100) || 100}%`;
+  updateZoomValue();
   for(const tool of["pan","roi","point"])$("tool-"+tool).classList.toggle("selected",scene.tool===tool);
 }
 function visibleViewer() {
   return $("viewers").dataset.mode === "result" ? resultViewer : originalViewer;
 }
+function updateZoomValue(){const zoom=visibleViewer()===resultViewer?plotZoom($("split-curve")):null;$("zoom-value").textContent=`${Math.round((zoom??visibleViewer().scale())*100)||100}%`;}
+$("split-curve").addEventListener("plotviewchange",updateZoomValue);
 function fit(viewer=visibleViewer()) {
+  if(viewer===resultViewer&&fitPlot($("split-curve")))return;
   if(viewer===resultViewer&&resultOwner!=="split"){resultScene.zoom=1;resultScene.panX=resultScene.panY=0;redraw();return;}
   if(viewer===resultViewer&&resultOwner==="split"){split.fitResult();redraw();return;}
   scene.zoom = 1;
@@ -1346,6 +1349,7 @@ $("demo").onclick = safe(async () => {
 $("add-step").onclick = ()=>workbench.openLibrary();
 $("fit").onclick = () => fit();
 $("actual").onclick = () => {
+  if(visibleViewer()===resultViewer&&fitPlot($("split-curve")))return;
   const viewer=visibleViewer(),canvas=viewer.canvas,target=viewer===resultViewer&&resultOwner!=="general"?resultScene:scene;
   if(target===resultScene&&resultOwner==="split")split.resultAutoFit=false;
   target.zoom =
