@@ -1,4 +1,4 @@
-"""Export the implemented v3 module catalogue and its scientific contracts."""
+"""Export the current module catalogue, documentation and scientific contracts."""
 from pathlib import Path
 import json
 import sys
@@ -36,15 +36,26 @@ def literal(value):
 
 def main():
     specs=catalog()
-    if set(specs)!=set(DETAILS):
-        raise RuntimeError('模块目录已变化，请补充新模块的公式与实际形状说明')
-    lines=['# 当前已实现模块清单（代码核对）','',f'目录取自版本 `{__version__}`，新流程契约版本为 `3`。内置 **{len(specs)} 个模块**：6 个基础数值算法、5 个校准 / 配准 / 统计 / 关联模块、5 个空间 / 时间编辑模块；插件另行注册。参数表直接由代码目录生成。','',
+    current={key:spec for key,spec in specs.items() if not spec.get('legacy')}
+    categories={'intermediate':'中间模块 · 数据编辑','algorithm':'算法模块 · 科学计算','modifier':'修饰模块 · 提取与传递'}
+    counts={label:sum(spec.get('category')==key for spec in current.values()) for key,label in categories.items()}
+    lines=['# 当前已实现模块清单（代码核对）','',f'目录取自版本 `{__version__}`，新流程契约版本为 `3`。模块库提供 **{len(current)} 个模块**，另保留 {len(specs)-len(current)} 个旧记录兼容定义；插件另行注册。分类、公式与参数取自统一代码目录。','',
            '完整形状与科学规则见 [MODULE_CONTRACTS_0_6_0.md](MODULE_CONTRACTS_0_6_0.md)；重构前行为保留在 [MODULE_INVENTORY_0_5_2.md](MODULE_INVENTORY_0_5_2.md)。旧结果按旧记录读取，不重新解释。','',
            '## 轴、参数与执行归属','',
-           '- T 为当前时间样本，Q 为有符号延迟，P 为左右双路，Y/X 为空间，C 为明确的 RGB/RGBA 分量。标量与向量保留真实维度。','- 实例：algorithm、id、version、parameters、enabled、target、execution、插件路径与内容哈希。每个实例独立；停用原样通过。','- execution：backend=cpu/auto/gpu（GPU 当前仅关联）；memory_mb=16…4096，默认256；precision=native/float32/float64，默认算法类型。每步工作数组按自身预算校验，重复统计保留数组与缓存合计受流程预算约束。标签禁止浮点精度转换。','- 运行范围只在起点 time_crop；ROI 只在显式 spatial_roi 节点，不在任务末尾暗裁剪。输出目录、名称、试算与运行按钮属于工作台。','- 每步输入输出轴、形状、样本数、数据含义、坐标原点及上游指纹随记录保存；未知时间 / 采集帧保持未知。','- 通用与分幅共用 SequenceEngine 与结果类型，仅预置不同流程。编辑中的不完整连接不影响原始数据预览。','- 默认配准按当前来源宽高初始化两半；关联按来源帧数给初始 W/τ。之后的裁剪会改变样本数，需据连接提示调整关联参数，不会静默改小。','']
+           '- T 为当前时间样本，Q 为有符号延迟，P 为左右双路，Y/X 为空间，C 为明确的 RGB/RGBA 分量；R 为剖面位置。分布使用单独的箱轴。标量与向量保留真实维度。','- 实例：algorithm、id、version、parameters、enabled、target、execution、插件路径与内容哈希。每个实例独立；停用原样通过。','- execution：backend=cpu/auto/gpu（GPU 当前仅关联）；memory_mb=16…4096，默认256；precision=native/float32/float64，默认算法类型。每步工作数组按自身预算校验，重复统计保留数组与缓存合计受流程预算约束。标签禁止浮点精度转换。','- 运行范围只在起点 time_crop；ROI 由 roi_crop 裁剪，区域运算由 region_reduce 完成。输出目录、名称、试算与运行按钮属于工作台。','- 每步输入输出轴、形状、样本数、数据含义、坐标原点及上游指纹随记录保存；未知时间 / 采集帧保持未知。','- 通用与分幅共用 SequenceEngine 与结果类型，仅预置不同流程。编辑中的不完整连接不影响原始数据预览。','- 默认配准按当前来源宽高初始化两半；关联按来源帧数给初始 W/τ。之后的裁剪会改变样本数，需据连接提示调整关联参数，不会静默改小。','']
+    lines += ['## 三类模块','', '| 类别 | 数量 |','|---|---|',*[f'| {label} | {count} |' for label,count in counts.items()], '']
     for key,spec in specs.items():
-        formula,shape,limits=DETAILS[key]
-        lines += [f'## {spec["name"]} `{key}`','',f'- 版本：`{spec["version"]}`；执行范围：`{spec["execution_scope"]}`。',f'- 公式 / 算法：{formula}',f'- 实际输入输出：{shape}',f'- 边界：{limits}','', '| 参数 | 类型 | 静态默认值 | 范围 / 选项 |','|---|---|---|---|']
+        documentation=spec.get('documentation',{})
+        definition=spec.get('formula',{})
+        if key in DETAILS:
+            formula,shape,limits=DETAILS[key]
+        else:
+            formula=definition.get('expression')
+            shape=f"{documentation.get('input','以实例编译后的输入契约为准')} → {documentation.get('output','以实例编译后的输出契约为准')}"
+            limits=definition.get('boundary','')
+        if not formula or not limits:
+            raise RuntimeError(f'{key} 缺少公式或边界说明')
+        lines += [f'## {spec["name"]} `{key}`','',f'- 类别：{categories.get(spec.get("category"),"旧模块")}；{"仅用于旧记录兼容；新界面不提供。" if spec.get("legacy") else "可从模块库添加。"}',f'- 版本：`{spec["version"]}`；执行范围：`{spec["execution_scope"]}`。',f'- 公式 / 算法：{formula}',f'- 实际输入输出：{shape}',f'- 边界：{limits}','', '| 参数 | 类型 | 静态默认值 | 范围 / 选项 |','|---|---|---|---|']
         for p in spec['parameters']:
             bounds=[]
             if p.get('minimum') is not None:bounds.append('≥ '+str(p['minimum']))
