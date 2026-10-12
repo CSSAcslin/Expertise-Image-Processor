@@ -51,7 +51,13 @@ class SplitService:
         entry = self.workbench.get_source(value["source_id"]) if axis else self._source(value)
         if entry["role"]!="input":
             raise ValueError("请选择输入来源")
-        event = self.workbench.preview.request(entry["source"],"module",nodes=value.get("module_prefix",[]),dependencies=value.get("module_dependencies",[]),input_kind=entry.get("result_kind","image"),index=value.get("sample_index",0)) if axis else self._frame(entry,value.get("index",0))
+        if axis:
+            event = self.workbench.module_sample(dict(source_id=entry["id"],steps=value.get("module_prefix",[]),dependencies=value.get("module_dependencies",[]),sample_index=value.get("sample_index",0)))
+            if event["kind"]!="image" or event["contract"]["axes"]!="YX":
+                raise ValueError("配准工具需要单幅灰度矩阵 YX 输入")
+            event["frame"] = event["reference"]
+        else:
+            event = self._frame(entry,value.get("index",0))
         if value.get("geometry"):
             config = GeometryConfig.from_dict(value["geometry"])
         else:

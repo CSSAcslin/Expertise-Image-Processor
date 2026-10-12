@@ -28,6 +28,7 @@ from eip.readers import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 from eip.modes.split_correlation.runner import split_job_entry
 from eip.web.split import SplitService
 from eip.web.records import display_name, automatic_name, saved_split_summary
+from eip.web.inspection import InspectionBroker
 from eip.module_registry import catalog, normalize_nodes, temporal, output_shape, migrate_workbench_nodes
 from eip.module_contracts import compile_flow, source_contract
 from eip.sequence_processing import sequence_job_entry
@@ -166,6 +167,7 @@ class Workbench:
         if restored:
             self.restore_session(restored)
         self.preview = PreviewBroker()
+        self.inspection = InspectionBroker()
         self.split = SplitService(self)
         self.monitor = threading.Thread(target=self._monitor, name="EIP-job-monitor", daemon=True)
         self.monitor.start()
@@ -403,6 +405,42 @@ class Workbench:
         contract = source_contract(entry["meta"],entry.get("result_kind","image"))
         return compile_flow(value.get("steps",[]),contract,center=value.get("center"),single=value.get("single",False),strict=False)
 
+    def _module_nodes(self, steps, dependencies=()):
+        nodes,_,_ = normalize_nodes(steps,check_types=False)
+        following,_,_ = normalize_nodes(dependencies,check_types=False)
+        if following and (following[-1]["algorithm"]!="alignment" or len(nodes)+len(following)>32):
+            raise ValueError("阶段检查的几何依赖只能止于后续配准模块")
+        registered = catalog(self.algorithms.values())
+        if any(n["algorithm"] not in registered or n.get("code_hash")!=registered[n["algorithm"]]["code_hash"] for n in [*nodes,*following]):
+            raise ValueError("请先注册流程中的算法版本")
+        return nodes,following
+
+    def module_sample(self, value):
+        entry = self.get_source(value["source_id"])
+        if entry["role"]!="input":
+            raise ValueError("请选择输入来源")
+        nodes,dependencies = self._module_nodes(value.get("steps",[]),value.get("dependencies",[]))
+        index,channel = value.get("sample_index",0),value.get("channel",0)
+        if type(index) is not int or index<0 or type(channel) is not int or channel<0:
+            raise ValueError("检查样本号与幅面必须为非负整数")
+        identifier = value.get("inspection_id")
+        if identifier is not None and (not isinstance(identifier,str) or not 1<=len(identifier)<=80):
+            raise ValueError("检查标识无效")
+        compile_flow(nodes,source_contract(entry["meta"],entry.get("result_kind","image")),single=True,following_nodes=dependencies)
+        return self.inspection.request(entry["source"],inspection_id=identifier,
+                                       revision=entry["meta"]["revision"],nodes=list(nodes),
+                                       dependencies=list(dependencies),index=index,channel=channel,
+                                       input_kind=entry.get("result_kind","image"))
+
+    def inspect_module(self, value):
+        event = self.module_sample(value)
+        if event["kind"]=="image":
+            pixels = event.pop("pixels")
+            token = self.frames.add(pixels,event["reference"],[0,0],pixels.shape[:2],event.pop("result_kind"))
+            self.frames.annotate(token,color_order=event["contract"].get("color_order","RGB"))
+            event["frame"] = self.frames.render(token,value.get("display"))
+        return event
+
     def submit_sequence(self,value):
         mode = value.get("mode","run")
         if mode not in {"run","trial"}:
@@ -415,13 +453,18 @@ class Workbench:
             raise ValueError("请明确选择输入来源")
         if value.get("selection",{}).get("roi") or value.get("selection",{}).get("mode") in {"range","current"}:
             raise ValueError("新流程的范围 / ROI 只能由时间裁剪与空间 ROI 模块设置")
-        nodes,_,_ = normalize_nodes(value.get("steps",[]),check_types=False)
-        dependencies,_,_ = normalize_nodes(value.get("preview_dependencies",[]),check_types=False)
-        if dependencies and (mode!="trial" or dependencies[-1]["algorithm"]!="alignment" or len(nodes)+len(dependencies)>32):
+        steps = value.get("steps",[])
+        stop_after = value.get("stop_after")
+        boundary = None
+        if stop_after is not None:
+            positions = [i for i,n in enumerate(steps) if isinstance(n,dict) and n.get("id")==stop_after]
+            if len(positions)!=1:
+                raise ValueError("运行终点必须是当前流程中的唯一模块实例")
+            boundary = dict(kind="prefix",stop_after=stop_after,full_step_count=len(steps))
+            steps = steps[:positions[0]+1]
+        nodes,dependencies = self._module_nodes(steps,value.get("preview_dependencies",[]))
+        if dependencies and mode!="trial":
             raise ValueError("阶段检查的几何依赖只能用于试算，并止于后续配准模块")
-        registered = catalog(self.algorithms.values())
-        if any(n["algorithm"] not in registered or n.get("code_hash")!=registered[n["algorithm"]]["code_hash"] for n in [*nodes,*dependencies]):
-            raise ValueError("请先注册流程中的算法版本")
         center = value.get("center")
         sample = value.get("sample_index",0)
         if center is not None and (type(center) is not int or center<0) or type(sample) is not int or sample<0:
@@ -433,6 +476,8 @@ class Workbench:
         payload = json.loads(json.dumps(payload,allow_nan=False))
         payload["input_kinds"] = [e.get("result_kind","image") for e in entries]
         payload["preview_dependencies"] = list(dependencies)
+        if boundary:
+            payload["execution_scope"] = boundary
         job = dict(id=identifier,mode=mode,engine="sequence",contract_version=3,name=name,source_name=entries[0]["meta"]["name"],source_ids=identifiers,source_count=len(entries),status="queued",completed=0,total=None,logs=[],payload=payload,created=time.time(),summary=f"{len(nodes)} 个模块 · {plans[0]['output']['label']}",base_shape=entries[0]["meta"]["shape"][:2])
         self.enqueue(identifier,job)
         return dict(id=identifier,plan=plans[0])
@@ -621,6 +666,8 @@ class Workbench:
     def cancel(self, identifier):
         with self.lock:
             job = self.jobs[identifier]
+            if job["status"] not in {"queued","running","cancelling"}:
+                return
             if identifier in self.pending:
                 self.pending.remove(identifier)
                 job["status"] = "cancelled"
@@ -841,3 +888,4 @@ class Workbench:
                 self.active["results"].cancel_join_thread()
                 self.active["results"].close()
         self.preview.close()
+        self.inspection.close()

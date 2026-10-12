@@ -143,6 +143,14 @@ def create_app(workspace: Path | None = None, restore_session: Path | None = Non
     def module_plan(value: dict):
         return workbench().module_plan(value)
 
+    @app.post("/api/modules/inspect")
+    def module_inspect(value: dict):
+        return workbench().inspect_module(value)
+
+    @app.post("/api/modules/inspect/cancel")
+    def cancel_inspection(value: dict):
+        return dict(cancelled=workbench().inspection.cancel(value.get("inspection_id")))
+
     @app.post("/api/modules/migrate")
     def module_migrate(value: dict):
         from eip.module_registry import migrate_workbench_nodes, normalize_nodes, is_reference

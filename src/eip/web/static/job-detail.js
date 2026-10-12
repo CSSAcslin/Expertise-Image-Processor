@@ -15,6 +15,7 @@ export function detailHTML(job) {
     if(run.curve_count!=null)rows+=row("曲线数量",run.curve_count);
     if(run.result_semantics)rows+=row("结果定义",run.result_semantics==="processed_g2"?"模块后处理的 g²（完整顺序见下方）":"标准 g²");
   } else if(job.engine==="sequence") {
+    if(c.execution_scope?.kind==="prefix")rows+=row("运行终点",`${c.steps?.at(-1)?.name||c.steps?.at(-1)?.algorithm||c.execution_scope.stop_after} · 包含此模块，后序模块未执行`);
     rows+=row("流程契约",`${run.contract_version||3} · 轴、形状、含义逐步校验`)+row("范围 / ROI", "由流程中的时间裁剪和空间 ROI 模块确定")+row("W / τ / 步长单位","关联模块直接上游的编辑后样本；真实时间差见样本映射 / CSV")+row("输出形状",(run.results||[]).map((r,i)=>`${i+1}. ${r.contract?.label||r.error||r.status} · ${r.contract?.dtype||""} · ${r.contract?.meaning||""}`).join("\n")||"待执行确定");
   } else {
     rows+=row("处理范围",JSON.stringify(c.selection||run.spec?.selection||{}))+row("算法步骤",(c.steps||run.spec?.steps||[]).filter(s=>s.enabled!==false).map((s,i)=>`${i+1}. ${s.algorithm} ${JSON.stringify(s.parameters)}`).join("\n")||"直接导出");

@@ -9,6 +9,7 @@ import { WorkbenchLayout } from "./layout.js";
 import { detailHTML, bindRename } from "./job-detail.js";
 import { PreviewEngine } from "./preview.js";
 import { setupWorkbench } from "./workbench.js";
+import { svgIcon } from "./icons.js";
 
 const $ = (id) => document.getElementById(id);
 const escape = (value) =>
@@ -46,7 +47,7 @@ function icon(name) {
 function wireIcons(root = document) {
   root
     .querySelectorAll("[data-icon]")
-    .forEach((el) => (el.innerHTML = icon(el.dataset.icon)));
+    .forEach((el) => (el.innerHTML = icons[el.dataset.icon]?icon(el.dataset.icon):svgIcon(el.dataset.icon)));
 }
 wireIcons();
 let toastTimer;
@@ -96,7 +97,8 @@ let sourceViews = new Map(),
   pixelGeneration = 0;
 let resultOwner="general",generalROI=null;
 let axisEditing=null,axisStage=false;
-const stageRequests=new Map();
+let inspectionGeneration=0,inspectionRequest=null,stageSnapshot=null;
+function cancelInspection(){inspectionGeneration++;const id=inspectionRequest;inspectionRequest=null;$("inspection-state").hidden=true;if(id)api("modules/inspect/cancel",{inspection_id:id}).catch(()=>{});}
 const preview=new PreviewEngine({read:(id,value)=>api(`sources/${id}/frame`,value),generation:()=>sourceGeneration,state:value=>{playing=value;$("play").innerHTML=icon(value?"pause":"play");$("play").setAttribute("aria-label",value?"暂停":"播放");}});
 let selectionRequest = 0;
 function frameRequest(id, value, generation = sourceGeneration) {
@@ -184,27 +186,48 @@ const split = new SplitController({
   },
 });
 let generalSequenceContext=null;
-const generalEditor=new ModuleEditor({nodes:()=>steps,catalog:()=>state?.modules,source:()=>active,host:()=>$("steps"),status:()=>$("module-status"),inspector:()=>$("general-module-fields"),title:()=>$("general-module-title"),instance:()=>$("general-module-instance"),preview:previewModule,drawROI:drawModuleROI,tools:moduleTools,inspect:(open=true)=>{if(open){layout.openParameters("general");$("general-module-inspector").scrollIntoView({block:"nearest"});}},selectionChanged:scheduleDraft,change:changed,afterRender:()=>{$("step-count").textContent=steps.length;},report:toast});
-const sequenceResults=new SequenceResults({report:toast,changed:scheduleDraft,promoted:async(opened,target)=>{sources=(await api("state")).sources;updateSources();if(target==="input"){generalSequenceContext=null;generalEditor.replace([]);$("batch").checked=false;$("scope").value="all";await selectSource(opened.source.id);}},display:()=>resultDisplay,image:async snapshot=>{result=snapshot;resultOwner="sequence";formalResult=null;resultSignature=null;resultScene.width=snapshot.shape[1];resultScene.height=snapshot.shape[0];await resultViewer.set(snapshot);if($("display-target").value==="result")fillDisplayControls(snapshot,resultDisplay);},signals:()=>{resultOwner="sequence";result=null;formalResult=null;resultViewer.clear();if($("display-target").value==="result")fillDisplayControls(null,resultDisplay);},shown:()=>{resultOwner="sequence";$("stale").hidden=true;setMode("compare");redraw();},promote:async(id,position)=>{sources=(await api("state")).sources;const job=await api(`jobs/${id}`),path=job.directory+"/"+job.run.results[position].output_directory+"/dataset.json";const entry=sources.find(s=>s.role==="result"&&s.run_id===id&&s.source.path.replaceAll("\\","/")===path.replaceAll("\\","/"));if(!entry)throw Error("该结果未能自动加入来源，请查看任务日志");formalResult=entry;await promoteResult();}});
+const generalEditor=new ModuleEditor({nodes:()=>steps,catalog:()=>state?.modules,source:()=>active,host:()=>$("steps"),status:()=>$("module-status"),inspector:()=>$("general-module-fields"),title:()=>$("general-module-title"),instance:()=>$("general-module-instance"),preview:previewModule,drawROI:drawModuleROI,tools:moduleTools,inspect:(open=true)=>{if(open){layout.openParameters("general");$("general-module-inspector").scrollIntoView({block:"nearest"});}},selectionChanged:()=>{cancelInspection();updateSummary();scheduleDraft();},change:changed,afterRender:()=>{$("step-count").textContent=steps.length;},report:toast});
+const sequenceResults=new SequenceResults({
+  report:toast,changed:scheduleDraft,display:()=>resultDisplay,
+  reset:()=>Object.assign(resultScene,{zoom:1,panX:0,panY:0,roi:null,annotation:null,tool:"pan"}),
+  promoted:async(opened,target)=>{sources=(await api("state")).sources;updateSources();if(target==="input"){generalSequenceContext=null;generalEditor.replace([]);$("batch").checked=false;$("scope").value="all";await selectSource(opened.source.id);}},
+  image:async snapshot=>{
+    result=snapshot;resultOwner="sequence";formalResult=null;resultSignature=null;
+    if(resultScene.width!==snapshot.shape[1]||resultScene.height!==snapshot.shape[0])Object.assign(resultScene,{zoom:1,panX:0,panY:0});
+    resultScene.width=snapshot.shape[1];resultScene.height=snapshot.shape[0];await resultViewer.set(snapshot);
+    if($("display-target").value==="result")fillDisplayControls(snapshot,resultDisplay);
+  },
+  signals:()=>{resultOwner="sequence";result=null;formalResult=null;resultViewer.clear();if($("display-target").value==="result")fillDisplayControls(null,resultDisplay);},
+  shown:reveal=>{resultOwner="sequence";$("stale").hidden=true;$("welcome").hidden=true;if(reveal)setMode(!active||$("viewers").dataset.mode==="result"?"result":"compare");redraw();},
+  promote:async(id,position)=>{sources=(await api("state")).sources;const job=await api(`jobs/${id}`),path=job.directory+"/"+job.run.results[position].output_directory+"/dataset.json";const entry=sources.find(s=>s.role==="result"&&s.run_id===id&&s.source.path.replaceAll("\\","/")===path.replaceAll("\\","/"));if(!entry)throw Error("该结果未能自动加入来源，请查看任务日志");formalResult=entry;await promoteResult();}
+});
 
 const workbench=setupWorkbench({editor:generalEditor,layout,source:()=>active,input:()=>input,viewer:originalViewer,resultViewer,scene,resultScene,notify:toast,save:scheduleDraft,inspect:(side,tool=null)=>previewModule(generalEditor,side,!!tool,tool==="point",tool),raw:async()=>{axisEditing=null;axisStage=false;scene.annotation=null;scene.tool="pan";$("axis-stage-note").hidden=true;$("module-preview-tools").hidden=true;if(input)await setInput(input);},currentJobs:()=>jobs,poll:pollJobs,submit});
 function moduleTools(node,host,editor){workbench.moduleTools(node,host,editor);}
 async function submitModules(nodes,mode="run",name=null,extra={}){
   if(!active||!input)return;
-  const response=await api("jobs",{contract_version:3,mode,name,source_ids:extra.source_ids||[active.id],steps:structuredClone(nodes),preview_dependencies:extra.dependencies||[],sample_index:extra.sample_index||0,output_dir:$("output-dir").value,config_revision:JSON.stringify(nodes)});
-  if(extra.stage)stageRequests.set(response.id,extra.stage);
+  const response=await api("jobs",{contract_version:3,mode,name,source_ids:extra.source_ids||[active.id],steps:structuredClone(nodes),stop_after:extra.stop_after||null,preview_dependencies:extra.dependencies||[],sample_index:extra.sample_index||0,output_dir:$("output-dir").value,config_revision:JSON.stringify(extra.stop_after?nodes.slice(0,nodes.findIndex(n=>n.id===extra.stop_after)+1):nodes)});
   toast(mode==="trial"?"试算已排队":"流程已排队");await pollJobs();return response;
 }
 async function previewModule(editor,side="input",drawing=false,point=false,tool=null){
+  let generation;
   try{
     if(!active||!editor.selected)throw Error("请先选择输入来源和模块");
+    if(!$("stage-sample").reportValidity())return;
+    cancelInspection();generation=inspectionGeneration;
     stopPlay();const i=editor.nodes.indexOf(editor.selected),nodes=editor.nodes.slice(0,i+(side==="output"?1:0));
     let dependencies=[];if(nodes.some(n=>n.enabled&&n.algorithm==="calibration"&&n.parameters.black_left!==n.parameters.black_right)){const end=editor.nodes.findIndex((n,j)=>j>=nodes.length&&n.enabled&&n.algorithm==="alignment");if(end>=0)dependencies=structuredClone(editor.nodes.slice(nodes.length,end+1));}
-    await submitModules(nodes,"trial",`${editor.specs[editor.selected.algorithm]?.name} · ${side==="input"?"输入":"输出"}检查`,{sample_index:editor.previewSample||0,dependencies,stage:{editor,nodeId:editor.selected.id,side,drawing,point,tool,sourceId:active.id,prefix:JSON.stringify(nodes)}});
-  }catch(e){toast(e.message,true);}
+    const request={editor,nodeId:editor.selected.id,side,drawing,point,tool:tool||(drawing?"roi":null),sourceId:active.id,sampleIndex:editor.previewSample||0,prefix:JSON.stringify(nodes)},key=JSON.stringify([active.id,active.meta.revision,nodes,dependencies,editor.previewSample||0,display]);
+    let data=stageSnapshot?.key===key&&originalViewer.snapshot===stageSnapshot.data.frame?stageSnapshot.data:null;
+    if(!data){inspectionRequest=crypto.randomUUID();$("inspection-state").hidden=false;$("inspection-message").textContent="正在读取此阶段 · 可继续预览原始数据";data=await api("modules/inspect",{inspection_id:inspectionRequest,source_id:active.id,steps:structuredClone(nodes),dependencies,sample_index:editor.previewSample||0,display});}
+    if(generation!==inspectionGeneration||active?.id!==request.sourceId||editor.selected?.id!==request.nodeId||(editor.previewSample||0)!==request.sampleIndex)return;
+    const current=editor.nodes.indexOf(editor.selected);if(JSON.stringify(editor.nodes.slice(0,current+(side==="output"?1:0)))!==request.prefix)return;
+    stageSnapshot={key,data};await showStageResult(data,request);
+  }catch(e){if(generation===undefined||generation===inspectionGeneration)toast(e.message,true);}
+  finally{if(generation===inspectionGeneration){inspectionRequest=null;$("inspection-state").hidden=true;}}
 }
 async function drawModuleROI(editor=generalEditor,point=false){
-  try{if(!active)throw Error("请先导入来源");if(!["roi_crop","spatial_roi"].includes(editor.selected?.algorithm)){editor.add(state.modules.roi_crop?"roi_crop":"spatial_roi");}await previewModule(editor,"input",true,point);}catch(e){toast(e.message,true);}
+  try{if(!active)throw Error("请先导入来源");const added=!["roi_crop","spatial_roi"].includes(editor.selected?.algorithm);if(added)editor.add(state.modules.roi_crop?"roi_crop":"spatial_roi");const fresh=added||!editor.selected.parameters.width&&!editor.selected.parameters.height;await previewModule(editor,"input",true,point,fresh?"roi-new":"roi");}catch(e){toast(e.message,true);}
 }
 function commitModuleROI(roi=scene.roi,remember=true){
   if(axisEditing?.tool&&!["roi","roi-new"].includes(axisEditing.tool)){workbench.commitRectangle(roi,axisEditing);return;}
@@ -214,39 +237,37 @@ function commitModuleROI(roi=scene.roi,remember=true){
   if(remember&&JSON.stringify(q)!==JSON.stringify(bound.committed)){bound.undo.push(structuredClone(bound.committed));bound.undo=bound.undo.slice(-32);bound.redo=[];}
   bound.committed=structuredClone(q);Object.assign(node.parameters,q);scene.roi=q;bound.editor.changed();updateROI();redraw();scheduleDraft();
 }
-async function showStageResult(job,request){
+async function showStageResult(data,request){
   if(active?.id!==request.sourceId)return;
-  const data=await api(`jobs/${job.id}/sequence`,{source:0,index:0,channel:0});
-  if(data.kind!=="image"){await sequenceResults.load(job.id);toast("此步骤已没有空间轴，结果以曲线显示");return;}
+  if(data.kind!=="image"){if(request.drawing)throw Error("此模块输入没有 Y/X 空间轴，请在前序空间数据阶段取点或绘制 ROI");await sequenceResults.inspect(data,`${request.editor.specs[request.editor.selected.algorithm].name} · ${request.side==="input"?"输入":"输出"}检查`);return;}
   const node=request.editor.nodes.find(n=>n.id===request.nodeId);if(!node)return;
   axisStage=true;axisEditing=request.drawing?request:null;stopPlay();scene.width=data.frame.shape[1];scene.height=data.frame.shape[0];scene.zoom=1;scene.panX=scene.panY=0;scene.tool=request.drawing?"roi":"pan";scene.roi=request.drawing?{x:node.parameters.x,y:node.parameters.y,width:node.parameters.width||scene.width-node.parameters.x,height:node.parameters.height||scene.height-node.parameters.y}:null;
   if(axisEditing)Object.assign(axisEditing,{undo:[],redo:[],committed:structuredClone(scene.roi)});
   workbench.stageShown(data,request);
   updateROI();if(splitActive()){$("split-tool").value="pan";split.view="stage";}
-  await originalViewer.set(data.frame);$("axis-stage-note").hidden=false;$("axis-stage-caption").textContent=`${request.editor.specs[node.algorithm].name} · ${request.side==="input"?"此步输入":"此步输出"} · ${data.contract.label}${request.drawing?" · 画布编辑当前实例":""}`;$("input-label").textContent="模块阶段检查";setMode("compare");redraw();
+  await originalViewer.set(data.frame);$("axis-stage-note").hidden=false;$("axis-stage-caption").textContent=`${request.editor.specs[node.algorithm].name} · ${request.side==="input"?"此步输入":"此步输出"} · ${data.contract.label}${data.contract.axes.startsWith("P")?" · 显示左路":""}${request.drawing?" · 画布编辑当前实例":""}`;$("input-label").textContent="模块阶段检查";setMode($("viewers").dataset.mode==="result"?"compare":$("viewers").dataset.mode);redraw();
   if($("display-target").value==="input")fillDisplayControls(data.frame,display);
 }
 $("axis-restore-raw").onclick=safe(async()=>{axisEditing=null;axisStage=false;$("axis-stage-note").hidden=true;if(input)await setInput(input);});
+$("cancel-inspection").onclick=()=>{cancelInspection();toast("阶段检查已取消");};
+$("stage-sample").addEventListener("change",cancelInspection);
 async function setAnalysisMode(mode) {
   $("analysis-mode").value=["split_correlation","split_curve"].includes(mode)?mode:"general";
   document.body.dataset.analysis="general";
   document.querySelector(".workspace").dataset.analysis="general";
   layout.apply();redraw();scheduleDraft();
 }function redraw(viewer) {
-  if(viewer===resultViewer&&resultOwner==="general")Object.assign(scene,{zoom:resultScene.zoom,panX:resultScene.panX,panY:resultScene.panY});
   if(splitActive()&&!axisStage)split.draw();else originalViewer.draw();
-  if(resultOwner==="sequence")resultViewer.draw();else if(resultOwner==="split")split.drawResult();else{
-    Object.assign(resultScene,{zoom:scene.zoom,panX:scene.panX,panY:scene.panY,roi:splitActive()?generalROI:scene.roi,tool:"pan"});resultViewer.draw();
-  }
+  if(resultOwner==="split")split.drawResult();else resultViewer.draw();
   $("zoom-value").textContent =
     `${Math.round(visibleViewer().scale() * 100) || 100}%`;
-  for(const tool of["pan","roi"])$("tool-"+tool).classList.toggle("selected",scene.tool===tool);
+  for(const tool of["pan","roi","point"])$("tool-"+tool).classList.toggle("selected",scene.tool===tool);
 }
 function visibleViewer() {
   return $("viewers").dataset.mode === "result" ? resultViewer : originalViewer;
 }
 function fit(viewer=visibleViewer()) {
-  if(viewer===resultViewer&&resultOwner==="sequence"){resultScene.zoom=1;resultScene.panX=resultScene.panY=0;redraw();return;}
+  if(viewer===resultViewer&&resultOwner!=="split"){resultScene.zoom=1;resultScene.panX=resultScene.panY=0;redraw();return;}
   if(viewer===resultViewer&&resultOwner==="split"){split.fitResult();redraw();return;}
   scene.zoom = 1;
   scene.panX = scene.panY = 0;
@@ -261,6 +282,7 @@ function signature() {
   });
 }
 function changed() {
+  cancelInspection();
   $("stale").hidden = resultOwner==="split" || !result || resultSignature === signature();
   updateSummary();
   updateROIStatistics();
@@ -350,6 +372,8 @@ function updateSummary() {
     ? `${$("batch").checked ? sources.filter((s) => s.role === "input").length : 1} 个来源 · ${count} 个处理步骤${scene.roi ? " · ROI" : ""}`
     : "打开数据以开始处理";
   $("trial").disabled = $("run").disabled = !active || !input || requestBusy;
+  $("run-current").disabled = !active || !input || !generalEditor.selected || requestBusy;
+  $("run-current").title = generalEditor.selected?`从输入运行至 ${generalEditor.selected.name||generalEditor.specs[generalEditor.selected.algorithm]?.name}（包含此模块）`:"选择运行终点模块";
   for (const id of [
     "previous",
     "next",
@@ -501,6 +525,8 @@ async function promoteResult() {
 }
 function setMode(mode) {
   $("viewers").dataset.mode = mode;
+  for(const key of mode==="compare"?["input","result"]:[mode])layout.state.windows[key].hidden=false;
+  layout.apply();
   document
     .querySelectorAll("[data-view]")
     .forEach((b) => b.classList.toggle("selected", b.dataset.view === mode));
@@ -527,6 +553,7 @@ function drawHistogram(snapshot) {
     `有限样本直方图，${snapshot.histogram_samples ?? "采样"} 个样本`;
 }
 async function setInput(snapshot, reset = false) {
+  cancelInspection();
   axisStage=false;axisEditing=null;scene.annotation=null;scene.tool="pan";$("module-preview-tools").hidden=true;$("axis-stage-note").hidden=true;
   $("input-label").textContent="原始数据";
   pixelGeneration++;
@@ -650,11 +677,13 @@ function configureTimeline(entry) {
     : (entry.meta.frame_count || 1) + 1;
 }
 async function selectSource(id, request = ++selectionRequest) {
+  cancelInspection();
   stopPlay();
   pendingSeek = null;
   const entry = sources.find((s) => s.id === id);
   if (!entry) return;
   if (entry.role === "result") {
+    if(entry.source.kind==="dataset"&&entry.run_id&&jobs.some(j=>j.id===entry.run_id&&j.engine==="sequence")){await sequenceResults.load(entry.run_id,entry.source_position||0,entry.side_output||null);return;}
     const matching = sources.find((s) => s.id === entry.input_id);
     if (matching && (active?.id !== matching.id || !input))
       await selectSource(matching.id, request);
@@ -836,12 +865,14 @@ function renderSteps() {
   generalEditor.render();updateSummary();
 }
 function addStep(){workbench.openLibrary();}
-async function submit(mode) {
+async function submit(mode,stopAfter=null) {
   if (!active || !input) return;
-  const error=generalEditor.validate();if(error)throw Error(error);
+  if(stopAfter&&!steps.some(n=>n.id===stopAfter))throw Error("请先选择运行终点模块");
+  const error=stopAfter?null:generalEditor.validate();if(error)throw Error(error);
   for (const el of $("general-module-fields").querySelectorAll("input"))
     if (!el.reportValidity()) return;
-  return submitModules(steps,mode,$("job-name").value.trim()||null,{sample_index:generalEditor.previewSample||0,source_ids:mode==="run"&&$("batch").checked?sources.filter(s=>s.role==="input").map(s=>s.id):[active.id]});
+  const end=steps.find(n=>n.id===stopAfter),name=$("job-name").value.trim();
+  return submitModules(steps,mode,end?`${name||active.display_name||active.meta.name} · 至 ${end.name||generalEditor.specs[end.algorithm]?.name}`:name||null,{stop_after:stopAfter,sample_index:generalEditor.previewSample||0,source_ids:mode==="run"&&$("batch").checked?sources.filter(s=>s.role==="input").map(s=>s.id):[active.id]});
 }
 const trialSignatures = new Map();
 const statusText = {
@@ -894,8 +925,7 @@ async function pollJobs(initial = false) {
       if(j.engine==="sequence"){
         if(j.status==="succeeded"||j.status==="completed_with_errors"){
           sources=(await api("state")).sources;updateSources();
-          const request=stageRequests.get(j.id);stageRequests.delete(j.id);
-          if(request)await showStageResult(full,request);else if(active?.id===j.source_ids[0])await sequenceResults.load(j.id);
+          if(active?.id===j.source_ids[0]&&!axisEditing&&!inspectionRequest)await sequenceResults.load(j.id);
           toast(j.status==="succeeded"?"模块流程完成，完整结果已保存":"部分来源失败，请查看任务详情",j.status!=="succeeded");
         }else if(full.error||full.run?.results?.[0]?.error)toast(full.error||full.run.results[0].error,true);
       } else if (j.mode === "split" || split.requested.has(j.id)) {
@@ -939,7 +969,6 @@ async function jobDetail(id) {
   const parts = [
     detailHTML(job),
   ];
-  if (job.error) parts.push(`<pre>${escape(job.error)}</pre>`);
   if (job.result)
     parts.push(
       `<p>结果：${job.result.dtype} · ${job.result.shape[1]} × ${job.result.shape[0]}<br>最小值 ${job.result.statistics.min} · 最大值 ${job.result.statistics.max} · 均值 ${job.result.statistics.mean}</p><button id="show-trial" class="quiet">查看该试算结果</button>`,
@@ -952,7 +981,6 @@ async function jobDetail(id) {
           `<p>来源 ${i + 1}：${escape(r.data_spec?.name || r.source.path)}<br>${statusText[r.status] || r.status} · ${r.completed_frames} 帧${r.error ? " · " + escape(r.error) : ""}</p>`,
       ),
     );
-  if (job.logs.length) parts.push(`<pre>${escape(job.logs.join("\n"))}</pre>`);
   if (job.directory)
     parts.push(
       `<div class="downloads"><button data-download="manifest" class="quiet">运行记录 JSON</button>${(job.run?.results || []).map((r, i) => (r.status === "succeeded" ? `<button data-download="csv" data-index="${i}" class="quiet">来源 ${i + 1} CSV</button>${!r.contract||r.contract.axes.includes("Y")?`<button data-download="image" data-index="${i}" class="quiet">来源 ${i + 1} 首帧 TIFF</button>`:`<button data-download="svg" data-index="${i}" class="quiet">来源 ${i + 1} 曲线 SVG</button>`}${r.contract?`<button data-download="array" data-index="${i}" class="quiet">来源 ${i + 1} 完整 NPY</button>`:""}` : "")).join("")}</div>`,
@@ -1328,13 +1356,15 @@ $("actual").onclick = () => {
   target.panX = target.panY = 0;
   redraw();
 };
-for (const tool of ["pan", "roi"])
+for (const tool of ["pan", "roi", "point"])
   $("tool-" + tool).onclick = safe(async() => {
     if(tool==="roi"){await drawModuleROI();return;}
+    if(tool==="point"){if(!active)throw Error("请先导入来源");if(generalEditor.selected?.algorithm!=="point_extract")generalEditor.add("point_extract");await previewModule(generalEditor,"input",true,true,"point");return;}
     if(splitActive()){$("split-tool").value=tool;split.setTool(tool);}
     scene.tool = tool;
     $("tool-pan").classList.toggle("selected", tool === "pan");
     $("tool-roi").classList.toggle("selected", tool === "roi");
+    $("tool-point").classList.toggle("selected", tool === "point");
   });
 $("clear-roi").onclick = () => commitROI(null);
 $("roi-full").onclick = () => {
@@ -1391,6 +1421,7 @@ $("batch").onchange = () => {
 for (const id of ["range-start", "range-end"]) $(id).onchange = scheduleDraft;
 $("trial").onclick = safe(() => submit("trial"));
 $("run").onclick = safe(() => submit("run"));
+$("run-current").onclick = safe(() => submit("run",generalEditor.selected?.id));
 $("previous").onclick = safe(() => step(-1));
 $("next").onclick = safe(() => step(1));
 $("play").onclick = safe(play);
