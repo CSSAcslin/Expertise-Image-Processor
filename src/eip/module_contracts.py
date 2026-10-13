@@ -10,6 +10,7 @@ import math
 import numpy as np
 
 from eip.module_registry import normalize_nodes, module_spec, CORRELATIONS, MODIFIERS, is_reference, needs_full_sequence
+from eip.module_statistics import retained_axes
 
 CONTRACT_VERSION = 3
 
@@ -67,6 +68,18 @@ def roi_bounds(contract, p):
     return x,y,width,height
 
 
+def statistic_contract(c,a,p):
+    axes=retained_axes(c.axes,p.get("scope","space_time"))
+    shape=tuple(size for axis,size in zip(c.axes,c.shape) if axis in axes)
+    global_=a=="global_statistics"
+    semantic="statistic" if global_ or p["mode"] in {"variance","count"} else "processed_g2" if c.semantic in {"g2","processed_g2"} else "processed_label" if "label" in c.semantic else c.semantic
+    meaning=f"global_{p['scope']}_{p['mode']}_of_{c.meaning}" if global_ else f"pixel_g2_spatial_{p['mode']}" if c.semantic in {"g2","processed_g2"} else f"regional_{p['mode']}_label" if "label" in c.semantic else f"regional_{p['mode']}_signal"
+    return replace(c,axes=axes,shape=shape,dtype="uint64" if p["mode"]=="count" else "float64",statistics=False,
+                   sequence_axis="N" if global_ else c.sequence_axis,length=1 if global_ else c.length,
+                   spatial_operation=None if global_ else p["mode"],meaning=meaning,semantic=semantic,
+                   origin=c.origin if not global_ or "Y" in axes and "X" in axes else (0,0))
+
+
 def modifier_contract(c,a,p):
     """Contract of the selected output, before choosing main or side routing."""
     if a in {"region_reduce","point_extract","line_extract"} and not c.spatial:
@@ -74,6 +87,8 @@ def modifier_contract(c,a,p):
     if a=="region_reduce":
         meaning=f"pixel_g2_spatial_{p['mode']}" if c.semantic in {"g2","processed_g2"} else f"regional_{p['mode']}_label" if "label" in c.semantic else f"regional_{p['mode']}_signal"
         return replace(c,axes="".join(a for a in c.axes if a not in "YX"),shape=tuple(s for a,s in zip(c.axes,c.shape) if a not in "YX"),dtype="float64",statistics=False,spatial_operation=p["mode"],meaning=meaning,semantic="processed_g2" if c.semantic in {"g2","processed_g2"} else "processed_label" if "label" in c.semantic else c.semantic)
+    if a in {"time_statistics","global_statistics"}:
+        return statistic_contract(c,a,p)
     if a=="point_extract":
         roi_bounds(c,dict(x=p["x"],y=p["y"],width=1,height=1))
         return replace(c,axes="".join(a for a in c.axes if a not in "YX"),shape=tuple(s for a,s in zip(c.axes,c.shape) if a not in "YX"),statistics=False,meaning="point_"+c.meaning)
@@ -123,6 +138,8 @@ def binding_contract(ref, providers):
     if node["algorithm"]=="parameter_binding" and port=="value":
         value=node["parameters"]["value"]
         return binding_contract(value["ref"],providers) if is_reference(value) else ((),value)
+    if node["algorithm"]=="global_statistics" and port in {"value","count"}:
+        return statistic_contract(c,"global_statistics",node["parameters"]).shape,None
     if node["algorithm"]!="sequence_statistics" or port not in {"mean","variance","count","scale"}:
         raise ValueError("前序模块没有声明此参数端口")
     return ((2,)+tuple(1 for _ in c.shape[1:]) if c.paired else ()) if port=="scale" else c.shape,None
@@ -179,7 +196,7 @@ def compile_flow(nodes, source, *, center=None, single=False, strict=True, follo
                             shape,literal= binding_contract(value["ref"],providers)
                             if key!="scale" and shape:
                                 raise ValueError("此参数只接受标量，不能引用矩阵 / 向量端口")
-                            if key=="scale" and shape and shape!=((2,)+tuple(1 for _ in c.shape[1:]) if c.paired else ()):
+                            if key=="scale" and shape and shape not in ({(2,),(2,)+tuple(1 for _ in c.shape[1:])} if c.paired else {()}):
                                 raise ValueError("尺度端口形状与当前输入不兼容")
                             if literal is not None:
                                 parameter=next(f for f in spec["parameters"] if f["key"]==key)
@@ -289,7 +306,7 @@ def compile_flow(nodes, source, *, center=None, single=False, strict=True, follo
                     if p["analysis"]=="curve" and c.spatial:
                         warning="当前 τ 扫描仍输出逐像素矩阵；需要单条曲线时，请在关联前归约区域信号，或在关联后对像素 g² 添加空间归约。"
                 else:
-                    if a in {"gaussian","box_blur"} or n.get("manifest"):
+                    if a in {"gaussian","box_blur","spatial_smooth"} or n.get("manifest"):
                         if not c.spatial:
                             raise ValueError("此空间算法需要 Y/X 轴；不能接收区域归约后的时间标量 / 向量")
                         if n.get("manifest") and c.axes.removeprefix("P") not in {"YX","YXC"}:

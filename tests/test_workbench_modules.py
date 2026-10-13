@@ -37,7 +37,7 @@ def test_roi_reduce_migration_preserves_original_and_values(tmp_path):
     original=deepcopy(old)
     migrated,report=migrate_workbench_nodes(old)
     assert old==original and len(report)==2
-    assert [n["algorithm"] for n in migrated]==["roi_crop","region_reduce","sequence_statistics","fixed_normalize"]
+    assert [n["algorithm"] for n in migrated]==["roi_crop","time_statistics","sequence_statistics","fixed_normalize"]
     data=np.arange(24,dtype=np.uint16).reshape(3,2,4)
     first=make(tmp_path,data,old); second=make(tmp_path,data,migrated)
     try:

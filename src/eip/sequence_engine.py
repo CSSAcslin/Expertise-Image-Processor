@@ -14,29 +14,15 @@ import json
 import hashlib
 import shutil
 import struct
-import warnings
 import numpy as np
 
-from eip.algorithms import BuiltinAlgorithm, Pipeline, RunContext
+from eip.algorithms import BuiltinAlgorithm, Pipeline, RunContext, preserve_dtype
 from eip.domain import Selection, StepSpec
 from eip.module_contracts import compile_flow, source_contract, roi_bounds, correlation_layout, Contract
 from eip.module_engine import IdentityPhotometry
 from eip.module_ops import intensity_curve
 from eip.module_registry import normalize_nodes, module_spec, CORRELATIONS, MODIFIERS, is_reference, needs_full_sequence
-
-
-def reduce_finite(a, axes, mode, q=.5):
-    a = np.asarray(a,dtype=np.float64)
-    valid = np.isfinite(a)
-    count = valid.sum(axis=axes)
-    if mode in {"mean","sum"}:
-        total = np.where(valid,a,0).sum(axis=axes)
-        value = total/np.maximum(count,1) if mode=="mean" else total
-    else:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore",RuntimeWarning)
-            value = np.nanquantile(np.where(valid,a,np.nan),q,axis=axes,method="linear")
-    return np.where(count,value,np.nan),count
+from eip.module_statistics import reduce_finite, retained_axes, joint_values, global_statistic
 
 
 class Cache:
@@ -147,6 +133,8 @@ class Source:
 class SequenceEngine:
     def __init__(self,reader,nodes,context=None,*,workdir,center=None,single=False,input_kind="image",dependencies=(),range_cache=None):
         self.context = context or RunContext()
+        self.workdir = Path(workdir)
+        self.global_statistics = {}
         self.source = Source(reader,self.context,workdir,input_kind)
         self.center,self.single = center,single
         self.dependencies = normalize_nodes(dependencies,check_types=False)[0]
@@ -216,6 +204,9 @@ class SequenceEngine:
                 elif a in {"intensity","affine","box_blur","threshold","gaussian","curve"}:
                     self.instances[i] = BuiltinAlgorithm(a)
                     self.instances[i].prepare(p,self.context)
+                elif a=="spatial_smooth":
+                    self.instances[i] = BuiltinAlgorithm("box_blur" if p["method"]=="mean" else "gaussian")
+                    self.instances[i].prepare(p,self.context)
                 self.operations.append(op)
                 self.contracts.append(after)
                 for side in stage_plan["stages"][0].get("side_outputs",[]):
@@ -227,13 +218,15 @@ class SequenceEngine:
                     self._sides.append(dict(id=f"{n['id']}:{port}",node_id=n["id"],port=port,name=p.get("name") or n.get("name") or title,contract=side_c,kind=a,stage=i,destination=p.get("destination","result"),export_format=p.get("export_format","dataset")))
                 # Temporary arrays as well as caches must fit the chosen budget.
                 elements = int(np.prod(c.shape,dtype=np.int64))
-                multiplier = 12 if a=="line_extract" and p["mode"]=="segment" else 1 if a in {"time_crop","time_sample","select_channel","data_tap","parameter_binding"} else 3 if a in {"affine","intensity","curve","threshold","spatial_roi","roi_crop",*MODIFIERS} else 12 if a in CORRELATIONS else p.get("window",1)+4 if a=="time_smooth" and p["mode"]=="quantile" else 8
+                multiplier = 12 if a=="line_extract" and p["mode"]=="segment" else 8 if a=="global_statistics" else 1 if a in {"time_crop","time_sample","select_channel","data_tap","parameter_binding"} else 3 if a in {"affine","intensity","curve","threshold","spatial_roi","roi_crop",*MODIFIERS} else 12 if a in CORRELATIONS else p.get("window",1)+4 if a=="time_smooth" and p["mode"]=="quantile" else 8
                 side_elements=max([int(np.prod(s["contract"].shape)) for s in self._sides if s["node_id"]==n["id"]] or [0])
                 working=max(elements,int(np.prod(after.shape)),side_elements)*8*multiplier
                 if working>n.get("execution",{}).get("memory_mb",256)*1024**2*2/3:
                     raise ValueError(f"{a} 工作数组超过该流程内存预算；请先裁剪 ROI、减小窗口或增加执行内存")
                 if a in {"statistics","sequence_statistics"}:
                     retained += elements*20
+                elif a=="global_statistics":
+                    retained += max(1,int(np.prod(after.shape if p["output"]=="main" else self._sides[-1]["contract"].shape)))*16
                 if retained+working+self.cache.budget>self.budget:
                     raise ValueError("重复统计保留数组与工作数组合计超过流程预算；请减少统计节点、先裁剪或提高内存预算")
             self.plan = self._actual_plan()
@@ -272,9 +265,13 @@ class SequenceEngine:
                 resolved=op["parameters"]["value"]
             elif op["algorithm"]=="sequence_statistics" and port in {"mean","variance","count","scale"}:
                 resolved=self.fit(previous)["scales" if port=="scale" else port]
+            elif op["algorithm"]=="global_statistics" and port in {"value","count"}:
+                resolved=self.global_fit(previous)[0 if port=="value" else 1]
             else:
                 raise ValueError("参数端口不存在")
             resolved=np.asarray(resolved)
+            if node["algorithm"]=="fixed_normalize" and key=="scale" and resolved.shape==(2,) and self.contracts[position].paired:
+                resolved=resolved.reshape((2,)+tuple(1 for _ in self.contracts[position].shape[1:]))
             if resolved.size!=1 and not (node["algorithm"]=="fixed_normalize" and key=="scale"):
                 raise ValueError("该参数只接受数值标量")
             p[key]=resolved.item() if resolved.size==1 else resolved
@@ -310,6 +307,8 @@ class SequenceEngine:
     def side_ref(self,identifier,index):
         side=next(s for s in self._sides if s["id"]==identifier)
         i=side["stage"]; op=self.operations[i]
+        if op["algorithm"]=="global_statistics":
+            return dict(self.global_ref(i),sample_index=index,side_output=identifier)
         if op["algorithm"] in {"sequence_statistics","parameter_binding"}:
             return dict(index=None,time=None,sample_index=index,side_output=identifier,upstream_samples=self.contracts[i].length)
         p=op["parameters"]
@@ -370,7 +369,13 @@ class SequenceEngine:
         op=self.operations[i]; a,p=op["algorithm"],op["parameters"]; c=self.contracts[i]
         if a=="axis_slice" and p["axis"]==c.sequence_axis:
             return self.get(i,p["index"])
+        if a=="global_statistics":
+            return self.global_fit(i)[0]
         value=self.get(i,index)
+        if a=="time_statistics":
+            value=joint_values(value,c.paired,p["validity"])
+            axes=tuple(k for k,axis in enumerate(c.axes) if axis not in retained_axes(c.axes,"space_time"))
+            return reduce_finite(value,axes,p["mode"],p["quantile"])[0]
         if a=="region_reduce":
             if c.paired and p["validity"]=="joint":
                 value=np.where(np.isfinite(value).all(axis=0)[None,...],value,np.nan)
@@ -495,6 +500,19 @@ class SequenceEngine:
                         value = np.where(np.arange(value.shape[1])[None,:]<line,photo.apply(value,"left"),photo.apply(value,"right"))
                     else:
                         value = photo.apply(value,"left")
+                elif a in {"spatial_smooth","gain_offset"}:
+                    if value.dtype.kind in "ui" and value.dtype.itemsize>4:
+                        raise ValueError("内置数值算法暂不处理 64 位整数；请显式提供精度策略")
+                    def transform(arr):
+                        arr64=np.asarray(arr,dtype=np.float64)
+                        if a=="gain_offset":
+                            with np.errstate(over="ignore",invalid="ignore"):
+                                result=arr64*p["gain"]+p["offset"]
+                            result=np.where(np.isfinite(result),result,np.nan)
+                        else:
+                            result=self.instances[i].process(arr64,self.context)
+                        return preserve_dtype(result,arr.dtype) if n.get("execution",{}).get("precision","native")=="native" else result
+                    value=np.stack([transform(arr) if n["target"] in {"both",side} else arr for arr,side in zip(value,("left","right"))]) if before.paired else transform(value)
                 else:
                     def apply(arr):
                         # Scalar/vector element operations use their true rank.
@@ -514,6 +532,23 @@ class SequenceEngine:
             elif value.dtype!=np.dtype(c.dtype):
                 raise ValueError(f"插件输出 dtype 从 {c.dtype} 变为 {value.dtype}；请保持一致或显式设置数值精度")
         return self.cache.put(key,value)
+
+    def global_fit(self,i):
+        if i not in self.global_statistics:
+            op=self.operations[i]
+            value,count=global_statistic(self.contracts[i],op["parameters"],lambda j:self.get(i,j),self.context,self.workdir)
+            precision=op["node"].get("execution",{}).get("precision","native")
+            if precision!="native":
+                value=np.asarray(value,dtype=precision)
+            self.global_statistics[i]=value,count
+        return self.global_statistics[i]
+
+    def global_ref(self,i):
+        c=self.contracts[i]; n=self.operations[i]["node"]; p=self.operations[i]["parameters"]
+        return dict(index=None,time=None,pts=None,source_number=None,trigger_time=None,
+                    contribution=dict(module_id=n["id"],upstream_start=0,upstream_stop=c.length,operation="global_statistics"),
+                    statistic=dict(scope=p["scope"],mode=p["mode"],quantile=p["quantile"] if p["mode"]=="quantile" else None,
+                                   input_axes=c.record()["full_axes"],retained_axes=retained_axes(c.axes,p["scope"]),validity=p["validity"]))
 
     def fit(self,i):
         if i in self.statistics:
@@ -610,6 +645,8 @@ class SequenceEngine:
             r = dict(r,correlation=dict(module_id=n["id"],center_sample=center,lag_samples=lag,window=p["window"],left_start=center-half,left_stop=center+half+1,right_start=center-half+lag,right_stop=center+half+1+lag,lag_seconds=total/p["window"] if known==p["window"] else None,lag_seconds_min=minimum,lag_seconds_max=maximum,known_pairs=known))
         elif a=="axis_slice" and op["parameters"]["output"]=="main" and op["parameters"]["axis"]==self.contracts[i].sequence_axis:
             r=dict(self.ref(i,op["parameters"]["index"]),selection=dict(axis=op["parameters"]["axis"],index=op["parameters"]["index"]))
+        elif a=="global_statistics" and p["output"]=="main":
+            r=self.global_ref(i)
         else:
             r = self.ref(i,index)
         return dict(r,sample_index=index)
@@ -622,3 +659,4 @@ class SequenceEngine:
             backend.close()
         self.instances.clear()
         self.backends.clear()
+        self.global_statistics.clear()

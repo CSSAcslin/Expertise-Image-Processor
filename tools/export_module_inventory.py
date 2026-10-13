@@ -37,12 +37,12 @@ def literal(value):
 def main():
     specs=catalog()
     current={key:spec for key,spec in specs.items() if not spec.get('legacy')}
-    categories={'intermediate':'中间模块 · 数据编辑','algorithm':'算法模块 · 科学计算','modifier':'修饰模块 · 提取与传递'}
+    categories={'intermediate':'中间模块 · 数据编辑','algorithm':'算法模块 · 科学计算','modifier':'修饰模块 · 统计与编辑'}
     counts={label:sum(spec.get('category')==key for spec in current.values()) for key,label in categories.items()}
     lines=['# 当前已实现模块清单（代码核对）','',f'目录取自版本 `{__version__}`，新流程契约版本为 `3`。模块库提供 **{len(current)} 个模块**，另保留 {len(specs)-len(current)} 个旧记录兼容定义；插件另行注册。分类、公式与参数取自统一代码目录。','',
            '完整形状与科学规则见 [MODULE_CONTRACTS_0_6_0.md](MODULE_CONTRACTS_0_6_0.md)；重构前行为保留在 [MODULE_INVENTORY_0_5_2.md](MODULE_INVENTORY_0_5_2.md)。旧结果按旧记录读取，不重新解释。','',
            '## 轴、参数与执行归属','',
-           '- T 为当前时间样本，Q 为有符号延迟，P 为左右双路，Y/X 为空间，C 为明确的 RGB/RGBA 分量；R 为剖面位置。分布使用单独的箱轴。标量与向量保留真实维度。','- 实例：algorithm、id、version、parameters、enabled、target、execution、插件路径与内容哈希。每个实例独立；停用原样通过。','- execution：backend=cpu/auto/gpu（GPU 当前仅关联）；memory_mb=16…4096，默认256；precision=native/float32/float64，默认算法类型。每步工作数组按自身预算校验，重复统计保留数组与缓存合计受流程预算约束。标签禁止浮点精度转换。','- 运行范围只在起点 time_crop；ROI 由 roi_crop 裁剪，区域运算由 region_reduce 完成。输出目录、名称、试算与运行按钮属于工作台。','- 每步输入输出轴、形状、样本数、数据含义、坐标原点及上游指纹随记录保存；未知时间 / 采集帧保持未知。','- 通用与分幅共用 SequenceEngine 与结果类型，仅预置不同流程。编辑中的不完整连接不影响原始数据预览。','- 默认配准按当前来源宽高初始化两半；关联按来源帧数给初始 W/τ。之后的裁剪会改变样本数，需据连接提示调整关联参数，不会静默改小。','']
+           '- T 为当前时间样本，Q 为有符号延迟，P 为左右双路，Y/X 为空间，C 为明确的 RGB/RGBA 分量；R 为剖面位置。分布使用单独的箱轴。标量与向量保留真实维度。','- 实例：algorithm、id、version、parameters、enabled、target、execution、插件路径与内容哈希。每个实例独立；停用原样通过。','- execution：backend=cpu/auto/gpu（GPU 当前仅关联）；memory_mb=16…4096，默认256；precision=native/float32/float64，默认算法类型。每步工作数组按自身预算校验，重复统计保留数组与缓存合计受流程预算约束。标签禁止浮点精度转换。','- 运行范围只在起点 time_crop；ROI 由 roi_crop 裁剪，逐样本区域运算由 time_statistics 完成；全域统计可压缩样本轴。输出目录、名称、试算与运行按钮属于工作台。','- 每步输入输出轴、形状、样本数、数据含义、坐标原点及上游指纹随记录保存；未知时间 / 采集帧保持未知。','- 通用与分幅共用 SequenceEngine 与结果类型，仅预置不同流程。编辑中的不完整连接不影响原始数据预览。','- 默认配准按当前来源宽高初始化两半；关联按来源帧数给初始 W/τ。之后的裁剪会改变样本数，需据连接提示调整关联参数，不会静默改小。','']
     lines += ['## 三类模块','', '| 类别 | 数量 |','|---|---|',*[f'| {label} | {count} |' for label,count in counts.items()], '']
     for key,spec in specs.items():
         documentation=spec.get('documentation',{})

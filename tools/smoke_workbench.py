@@ -104,13 +104,13 @@ def main():
                 expect(page.locator("[data-add-module='roi_crop']")).to_be_hidden()
                 page.locator("[data-category-filter='all']").click()
                 page.locator("#module-search").fill("增益")
-                expect(page.locator("[data-add-module='affine']")).to_be_visible()
+                expect(page.locator("[data-add-module='gain_offset']")).to_be_visible()
                 expect(page.locator("[data-add-module='data_tap']")).to_be_hidden()
                 add("roi_crop")
                 for key, value in (("x", 4), ("y", 3), ("width", 20), ("height", 12)):
                     parameter(key, value)
                 assert page.locator("#general-module-fields [data-key='mode']").count() == 0
-                add("affine")
+                add("gain_offset")
                 parameter("gain", 2)
                 page.locator("[data-inspector-tab='formula']").click()
                 expect(page.locator("#general-module-inspector")).to_contain_text("公式")
@@ -120,11 +120,11 @@ def main():
                 add("data_tap")
                 parameter("name", "归一前截流")
                 parameter("destination", "both")
-                add("affine")
+                add("gain_offset")
                 parameter("gain", 3)
 
                 count = page.locator("#steps [data-instance]").count()
-                selected = page.locator("#steps [data-algorithm='affine']").last
+                selected = page.locator("#steps [data-algorithm='gain_offset']").last
                 selected.locator("[data-node-menu]").click()
                 selected.locator("[data-node-action='duplicate']").click()
                 expect(page.locator("#steps [data-instance]")).to_have_count(count + 1)
@@ -230,7 +230,7 @@ def main():
                 add("parameter_binding")
                 provider=page.locator("#steps [data-algorithm='parameter_binding']").get_attribute("data-instance")
                 parameter("value",2.5)
-                add("affine")
+                add("gain_offset")
                 page.locator("[data-bind='gain']").click()
                 page.locator("[data-bind-source]").select_option(provider)
                 page.locator("[data-bind-port]").select_option("value")
@@ -271,7 +271,7 @@ def main():
 
                 # The split preset is an editable flow with a readable g2 definition.
                 template("split_curve")
-                expect(page.locator("#steps [data-instance]")).to_have_count(6)
+                expect(page.locator("#steps [data-instance]")).to_have_count(5)
                 page.locator("#steps [data-algorithm='correlation_curve']").click()
                 page.locator("[data-inspector-tab='formula']").click()
                 expect(page.locator("#general-module-fields math")).to_be_visible()
@@ -373,7 +373,7 @@ def main():
                 migrated_page.goto(url)
                 expect(migrated_page.locator("#steps [data-instance]")).to_have_count(5)
                 order=migrated_page.locator("#steps [data-instance]").evaluate_all("els=>els.map(e=>e.dataset.algorithm)")
-                assert order==["time_crop","roi_crop","region_reduce","sequence_statistics","fixed_normalize"],order
+                assert order==["time_crop","roi_crop","time_statistics","sequence_statistics","fixed_normalize"],order
                 expect(migrated_page.locator("#frame-info")).to_contain_text("25")
                 assert not errors, errors
                 report = dict(

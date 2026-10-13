@@ -50,6 +50,20 @@ STRUCTURAL["statistics"].update(name="上游序列统计与固定尺度",inputs=
 STRUCTURAL["calibration"]["inputs"] = ["sensor","pair"]
 
 WORKBENCH = {
+    "spatial_smooth": dict(description="选择均值或高斯空间平滑；输出类型由实例精度决定。", parameters=[
+        field("method","平滑类型","str","mean",choices=["mean","gaussian"]),
+        field("radius","空间半径 / px","int",1,minimum=1,maximum=32), field("sigma","高斯 σ / px","float",1.,minimum=1e-12,maximum=1e12)]),
+    "gain_offset": dict(description="增益乘法与偏置加法；算法默认保留输入类型，浮点精度不先量化。", parameters=[
+        field("gain","增益","float",1.,minimum=-1e12,maximum=1e12),field("offset","偏置","float",0.,minimum=-1e12,maximum=1e12)]),
+    "time_statistics": dict(description="逐样本统计空间 / 分量，保留 T 或 Q 及显式 P/C；可替换主路或输出旁路。", parameters=[
+        field("mode","统计量","str","mean",choices=["mean","sum","min","max","variance","std","quantile","count"]),
+        field("quantile","分位 q","float",.5,minimum=0,maximum=1),
+        field("validity","双路有效值","str","joint",choices=["joint","independent"]),field("output","数据流作用","str","main",choices=["main","side"])]),
+    "global_statistics": dict(description="压缩样本轴得到一条静态统计记录；默认统计全部数据，可仅压缩样本轴或保留 P/C。", parameters=[
+        field("scope","统计范围","str","all",choices=["all","samples","space_time"]),
+        field("mode","统计量","str","mean",choices=["mean","sum","min","max","variance","std","quantile","count"]),
+        field("quantile","分位 q","float",.5,minimum=0,maximum=1),
+        field("validity","双路有效值","str","independent",choices=["joint","independent"]),field("output","数据流作用","str","main",choices=["main","side"])]),
     "roi_crop": dict(description="裁剪直接输入的矩形空间区域。", parameters=[deepcopy(p) for p in AXIS_MODULES["spatial_roi"]["parameters"][:4]]),
     "region_reduce": dict(description="对当前完整空间区域求均值、总和或分位值。", parameters=[
         field("mode","区域运算","str","mean",choices=["mean","sum","quantile"]), field("quantile","分位 q","float",.5,minimum=0,maximum=1),
@@ -73,14 +87,14 @@ for _key,_analysis in (("correlation_map","map"),("correlation_curve","curve")):
             _p["default"]=_analysis
 
 CORRELATIONS = {"correlation","correlation_map","correlation_curve"}
-MODIFIERS = {"region_reduce","point_extract","line_extract","axis_slice","distribution"}
+MODIFIERS = {"region_reduce","time_statistics","global_statistics","point_extract","line_extract","axis_slice","distribution"}
 
 
 def needs_full_sequence(nodes):
-    return any(n["enabled"] and (n["algorithm"] in {"time_sample","time_smooth","time_bin"}
+    return any(n["enabled"] and (n["algorithm"] in {"time_sample","time_smooth","time_bin","global_statistics"}
                or n["algorithm"]=="distribution" and any(n["parameters"].get(k) is None for k in ("minimum","maximum")))
                for n in nodes)
-REFERENCABLE = {"intensity":{"gain","offset"},"affine":{"gain","offset"},"threshold":{"threshold"},"curve":{"input_max","gamma"},"gaussian":{"sigma"},"fixed_normalize":{"scale"},"parameter_binding":{"value"}}
+REFERENCABLE = {"intensity":{"gain","offset"},"affine":{"gain","offset"},"gain_offset":{"gain","offset"},"threshold":{"threshold"},"curve":{"input_max","gamma"},"gaussian":{"sigma"},"spatial_smooth":{"sigma"},"fixed_normalize":{"scale"},"parameter_binding":{"value"}}
 
 
 def is_reference(value):
@@ -92,13 +106,13 @@ def catalog(plugins=()):
     for spec in (*BUILTINS, *[s for s in plugins if s.manifest]):
         result[spec.id] = dict(asdict(spec), inputs=["sensor", "pair", "map"], output="same", repeatable=True)
     for key, spec in {**STRUCTURAL, **AXIS_MODULES, **WORKBENCH}.items():
-        result[key] = dict(deepcopy(spec), id=key, version="1.0", manifest=None, code_hash=None, execution_scope="sequence" if key in {"statistics", "sequence_statistics", *CORRELATIONS, "time_crop", "time_sample", "time_smooth", "time_bin", "data_tap", "axis_slice"} else "frame", output_kind="image", repeatable=True)
+        result[key] = dict(deepcopy(spec), id=key, version="1.0", manifest=None, code_hash=None, execution_scope="sequence" if key in {"statistics", "sequence_statistics", "global_statistics", *CORRELATIONS, "time_crop", "time_sample", "time_smooth", "time_bin", "data_tap", "axis_slice"} else "frame", output_kind="image", repeatable=True)
     for spec in result.values():
         spec["defaults"] = defaults(spec)
         spec["bindable_parameters"] = sorted({p["key"] for p in spec["parameters"] if p["kind"] in {"int","float"}} if spec.get("manifest") else REFERENCABLE.get(spec["id"],set()))
         from eip.module_documentation import enrich
         enrich(spec)
-        spec["ports"] = ([dict(id=port,kind="statistic",dtype="uint32" if port=="count" else "float64") for port in ("mean","variance","count","scale")] if spec["id"]=="sequence_statistics" else [dict(id="value",kind="scalar",dtype="float64")] if spec["id"]=="parameter_binding" else [dict(id="data",kind="upstream" if spec["id"]=="data_tap" else "output")])
+        spec["ports"] = ([dict(id=port,kind="statistic",dtype="uint32" if port=="count" else "float64") for port in ("mean","variance","count","scale")] if spec["id"]=="sequence_statistics" else [dict(id="value",kind="statistic",dtype="selected"),dict(id="count",kind="statistic",dtype="uint64")] if spec["id"]=="global_statistics" else [dict(id="value",kind="scalar",dtype="float64")] if spec["id"]=="parameter_binding" else [dict(id="data",kind="upstream" if spec["id"]=="data_tap" else "output")])
     return result
 
 
@@ -192,7 +206,7 @@ def normalize_nodes(nodes, *, check_types=True, input_type="sensor", input_kind=
         if execution.get("backend")=="gpu" and algorithm not in CORRELATIONS:
             raise ValueError("此模块当前支持 CPU；GPU 仅用于二阶关联")
         node["execution"] = deepcopy(execution)
-        if algorithm in {*STRUCTURAL,*AXIS_MODULES,*WORKBENCH} and node["target"] != "both":
+        if algorithm in {*STRUCTURAL,*AXIS_MODULES,*WORKBENCH}-{"spatial_smooth","gain_offset"} and node["target"] != "both":
             raise ValueError("双路结构与时序模块作用于完整输入；左 / 右路范围仅适用于逐帧算法")
         if algorithm in AXIS_MODULES or algorithm in WORKBENCH and algorithm not in CORRELATIONS:
             if set(p)-set(spec["defaults"]):
@@ -284,7 +298,7 @@ def normalize_nodes(nodes, *, check_types=True, input_type="sensor", input_kind=
 
 
 def temporal(nodes):
-    return any(n.get("enabled", True) and n["algorithm"] in {"statistics", "sequence_statistics", *CORRELATIONS, "time_crop", "time_sample", "time_smooth", "time_bin", "data_tap", "axis_slice"} for n in nodes)
+    return any(n.get("enabled", True) and n["algorithm"] in {"statistics", "sequence_statistics", "spatial_smooth", "gain_offset", "time_statistics", "global_statistics", *CORRELATIONS, "time_crop", "time_sample", "time_smooth", "time_bin", "data_tap", "axis_slice"} for n in nodes)
 
 
 def migrate_nodes(nodes):
@@ -302,8 +316,20 @@ def migrate_nodes(nodes):
             else:
                 crop["id"] = f"{n.get('id') or uuid.uuid4().hex}-crop"
                 result.append(crop)
-                n.update(algorithm="region_reduce",parameters=dict(mode=mode,quantile=p.get("quantile",.5),validity=p.get("validity","joint"),output="main"))
+                n.update(algorithm="time_statistics",parameters=dict(mode=mode,quantile=p.get("quantile",.5),validity=p.get("validity","joint"),output="main"))
                 result.append(n)
+        elif a=="region_reduce":
+            n["algorithm"]="time_statistics"
+            result.append(n)
+        elif a in {"affine","gaussian"} or a in {"intensity","box_blur"} and n.get("execution",{}).get("precision","native")=="native":
+            if a in {"affine","gaussian"}:
+                execution=n.setdefault("execution",{})
+                if execution.get("precision","native")=="native":
+                    execution["precision"]="float64"
+            n["algorithm"]="gain_offset" if a in {"intensity","affine"} else "spatial_smooth"
+            if a in {"box_blur","gaussian"}:
+                n["parameters"]=dict(method="mean" if a=="box_blur" else "gaussian",radius=p["radius"],sigma=p.get("sigma",1.))
+            result.append(n)
         elif a=="statistics":
             stats = deepcopy(n)
             stats.update(id=f"{n.get('id') or uuid.uuid4().hex}-stats",algorithm="sequence_statistics",parameters=dict(normalization=p.get("normalization","none")))
@@ -328,6 +354,10 @@ def migrate_workbench_nodes(nodes):
         report.append("旧统计已拆为序列统计 / 显式固定尺度归一，保留原 float64 与固定尺度。")
     if any(n.get("algorithm")=="correlation" for n in nodes):
         report.append("关联输出已转换为固定延迟图或延迟扫描的独立模块入口。")
+    if any(n.get("algorithm") in {"affine","intensity","box_blur","gaussian","region_reduce"} for n in nodes):
+        report.append("平滑、增益和区域统计已迁入合并入口；原数值精度保留。旧定类型节点若另设浮点覆盖则保留兼容计算，避免改变原来的先量化行为。")
+    if any(n.get("algorithm")=="sequence_statistics" for n in nodes):
+        report.append("旧序列统计保留为兼容节点及原参数端口；新模块库使用时序统计 / 全域统计，g² 模板不再添加序列统计。")
     return migrated,report
 
 

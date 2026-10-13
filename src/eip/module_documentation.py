@@ -3,11 +3,15 @@ from copy import deepcopy
 
 
 ENTRIES = {
+    "gain_offset": ("modifier", "sliders", "增益 / 偏置", "B=gA+b", "算法默认保留输入类型；整数舍入限幅。选择 float32/64 时直接输出浮点，不先量化。"),
+    "spatial_smooth": ("modifier", "blur", "空间平滑", "mean: B=ΣA/(2r+1)²; gaussian: B=(K*(A·valid))/(K*valid)", "类型在模块内选择。均值采用反射边界，高斯采用边界复制；算法默认保留输入类型，浮点精度不先量化。"),
+    "time_statistics": ("modifier", "statistics", "时序统计", "每个样本：mean / sum / min / max / variance / std / quantile / count", "逐样本归约空间 / 分量，保留 T 或 Q 及 P/C，不压缩时间。方差为总体方差（ddof=0）。"),
+    "global_statistics": ("modifier", "statistics", "全域统计", "全上游：mean / sum / min / max / variance / std / quantile / count", "默认压缩所有轴；也可只压缩样本轴，或压缩样本与空间轴并保留 P/C。输出 N=1，不伪造时间。方差为总体方差；精确分位值使用临时磁盘缓存。"),
     "intensity": ("intermediate", "sliders", "定类型增益 / 偏置", "B=cast_clip_round(gA+b)", "整数先舍入再限幅；输出保持原类型。"),
     "affine": ("intermediate", "sliders", "浮点增益 / 偏置", "B=gA+b", "float64 输出，不量化、不限幅；溢出为 NaN。"),
     "box_blur": ("intermediate", "blur", "空间均值平滑", "B[y,x]=sum(A[y+dy,x+dx])/(2r+1)^2", "空间反射边界，要求输入有限；保持原类型。"),
     "gaussian": ("intermediate", "blur", "空间高斯平滑", "K[k]∝exp(-k²/(2σ²)); B=(K*(A·valid))/(K*valid)", "边界复制；原无效位置仍无效。"),
-    "curve": ("intermediate", "curve", "固定尺度强度映射", "x=A/M; B=f(x)", "整段固定尺度；非法定义域及非有限值为 NaN。identity 返回原值。"),
+    "curve": ("modifier", "curve", "固定尺度强度映射", "x=A/M; B=f(x)", "整段固定尺度；非法定义域及非有限值为 NaN。identity 返回原值。"),
     "threshold": ("algorithm", "threshold", "阈值分割", "B=uint8(A≥θ)", "输出为标签；不能将标签当光强进入关联。"),
     "calibration": ("algorithm", "calibrate", "传感器强度标定", "I=F(A)-black", "固定 LUT / 曲线；饱和及非有限输入为 NaN。显示 LUT 不参与。"),
     "alignment": ("algorithm", "align", "双幅配准", "L=crop(A,left); R=sample(crop(A,right),mirror(x+dx,y+dy))", "只保留公共有效区，插值方式明确；输入为灰度强度。"),
@@ -19,20 +23,20 @@ ENTRIES = {
     "roi_crop": ("intermediate", "crop", "ROI 裁剪", "B=A[y:y+h,x:x+w]", "相对此模块直接输入坐标；保留空间轴和来源原点。"),
     "region_reduce": ("modifier", "reduce", "区域归约", "mean=Σvalid(A)/n; sum=Σvalid(A); quantile=Q_q(A)", "归约 Y/X；全部无效为 NaN；双路共同 / 独立支持显式选择。"),
     "statistics": ("modifier", "statistics", "统计与归一（兼容）", "μ=ΣI/n; variance=M2/n; B=I/s", "历史节点包含主流归一与 float64 转换；不作为新模块展示。"),
-    "sequence_statistics": ("modifier", "statistics", "序列统计", "μ=Σvalid(I)/n; variance=M2/n; s=√(ΣM2/Σn)", "主流原样通过；mean / variance / count / scale 为独立侧输出。"),
-    "fixed_normalize": ("intermediate", "normalize", "固定尺度归一", "B=A/s", "显式固定尺度，必须有限且大于 0；输出 float64。"),
+    "sequence_statistics": ("modifier", "statistics", "序列统计（兼容）", "μ=Σvalid(I)/n; variance=M2/n; s=√(ΣM2/Σn)", "旧流程专用：主流原样通过，保留统计与固定涨落 RMS 端口。新流程使用时序统计 / 全域统计。"),
+    "fixed_normalize": ("modifier", "normalize", "固定尺度归一", "B=A/s", "显式固定尺度，必须有限且大于 0；输出 float64。"),
     "select_channel": ("modifier", "channels", "双路选幅", "B=L 或 R", "仅移除 P 轴，主流明确改变；不能接单路。"),
     "time_sample": ("intermediate", "sample", "间隔采样", "B[j]=A[offset+j·step]", "不插值、不合帧；保留实际时间；只接受 T。"),
     "time_smooth": ("intermediate", "window", "时间滑窗", "B[j]=mean_valid(A[j:j+W]) 或 quantile", "完整滑窗、不补帧；输出时间为中心样本；只接受 T。"),
     "time_bin": ("intermediate", "bin", "时间合帧", "B[j]=mean_valid 或 sum_valid(A[jB:(j+1)B])", "不重叠分组，丢弃不满尾组；不伪造采集帧；只接受 T。"),
     "grayscale": ("intermediate", "palette", "灰度转换", "Y=.2126R+.7152G+.0722B 或 (R+G+B)/3", "明确转换 RGB；忽略 alpha，float64 输出；灰度输入拒绝重复转换。"),
     "color_convert": ("intermediate", "palette", "颜色排列 / 扩展", "RGB←repeat(gray,3); BGR=RGB[...,::-1]", "显式声明输出颜色顺序；不暗中改变强度尺度。"),
-    "point_extract": ("modifier", "point", "点信号提取", "B=A[...,y,x,...]", "去除 Y/X，保留 T 或 Q 及显式通道；坐标为直接上游。"),
-    "line_extract": ("modifier", "line", "直线截面提取", "p_j=p₀+j(p₁−p₀)/(N−1); B_j=sample(A,p_j)", "横纵便捷线或任意端点线段；R 为像素距离，最近邻或明确双线性。"),
-    "axis_slice": ("modifier", "slice", "按轴截面", "B=take(A,index,axis)", "按明确轴与从 0 起位置提取；T/Q 单样本截面改为 N 记录轴。"),
+    "point_extract": ("intermediate", "point", "点信号提取", "B=A[...,y,x,...]", "去除 Y/X，保留 T 或 Q 及显式通道；坐标为直接上游。"),
+    "line_extract": ("intermediate", "line", "直线截面提取", "p_j=p₀+j(p₁−p₀)/(N−1); B_j=sample(A,p_j)", "横纵便捷线或任意端点线段；R 为像素距离，最近邻或明确双线性。"),
+    "axis_slice": ("intermediate", "slice", "按轴截面", "B=take(A,index,axis)", "按明确轴与从 0 起位置提取；T/Q 单样本截面改为 N 记录轴。"),
     "distribution": ("modifier", "histogram", "分布统计", "H[b]=count(e_b≤finite(A)<e_(b+1))", "上下界可独立手动设置或自动识别上游完整范围的有限值极值；整段固定等宽箱，末箱含右边界。常量数据自动边界向外扩展；无有限值时自动识别报错。"),
     "data_tap": ("modifier", "export", "数据截流导出", "main=A; captured=A", "获取直接上游真实数据；主流透传，不更改轴、dtype 或来源。"),
-    "parameter_binding": ("modifier", "variable", "参数传递", "main=A; value=v", "只发布数值标量；允许常量或已启用前序模块的明确端口，禁止循环与任意代码。"),
+    "parameter_binding": ("intermediate", "variable", "参数传递", "main=A; value=v", "只发布数值标量；允许常量或已启用前序模块的明确端口，禁止循环与任意代码。"),
 }
 
 LATEX = {
@@ -59,6 +63,9 @@ LATEX = {
 LATEX["correlation_map"]=LATEX["correlation_curve"]=LATEX["correlation"]
 LATEX["spatial_roi"]=LATEX["roi_crop"]
 LATEX["statistics"]=LATEX["sequence_statistics"]+r",\quad B=I/s"
+LATEX["gain_offset"]=r"B=gA+b,\quad \mathrm{native}:\operatorname{cast}_{d}(B),\quad \mathrm{float}:\operatorname{cast}_{32/64}(B)"
+LATEX["spatial_smooth"]=LATEX["box_blur"]+r",\quad\mathrm{or}\quad"+LATEX["gaussian"]
+LATEX["time_statistics"]=LATEX["global_statistics"]=r"\mu=\frac{\sum_{j\in V}A_j}{n},\quad \sigma^2=\frac{\sum_{j\in V}(A_j-\mu)^2}{n},\quad m=\min_{j\in V}A_j,\quad M=\max_{j\in V}A_j,\quad Q_q=(1-f)A_{(\lfloor u\rfloor)}+fA_{(\lceil u\rceil)},\quad u=(n-1)q,\ f=u-\lfloor u\rfloor"
 
 VALIDITY = {
     "box_blur":"输入必须全部有限；遇 NaN / Inf 直接报错。",
@@ -83,6 +90,9 @@ VALIDITY = {
     "grayscale":"任一参与颜色分量非有限时结果非有限；忽略alpha。", "color_convert":"重排 / 复制，不改变原值有效性。",
 }
 VALIDITY["correlation_map"]=VALIDITY["correlation_curve"]=VALIDITY["correlation"]
+VALIDITY["gain_offset"]="浮点输出不舍入、不限幅；native 整数按 rint 舍入并限幅，native 浮点保留类型。计算溢出置 NaN；拒绝 64 位整数的隐式浮点运算。"
+VALIDITY["spatial_smooth"]="均值要求全部有限；高斯按有限权重归一，原无效位置保留 NaN。输出默认保留原类型；选择浮点精度时不先整数量化。"
+VALIDITY["time_statistics"]=VALIDITY["global_statistics"]="仅有限值参与；空集合的 count 为0，其余统计量为 NaN。方差分母为有效值数 n；min/max 为独立极值运算，分位值使用线性插值。双路共同有效支持或各路独立支持由参数明确指定。"
 SYMBOLS={"gain":"g","offset":"o / b","sigma":"σ","radius":"r","threshold":"θ","input_max":"M","gamma":"γ","quantile":"q","window":"W","map_lag":"q / τ","stride":"S","scale":"s","bins":"N","minimum":"e₀","maximum":"eₙ","samples":"N","step":"s","size":"B","center":"c"}
 
 IO = {
@@ -107,6 +117,10 @@ for _key in ("correlation_map","correlation_curve"):
     IO[_key]=IO["correlation"]
 for _key in ("box_blur","gaussian"):
     IO[_key]=("含Y/X的空间矩阵；双路分别处理","同形状空间平滑输出；不能接标量或线信号")
+IO["spatial_smooth"]=IO["gaussian"]
+IO["gain_offset"]=("矩阵 / 双路 / 标量 / 向量数值","同轴同形状，dtype 由实例精度决定")
+IO["time_statistics"]=("T/Q/N×空间或分量；双路与颜色分量明确","T/Q/N(P)(C)，逐样本统计值；count 为 uint64，其余 float64；可旁路")
+IO["global_statistics"]=("任意 T/Q/N 数值序列的完整直接上游","N=1 静态统计记录；保留轴由统计范围决定；value/count 可用于后序参数绑定")
 for _key in ("time_crop","time_sample","time_smooth","time_bin"):
     IO[_key]=("当前时间T×…；不接受Q延迟轴或N静态记录","编辑后的T′×…，保留真实时间与贡献来源")
 
@@ -121,7 +135,9 @@ def enrich(spec):
         spec["formula"]={"latex":"","expression":"未提供公式","symbols":[],"domain":"以已声明插件契约为准","validity":"以插件实现及输出校验为准","boundary":"未提供边界说明",**formula}
         return spec
     category, icon, name, expression, boundary = ENTRIES.get(spec["id"], ("algorithm", "plugin", spec["name"], "用户模块执行契约", "以插件声明及实际输出校验为准。"))
-    spec.update(category=category, icon=icon, name=name, legacy=spec["id"] in {"spatial_roi", "statistics", "correlation"})
+    spec.update(category=category, icon=icon, name=name, legacy=spec["id"] in {"spatial_roi", "statistics", "correlation", "intensity", "affine", "box_blur", "gaussian", "region_reduce", "sequence_statistics"})
+    if spec["legacy"] and not name.endswith("（兼容）"):
+        spec["name"] += "（兼容）"
     symbols = [{"symbol":"A / I", "meaning":"本模块直接上游数值", "unit":"上游单位"}, {"symbol":"B", "meaning":"本模块输出", "unit":"由输出契约确定"}]
     if spec["id"].startswith("correlation"):
         symbols = [
@@ -144,6 +160,12 @@ def enrich(spec):
         symbols += [{"symbol":"H_b", "meaning":"落入第 b 个固定箱的有限值数量；末箱含右边界", "unit":"计数"},
                     {"symbol":"e_b", "meaning":"由手动值或上游完整范围自动识别的有限值极值及箱数确定，整段共用固定边界", "unit":"上游单位"},
                     {"symbol":"V", "meaning":"当前样本中的有限值集合，超范围值不计入任何箱", "unit":"值集合"}]
+    if spec["id"] in {"time_statistics","global_statistics"}:
+        symbols += [{"symbol":"μ", "meaning":"所选有限值集合的算术平均", "unit":"上游单位"},
+                    {"symbol":"σ²", "meaning":"总体方差，分母为有效值数量 n", "unit":"上游单位平方"},
+                    {"symbol":"V", "meaning":"时序统计：当前样本内除 P/C 外的轴；全域统计：按所选范围合并所有上游样本。共同有效规则先于归约应用", "unit":"值集合"},
+                    {"symbol":"n", "meaning":"有限值数量；空集合为0", "unit":"计数"},
+                    {"symbol":"A_(k)", "meaning":"有限值升序排列后的第 k 项（从0起）", "unit":"上游单位"}]
     symbols += [{"symbol":SYMBOLS.get(p["key"],p["key"]),"meaning":p["label"],"unit":p.get("unit","")} for p in spec.get("parameters",[]) if p["kind"] in {"int","float"}]
     if spec["id"] in {"region_reduce","sequence_statistics","statistics","gaussian"}:
         symbols += [{"symbol":"V / valid","meaning":"本公式声明的有限值支持集合","unit":"无"},{"symbol":"n","meaning":"有效支持数量","unit":"样本或像素"}]
@@ -152,5 +174,5 @@ def enrich(spec):
     spec["formula"] = dict(latex=LATEX[spec["id"]], expression=expression, symbols=symbols, domain=spec.get("description", ""), validity=VALIDITY.get(spec["id"],"有限值参与统计 / 平滑；全部无效输出 NaN，具体集合和边界见公式及算法说明。"), boundary=boundary)
     input_,output_=IO.get(spec["id"],("数值矩阵 / 双路 / 标量 / 向量；64位整数不作隐式浮点计算","同轴同形状；实际dtype和语义见公式边界及实例契约"))
     spec["documentation"] = dict(summary=spec.get("description", ""), formula=deepcopy(spec["formula"]), input=input_, output=output_)
-    spec["effect"] = "pass" if spec["id"] in {"data_tap", "sequence_statistics", "parameter_binding"} else "selectable" if spec["id"] in {"region_reduce","point_extract","line_extract","axis_slice","distribution"} else "replace"
+    spec["effect"] = "pass" if spec["id"] in {"data_tap", "sequence_statistics", "parameter_binding"} else "selectable" if spec["id"] in {"region_reduce","time_statistics","global_statistics","point_extract","line_extract","axis_slice","distribution"} else "replace"
     return spec

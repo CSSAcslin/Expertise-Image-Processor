@@ -175,7 +175,7 @@ def create_app(workspace: Path | None = None, restore_session: Path | None = Non
                         parameter = provider["parameters"].get(port.partition(":")[2])
                         if not is_reference(parameter) and (isinstance(parameter,bool) or not isinstance(parameter,(int,float))):
                             raise ValueError("引用的参数端口不是数值参数")
-                    elif not (provider["algorithm"]=="sequence_statistics" and port in {"mean","variance","count","scale"} or provider["algorithm"]=="parameter_binding" and port=="value"):
+                    elif not (provider["algorithm"]=="sequence_statistics" and port in {"mean","variance","count","scale"} or provider["algorithm"]=="global_statistics" and port in {"value","count"} or provider["algorithm"]=="parameter_binding" and port=="value"):
                         raise ValueError("参数引用的结果端口不存在或不支持数值绑定")
             providers[node["id"]] = node
         return dict(nodes=normalized,report=report)

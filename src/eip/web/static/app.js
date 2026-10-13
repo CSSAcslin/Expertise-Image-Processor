@@ -1182,7 +1182,7 @@ async function submitDialog() {
 function projectView() {
   stashView();
   return {
-    workbench_schema:2,
+    workbench_schema:3,
     web_module_contract:3,
     analysis_mode:$("analysis-mode").value,
     split_mode:split.serialize(),
@@ -1246,7 +1246,7 @@ async function restoreProjectOptions(view) {
   updateSummary();
 }
 async function migrateGeneralFlow(view){
-  if(view.workbench_schema>=2)return;
+  if(view.workbench_schema>=3)return;
   if(view.web_module_contract!==3&&!active)return;
   if(view.web_module_contract!==3){
   if(!steps.some(n=>n.algorithm==="time_crop")){const time=moduleNode(state.modules.time_crop,active),range=view.web_range,ctx=view.web_sequence_context?.config;
@@ -1258,8 +1258,8 @@ async function migrateGeneralFlow(view){
   scene.roi=null;generalROI=null;$("scope").value="all";view.web_module_contract=3;
   }
   const migrated=await api("modules/migrate",{steps});
-  steps=migrated.nodes;view.steps=structuredClone(steps);view.workbench_schema=2;
-  renderSteps();if(migrated.report.length)toast("旧流程草稿已迁移：ROI、统计和关联已拆分，原保存项目不变。");
+  steps=migrated.nodes;view.steps=structuredClone(steps);view.workbench_schema=3;
+  renderSteps();if(migrated.report.length)toast("流程草稿已迁移至新模块目录，原保存项目不变。");
 }
 let draftTimer,
   restoringDraft = false,
