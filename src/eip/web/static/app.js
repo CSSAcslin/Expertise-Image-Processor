@@ -3,7 +3,7 @@ import { Viewer } from "./viewer.js";
 import { FileBrowser } from "./file-browser.js";
 import { validROI, moveROI } from "./geometry.js";
 import { SplitController } from "./split.js";
-import { ModuleEditor, moduleNode } from "./flow.js";
+import { ModuleEditor, moduleNode, contractAxes } from "./flow.js";
 import { SequenceResults } from "./sequence.js";
 import { WorkbenchLayout } from "./layout.js";
 import { detailHTML, bindRename } from "./job-detail.js";
@@ -428,7 +428,7 @@ function updateSources() {
     (b) =>
       (b.onclick = (event) => {
         event.stopPropagation();
-        showSourceDetails(b.dataset.info);
+        safe(() => showSourceDetails(b.dataset.info))();
       }),
   );
   document.querySelectorAll("[data-remove]").forEach(
@@ -440,9 +440,18 @@ function updateSources() {
   );
   updateSummary();
 }
-function showSourceDetails(id) {
+async function showSourceDetails(id) {
   const entry = sources.find((s) => s.id === id);
   if (!entry) return;
+  // Reader axes/shape describe a decoded frame (or a plotted thumbnail).
+  // Use the same complete source contract as processing, with no algorithm nodes.
+  const contract = (await api("modules/plan", { source_id: id, steps: [] })).output;
+  const axes = contractAxes(contract);
+  const color = contract.axes.includes("C")
+    ? contract.color_order
+    : contract.axes.includes("Y") && contract.axes.includes("X")
+      ? "gray"
+      : "不适用";
   const labels = {
     stream_pts: "视频真实时间戳",
     user: "用户指定间隔",
@@ -455,8 +464,8 @@ function showSourceDetails(id) {
     ["来源", entry.display_name || entry.meta.name],
     ["路径", entry.source.path],
     ["类型", entry.meta.kind],
-    ["数据尺寸", entry.meta.contract?.label||entry.meta.shape.join(" × ")],
-    ["像素类型", entry.meta.dtype],
+    ["数据尺寸", contract.label],
+    ["数值类型", contract.dtype],
     [
       "有效位深",
       entry.meta.sample_bits ? entry.meta.sample_bits + " bit" : "未声明",
@@ -465,8 +474,15 @@ function showSourceDetails(id) {
       "按帧跳转",
       indexed(entry) ? "支持精确帧号" : "按时间定位，已知帧号会显示",
     ],
-    ["轴 / 颜色", entry.meta.axes + " / " + entry.meta.color],
-    ["帧数", entry.meta.frame_count ?? "未知"],
+    ["轴 / 颜色", axes + " / " + color],
+    [
+      contract.sequence_axis === "Q"
+        ? "延迟项数"
+        : contract.sequence_axis === "T"
+          ? "帧 / 样本数"
+          : "记录数",
+      contract.length ?? "未知",
+    ],
     [
       "时长",
       entry.meta.duration === null ? "未知" : entry.meta.duration + " s",
