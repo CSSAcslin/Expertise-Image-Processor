@@ -22,3 +22,8 @@ dialog{border:1px solid #465b70;border-radius:8px;background:#1b2532;color:#e3ec
 #toast{z-index:1200;bottom:113px;pointer-events:none} .node-menu[open] summary{color:var(--accent)}
 .interactive-plot{touch-action:none;user-select:none;cursor:grab}.interactive-plot.plot-dragging{cursor:grabbing}
 .unified-workbench>.library,.unified-workbench>.tasks{position:relative}.dock-resizer[data-resize=library]{position:absolute;inset:0 0 0 auto;width:6px;cursor:col-resize}.dock-resizer[data-resize=library]:after{content:'';position:absolute;top:calc(50% - 17px);left:2px;height:34px;width:2px;background:#60748a}.dock-resizer[data-resize=tasks]{top:0;bottom:auto;height:6px}.dock-resizer:focus-visible{outline:1px solid var(--accent);outline-offset:-1px}.workspace[data-resizing=columns],.workspace[data-resizing=columns] *{cursor:col-resize!important;user-select:none}.workspace[data-resizing=rows],.workspace[data-resizing=rows] *{cursor:row-resize!important;user-select:none}.interactive-plot.plot-axis-y{cursor:ns-resize}.interactive-plot.plot-dragging{cursor:grabbing}
+/* Resource settings. Result browsing stays in the shared workbench library. */
+#run-settings-dialog{width:min(650px,94vw);max-height:90vh;overflow:auto}
+.resource-readout{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;max-width:100%}
+.danger{color:#f3a6a6;border-color:#7e4c55}
+#run-settings-dialog .dialog-body{max-height:calc(90dvh - 65px);gap:14px;padding:18px}

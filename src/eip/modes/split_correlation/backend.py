@@ -23,6 +23,9 @@ def devices():
 
 class Backend:
     def __init__(self, requested, budget_bytes):
+        if requested not in {"cpu","auto","gpu"}:
+            raise ValueError("未知计算设备")
+        self.requested = requested
         self.xp = np
         self.name = "cpu"
         self.reason = None
@@ -38,6 +41,7 @@ class Backend:
                     check = cp.sum(cp.asarray([1.0,2.0],dtype=cp.float64)).item()
                     if check != 3.0:
                         raise ValueError("GPU 数值自检失败")
+                    cp.get_default_memory_pool().set_limit(size=int(budget_bytes))
                     self.xp,self.name = cp,"gpu"
                 except Exception as error:
                     available.update(gpu=False,reason=f"GPU 启动失败：{error}")
@@ -52,3 +56,4 @@ class Backend:
     def close(self):
         if self.name == "gpu":
             self.xp.get_default_memory_pool().free_all_blocks()
+            self.xp.get_default_pinned_memory_pool().free_all_blocks()

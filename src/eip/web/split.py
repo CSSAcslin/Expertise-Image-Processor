@@ -139,10 +139,17 @@ class SplitService:
         entry = self._source(value)
         if entry.get("result_kind")=="label":
             raise ValueError("标签结果不能隐式当作光强计算关联")
-        config = CorrelationConfig.from_dict(value["config"])
+        config = self.resource_config(value["config"])
         result = preflight(entry["meta"],config,value.get("task","trial"))
         result["devices"] = self.devices
         return result
+
+    def resource_config(self,value):
+        policy = self.workbench.resources
+        settings = dict(value)
+        settings["memory_mb"] = min(settings.get("memory_mb") or policy.job_mb,policy.job_mb,4096)
+        settings.setdefault("backend",policy.backend)
+        return CorrelationConfig.from_dict(settings)
 
     def submit(self,value):
         entry = self._source(value)
@@ -153,7 +160,7 @@ class SplitService:
                 raise ValueError("当前流程没有对应时序模块；可按单帧试算或运行图像流程")
             frame = self._frame(entry,config.get("center",0))
             return self.workbench.submit(dict(mode=task,source_ids=[entry["id"]],steps=config.get("workflow",[]),selection=dict(mode="current" if task=="trial" else "all",current=frame["frame"],roi=config.get("roi")),index_selection=[config.get("start",0),config.get("end") or entry["meta"]["frame_count"]] if task=="run" else None,name=value.get("name"),output_dir=value.get("output_dir"),config_revision=value.get("config_revision")))
-        config = CorrelationConfig.from_dict(value["config"])
+        config = self.resource_config(value["config"])
         if config.workflow is not None:
             self.workbench.validate_steps(list(config.workflow))
             normalize_nodes(config.workflow,input_kind=entry.get("result_kind","image"))
@@ -290,4 +297,5 @@ class SplitService:
         kind = {"statistics":"全源统计","curve":"τ 扫描曲线","trial":"空间图试算","run":"空间系数图"}[run["task"]]
         job.update(name=run.get("display_name") or automatic_name(job["name"],kind,job["created"]),source_name=Path(run["source"]["path"]).name,summary=saved_split_summary(run["config"],run["task"]))
         self.workbench.enqueue(identifier,job,queue_job=False)
+        self.workbench.results.remember()
         return {"id":identifier}

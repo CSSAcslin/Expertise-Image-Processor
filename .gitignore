@@ -8,8 +8,19 @@ build/
 dist/
 .test-output/
 .eip-cache/
+.eip-resources.json
+.eip-results.json
 outputs/
 *.partial/
 .idea/
 .vscode/
 Thumbs.db
+.DS_Store
+.env
+.env.*
+!.env.example
+# Local datasets, workspace projects and maintenance session snapshots.
+/测试/
+/data/
+*.eip.json
+*.session.json

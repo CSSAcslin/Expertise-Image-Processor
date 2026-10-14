@@ -48,6 +48,8 @@ def inspection_entry(commands, results, folder):
                         input_kind=command.get("input_kind", "image"),
                         dependencies=command.get("dependencies", []),
                         range_cache=range_cache,
+                        resources=command.get("resources"),
+                        inspection=True,
                     )
                     try:
                         side_id, index = command.get("side_output"), command["index"]
@@ -193,3 +195,10 @@ class InspectionBroker:
             self.closed = True
             self.active = None
             self._dispose()
+
+    def release_idle(self):
+        with self.lock:
+            if self.active:
+                return False
+            self._dispose()
+            return True

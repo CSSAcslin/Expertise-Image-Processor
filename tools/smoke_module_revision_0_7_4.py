@@ -14,6 +14,8 @@ import tifffile
 from playwright.sync_api import expect, sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT/"src"))
+from eip import __version__
 
 
 def main():
@@ -42,7 +44,7 @@ def main():
                 raise AssertionError("isolated server did not start")
             with httpx.Client(base_url=url, timeout=45) as api, sync_playwright() as pw:
                 state = api.get("/api/state").json()
-                assert state["version"] == "0.7.4"
+                assert state["version"] == __version__
                 api.headers["X-EIP-Token"] = state["session_token"]
                 response = api.post("/api/sources/open", json=dict(path=str(output / "source.tif"), interval=.01))
                 response.raise_for_status()
@@ -115,7 +117,7 @@ def main():
                 assert jobs[0]["status"] == "succeeded", jobs
                 saved = api.get("/api/jobs/" + jobs[0]["id"]).json()
                 item = saved["run"]["results"][0]
-                assert saved["run"]["app_version"] == "0.7.4"
+                assert saved["run"]["app_version"] == __version__
                 assert item["contract"]["full_axes"] == "N" and item["contract"]["length"] == 1
                 numeric = api.get(f"/api/jobs/{saved['id']}/download", params=dict(file="array"))
                 numeric.raise_for_status()
@@ -127,6 +129,7 @@ def main():
                 assert rows[0]["time_seconds"] == ""
                 assert [n["algorithm"] for n in saved["run"]["spec"]["steps"]] == ["gain_offset", "spatial_smooth", "time_statistics", "global_statistics"]
                 page.locator("[data-library-tab='sources']").click()
+                page.locator("#manage-results").click()
                 page.locator(f"[data-sequence-result='{saved['id']}']").click()
                 expect(page.locator("#split-curve svg")).to_be_visible()
                 page.screenshot(path=str(output / "statistics-result.png"), full_page=True)
@@ -172,7 +175,7 @@ def main():
                 page.screenshot(path=str(output / "modules-compact.png"), full_page=True)
                 assert len(computations) == 1 and len(api.get("/api/jobs").json()) == 1
                 assert not errors, errors
-                report = dict(version="0.7.4", categories=True, merged_selectors=True, precision=True,
+                report = dict(version=__version__, categories=True, merged_selectors=True, precision=True,
                               statistics_export=20.25, output_axes="N", clear_undo_redo=True,
                               clear_persisted=True, templates_without_statistics=True, statistic_binding=True,
                               javascript_errors=errors)

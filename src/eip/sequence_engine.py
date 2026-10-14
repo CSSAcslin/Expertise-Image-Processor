@@ -23,6 +23,8 @@ from eip.module_engine import IdentityPhotometry
 from eip.module_ops import intensity_curve
 from eip.module_registry import normalize_nodes, module_spec, CORRELATIONS, MODIFIERS, is_reference, needs_full_sequence
 from eip.module_statistics import reduce_finite, retained_axes, joint_values, global_statistic
+from eip.resources import ResourceSettings, configure_reader, MIB
+from eip.gpu_ops import GPU_MODULES, element_operation
 
 
 class Cache:
@@ -131,7 +133,7 @@ class Source:
 
 
 class SequenceEngine:
-    def __init__(self,reader,nodes,context=None,*,workdir,center=None,single=False,input_kind="image",dependencies=(),range_cache=None):
+    def __init__(self,reader,nodes,context=None,*,workdir,center=None,single=False,input_kind="image",dependencies=(),range_cache=None,resources=None,inspection=False):
         self.context = context or RunContext()
         self.workdir = Path(workdir)
         self.global_statistics = {}
@@ -142,9 +144,17 @@ class SequenceEngine:
         self.nodes = [n for n in self.plan["nodes"] if n["enabled"]]
         self.contracts = [self.source.contract]
         self.operations,self.instances,self.statistics = [],{},{}
-        self.budget = max([n.get("execution",{}).get("memory_mb",256) for n in self.nodes] or [256])*1024**2
-        self.cache = Cache(min([n.get("execution",{}).get("memory_mb",256) for n in self.nodes] or [256])*1024**2//3)
+        self.resources = ResourceSettings.from_dict(resources) if resources is not None else None
+        legacy_mb = [n.get("execution",{}).get("memory_mb") or 256 for n in self.nodes] or [256]
+        self.inspection = inspection
+        self.budget = ((self.resources.inspection_mb if inspection else self.resources.job_mb) if self.resources else max(legacy_mb))*MIB
+        cache_budget = min(self.resources.cache_mb*MIB,self.budget//3) if self.resources else min(legacy_mb)*MIB//3
+        self.reader_cache_budget = cache_budget//4
+        configure_reader(reader,self.reader_cache_budget)
+        self.cache = Cache(cache_budget-self.reader_cache_budget)
         self.mappings,self.backends = {},{}
+        self.device_backends,self.device_records = {},{}
+        self.resource_plan = []
         self.last_correlation = {}
         self.resolved_bindings = {}
         self._sides = []
@@ -185,10 +195,8 @@ class SequenceEngine:
                     from eip.modes.split_correlation.photometry import Photometry
                     self.instances[i] = Photometry(PhotometryConfig.from_dict(dict(p,normalization="none")))
                 elif a in CORRELATIONS:
-                    from eip.modes.split_correlation.backend import Backend
                     lags,centers,_,_ = correlation_layout(c,p,center,single_here)
                     op.update(lags=lags,centers=centers)
-                    self.backends[i] = Backend(n.get("execution",{}).get("backend","cpu"),n.get("execution",{}).get("memory_mb",256)*1024**2)
                     self.mappings[n["id"]] = dict(lag_units="upstream_samples",window_units="upstream_samples",lags=lags,centers=dict(start=centers.start,stop=centers.stop,step=centers.step))
                 elif a=="line_extract" and p["mode"]=="segment":
                     length=float(np.hypot(p["x1"]-p["x0"],p["y1"]-p["y0"]))
@@ -207,6 +215,7 @@ class SequenceEngine:
                 elif a=="spatial_smooth":
                     self.instances[i] = BuiltinAlgorithm("box_blur" if p["method"]=="mean" else "gaussian")
                     self.instances[i].prepare(p,self.context)
+                self._configure_backend(i,n)
                 self.operations.append(op)
                 self.contracts.append(after)
                 for side in stage_plan["stages"][0].get("side_outputs",[]):
@@ -218,21 +227,62 @@ class SequenceEngine:
                     self._sides.append(dict(id=f"{n['id']}:{port}",node_id=n["id"],port=port,name=p.get("name") or n.get("name") or title,contract=side_c,kind=a,stage=i,destination=p.get("destination","result"),export_format=p.get("export_format","dataset")))
                 # Temporary arrays as well as caches must fit the chosen budget.
                 elements = int(np.prod(c.shape,dtype=np.int64))
-                multiplier = 12 if a=="line_extract" and p["mode"]=="segment" else 8 if a=="global_statistics" else 1 if a in {"time_crop","time_sample","select_channel","data_tap","parameter_binding"} else 3 if a in {"affine","intensity","curve","threshold","spatial_roi","roi_crop",*MODIFIERS} else 12 if a in CORRELATIONS else p.get("window",1)+4 if a=="time_smooth" and p["mode"]=="quantile" else 8
+                multiplier = 12 if a=="line_extract" and p["mode"]=="segment" else 8 if a=="global_statistics" else 1 if a in {"time_crop","time_sample","select_channel","data_tap","parameter_binding"} else 3 if a in {"affine","intensity","curve","threshold","spatial_roi","roi_crop",*MODIFIERS} else 12 if a in CORRELATIONS else 8
                 side_elements=max([int(np.prod(s["contract"].shape)) for s in self._sides if s["node_id"]==n["id"]] or [0])
                 working=max(elements,int(np.prod(after.shape)),side_elements)*8*multiplier
-                if working>n.get("execution",{}).get("memory_mb",256)*1024**2*2/3:
-                    raise ValueError(f"{a} 工作数组超过该流程内存预算；请先裁剪 ROI、减小窗口或增加执行内存")
+                limit = min(self.budget,(n.get("execution",{}).get("memory_mb") or self.budget/MIB)*MIB)
+                if working>limit*2/3:
+                    remedy = "此实例另设内存上限，可清空上限或点击「流程继承统一资源」" if n.get("execution",{}).get("memory_mb") and limit<self.budget else "请先裁剪 ROI 或在运行设置增加统一预算"
+                    raise ValueError(f"{n.get('name') or a} 工作数组估计 {working/MIB:.1f} MiB，超过内存预算 {limit/MIB:.0f} MiB；{remedy}")
                 if a in {"statistics","sequence_statistics"}:
                     retained += elements*20
                 elif a=="global_statistics":
                     retained += max(1,int(np.prod(after.shape if p["output"]=="main" else self._sides[-1]["contract"].shape)))*16
-                if retained+working+self.cache.budget>self.budget:
+                elif a in CORRELATIONS:
+                    retained += elements*24
+                # Outer temporal accumulators survive while upstream is computed.
+                nested = sum(int(np.prod(self.contracts[j].shape))*24 for j,old in enumerate(self.nodes[:i]) if old["algorithm"] in {"time_smooth","time_bin"})
+                if retained+working+nested+cache_budget>self.budget:
                     raise ValueError("重复统计保留数组与工作数组合计超过流程预算；请减少统计节点、先裁剪或提高内存预算")
+                self.resource_plan.append(dict(node_id=n["id"],working_bytes=working,retained_bytes=retained,nested_bytes=nested,limit_bytes=int(limit),window_storage="disk" if a=="time_smooth" and p["mode"]=="quantile" else None))
             self.plan = self._actual_plan()
         except Exception:
             self.close()
             raise
+
+    def _configure_backend(self,i,node):
+        from eip.modes.split_correlation.backend import Backend
+        requested = node.get("execution",{}).get("backend","inherit")
+        requested = (self.resources.backend if self.resources else "cpu") if requested=="inherit" else requested
+        a = node["algorithm"]
+        if a not in GPU_MODULES:
+            self.device_records[node["id"]] = dict(requested=requested,actual="cpu",reason="此模块使用 CPU")
+            return
+        if requested not in self.device_backends:
+            budget = self.resources.gpu_mb*MIB*(.25 if self.inspection else .75) if self.resources else self.budget
+            self.device_backends[requested] = Backend(requested,budget)
+        backend = self.device_backends[requested]
+        self.backends[i] = backend
+        self.device_records[node["id"]] = dict(requested=requested,actual=backend.name,reason=backend.reason)
+        if backend.reason and not any(r.get("reason")==backend.reason for k,r in self.device_records.items() if k!=node["id"]):
+            self.context.log(f"自动设备选择：使用 CPU；{backend.reason}")
+
+    def _gpu_apply(self,i,value):
+        op,backend,c = self.operations[i],self.backends[i],self.contracts[i]
+        a,p,n = op["algorithm"],op["parameters"],op["node"]
+        if value.dtype.kind in "ui" and value.dtype.itemsize>4 and a!="fixed_normalize":
+            raise ValueError("内置数值算法暂不处理 64 位整数；请显式提供精度策略")
+        def transform(arr):
+            # A nonspatial colour vector has the same threshold reduction as CPU.
+            if a=="threshold" and not c.spatial and "C" in c.axes:
+                xp=backend.xp
+                return backend.host((xp.mean(xp.asarray(arr,dtype=xp.float64)[...,:3],axis=-1)>=p["threshold"]).astype(xp.uint8))
+            result = element_operation(a,arr,p,backend.xp,color_order=c.color_order,
+                                       preserve_input=a in {"gain_offset","spatial_smooth"} and n.get("execution",{}).get("precision","native")=="native")
+            return backend.host(result)
+        if c.paired and a not in {"fixed_normalize","grayscale"}:
+            return np.stack([transform(arr) if n["target"] in {"both",side} else arr for arr,side in zip(value,("left","right"))])
+        return transform(value)
 
     def _actual_plan(self):
         # Include disabled cards in provenance but only active operations in shape chain.
@@ -245,7 +295,7 @@ class SequenceEngine:
                 upstream.append({key:value for key,value in n.items() if key!="name"})
             fingerprint = hashlib.sha256(json.dumps(dict(source_revision=self.source.reader.meta.revision,contract_version=3,upstream=upstream,preview_dependencies=self.dependencies),sort_keys=True,ensure_ascii=False,separators=(",",":")).encode()).hexdigest()
             stages.append(dict(id=n["id"],algorithm=n["algorithm"],enabled=n["enabled"],input=before.record(),output=self.contracts[active].record(),upstream_fingerprint=fingerprint,side_outputs=[dict(port=s["port"],contract=s["contract"].record()) for s in self._sides if s["node_id"]==n["id"]]))
-        return dict(self.plan,stages=stages,output=self.contracts[-1].record(),preview_dependencies=list(self.dependencies),resolved_bindings=self.resolved_bindings)
+        return dict(self.plan,stages=stages,output=self.contracts[-1].record(),preview_dependencies=list(self.dependencies),resolved_bindings=self.resolved_bindings,devices=self.device_records,resources=self.resources.record() if self.resources else None,resource_role="inspection" if self.inspection else "job",worker_budget_bytes=self.budget,resource_plan=self.resource_plan)
 
     def _resolve_parameters(self,node,position):
         from copy import deepcopy
@@ -437,7 +487,8 @@ class SequenceEngine:
                 size = p["window"] if a=="time_smooth" else p["size"]
                 first = index if a=="time_smooth" else index*size
                 if p["mode"]=="quantile":
-                    value,_ = reduce_finite(np.stack([self.get(i,j) for j in range(first,first+size)]),0,"quantile",p["quantile"])
+                    from eip.window_statistics import window_quantile
+                    value = window_quantile(lambda j:self.get(i,j),before.shape,first,size,p["quantile"],max(1024,self.resource_plan[i]["limit_bytes"]//8),self.workdir,self.context.check_cancelled)
                 else:
                     total,count = np.zeros(before.shape),np.zeros(before.shape,dtype=np.uint32)
                     for j in range(first,first+size):
@@ -451,6 +502,8 @@ class SequenceEngine:
                 value = self.get(i,index)/stats["scales"]
             elif a in {"data_tap","sequence_statistics","parameter_binding"}:
                 value=self.get(i,index)
+            elif a in GPU_MODULES and a not in CORRELATIONS and self.backends[i].name=="gpu":
+                value=self._gpu_apply(i,self.get(i,index))
             elif a=="fixed_normalize":
                 scale=np.asarray(p["scale"],dtype=np.float64)
                 if not np.isfinite(scale).all() or (scale<=0).any():
@@ -655,8 +708,13 @@ class SequenceEngine:
         for instance in self.instances.values():
             if hasattr(instance,"close"):
                 instance.close()
-        for backend in self.backends.values():
+        self.last_correlation.clear()
+        for backend in self.device_backends.values():
             backend.close()
         self.instances.clear()
         self.backends.clear()
+        self.device_backends.clear()
         self.global_statistics.clear()
+        self.statistics.clear()
+        self.cache.entries.clear()
+        self.cache.size = 0

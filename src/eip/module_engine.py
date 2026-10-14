@@ -16,13 +16,24 @@ class IdentityPhotometry:
 
 
 class FrameModules:
-    def __init__(self, nodes, shape, context=None, *, input_type="sensor"):
+    def __init__(self, nodes, shape, context=None, *, input_type="sensor",resources=None):
         from eip.modes.split_correlation.config import GeometryConfig, PhotometryConfig
         from eip.modes.split_correlation.geometry import Geometry
         from eip.modes.split_correlation.photometry import Photometry
         self.context = context or RunContext()
         canonical, self.output_type, self.output_kind = normalize_nodes(nodes, input_type=input_type)
         self.nodes = [n for n in canonical if n["enabled"]]
+        if resources:
+            from eip.gpu_ops import GPU_MODULES
+            from eip.resources import ResourceSettings,MIB
+            policy = ResourceSettings.from_dict(resources)
+            if int(np.prod(shape))*8*12 > policy.job_mb*MIB:
+                raise ValueError("逐帧流程工作数组超过统一任务内存预算，请减少空间范围或提高统一预算")
+            for node in self.nodes:
+                execution = node.setdefault("execution",{})
+                if execution.get("backend","inherit")=="inherit":
+                    execution["backend"] = resources["backend"] if node["algorithm"] in GPU_MODULES else "cpu"
+                execution["memory_mb"] = min(execution.get("memory_mb") or policy.job_mb,policy.job_mb,int(policy.gpu_mb*.75) if execution["backend"] in {"auto","gpu"} else policy.job_mb)
         self.instances, self.alignments, self.photos = {}, {}, {}
         self.shape, self.output_shape = tuple(shape), tuple(shape)
         self.record = {"modules":deepcopy(self.nodes), "input_shape":list(shape)}
@@ -42,6 +53,7 @@ class FrameModules:
                 else:
                     self.instances[i] = Pipeline([StepSpec(**node)], self.context)
             self.record.update(output_shape=list(self.output_shape), mappings=[g.record for g in self.alignments.values()], calibrations={self.nodes[i]["id"]:p.record for i,p in self.photos.items()})
+            self.record["devices"] = {self.nodes[i]["id"]:dict(actual=getattr(getattr(instance.instances[0],"backend",None),"name","cpu"),reason=getattr(getattr(instance.instances[0],"backend",None),"reason",None)) for i,instance in self.instances.items()}
         except Exception:
             self.close()
             raise
@@ -91,7 +103,8 @@ class FrameModules:
 
 class ModulePipeline:
     """Lazy shape adapter; the same frame algorithms serve all workbench modes."""
-    def __init__(self, steps, context):
+    def __init__(self, steps, context,resources=None):
+        self.resources = resources
         self.nodes, self.output_type, self.output_kind = normalize_nodes([asdict(s) for s in steps])
         if self.output_type in {"pair", "moments"}:
             raise ValueError("流程输出仍为双路数据；请添加「选择幅面」或二阶关联模块")
@@ -102,7 +115,7 @@ class ModulePipeline:
             self.engine.close()
             self.engine = None
         if self.engine is None:
-            self.engine = FrameModules(self.nodes, pixels.shape, self.context)
+            self.engine = FrameModules(self.nodes, pixels.shape, self.context,resources=self.resources)
         return self.engine.execute(pixels)
 
     @property

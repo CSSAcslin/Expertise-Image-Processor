@@ -155,6 +155,7 @@ def main():
                 page.locator("#run").click()
                 saved = completed(before)
                 page.locator("[data-library-tab='sources']").click()
+                page.locator("#manage-results").click()
                 page.locator(f"[data-sequence-result='{saved['id']}']").click()
                 page.locator("#open-result-tools").click()
                 expect(page.locator("#sequence-controls")).to_be_visible()
@@ -191,6 +192,7 @@ def main():
                 expect(page.locator("#steps [data-instance]")).to_have_count(count)
                 page.locator("[data-library-tab='sources']").click()
                 page.locator(f"#source-list [data-source='{source['id']}']").click()
+                page.locator("#manage-results").click()
                 page.locator(f"[data-sequence-result='{saved['id']}']").click()
                 expect(page.locator("#result-label")).to_have_text(saved["name"])
                 before_jobs = len(api.get("/api/jobs").json())
@@ -315,6 +317,7 @@ def main():
                 before={j["id"] for j in api.get("/api/jobs").json()}
                 page.locator("#run").click();extracted=completed(before)
                 page.locator("[data-library-tab='sources']").click()
+                page.locator("#manage-results").click()
                 page.locator(f"[data-sequence-result='{extracted['id']}']").click()
                 page.locator("#open-result-tools").click()
                 extraction=extracted["run"]["results"][0]
@@ -347,6 +350,7 @@ def main():
                 before={j["id"] for j in api.get("/api/jobs").json()}
                 page.locator("#trial").click();qjob=completed(before)
                 page.locator("[data-library-tab='sources']").click()
+                page.locator("#manage-results").click()
                 page.locator(f"[data-sequence-result='{qjob['id']}']").click()
                 expect(page.locator("#split-curve")).to_contain_text("有符号 τ")
                 expect(page.locator("#sequence-play")).to_be_hidden()

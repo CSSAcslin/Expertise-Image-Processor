@@ -203,7 +203,8 @@ def test_old_project_migration_keeps_source_and_g2(client, tmp_path, normalizati
     assert Path(migrated["view"]["migration"]["path"]).is_file()
     assert Path(migrated["state"]["project_path"]) != project
     steps = migrated["view"]["steps"]
-    assert [n["algorithm"] for n in steps] == ["alignment", "sequence_statistics", "fixed_normalize", "roi_crop", "region_reduce", "correlation_curve"]
+    # Current module catalog expresses per-sample spatial statistics explicitly.
+    assert [n["algorithm"] for n in steps] == ["alignment", "sequence_statistics", "fixed_normalize", "roi_crop", "time_statistics", "correlation_curve"]
     new_job = run(client, entry, steps)
     assert new_job["status"] == "succeeded", new_job
     new_values = client.post(f"/api/jobs/{new_job['id']}/sequence", json={}).json()

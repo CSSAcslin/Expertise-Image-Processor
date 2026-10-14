@@ -9,9 +9,25 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
+from starlette.concurrency import run_in_threadpool
+import anyio
 
 from eip import __version__
 from eip.web.runtime import Workbench
+
+
+class DownloadResponse(FileResponse):
+    """Release download leases and temporary files even when a client aborts."""
+    def __init__(self,path,filename,finish):
+        super().__init__(path,filename=filename)
+        self.finish = finish
+
+    async def __call__(self,scope,receive,send):
+        try:
+            await super().__call__(scope,receive,send)
+        finally:
+            with anyio.CancelScope(shield=True):
+                await run_in_threadpool(self.finish)
 
 
 def create_app(workspace: Path | None = None, restore_session: Path | None = None):
@@ -37,7 +53,7 @@ def create_app(workspace: Path | None = None, restore_session: Path | None = Non
         origin = request.headers.get("origin")
         if origin and origin != str(request.base_url).rstrip("/"):
             return JSONResponse({"detail": "请从本机工作台发起请求"}, status_code=403)
-        if request.url.path.startswith("/api/") and request.url.path != "/api/state":
+        if request.url.path.startswith("/api/") and request.url.path != "/api/state" and not request.url.path.startswith("/api/result-downloads/"):
             if not secrets.compare_digest(request.headers.get("x-eip-token", ""), token):
                 return JSONResponse({"detail": "工作台会话已过期，请刷新页面"}, status_code=403)
         if request.url.path == "/api/state" and request.headers.get("sec-fetch-site") == "cross-site":
@@ -65,6 +81,47 @@ def create_app(workspace: Path | None = None, restore_session: Path | None = Non
     @app.get("/api/state")
     def state():
         return {**workbench().state(), "session_token": token, "version": __version__}
+
+    @app.get("/api/resources")
+    def resources():
+        return workbench().resource_status()
+
+    @app.post("/api/resources")
+    def set_resources(value: dict):
+        return workbench().update_resources(value)
+
+    @app.post("/api/resources/clear")
+    def clear_resources():
+        return workbench().clear_caches()
+
+    @app.get("/api/results/{identifier}/delete-preview")
+    def deletion_preview(identifier: str):
+        return workbench().results.deletion_preview(identifier)
+
+    @app.post("/api/results/{identifier}/delete")
+    def delete_result(identifier: str,value: dict):
+        return workbench().results.delete(identifier,value)
+
+    @app.post("/api/results/{identifier}/package")
+    def package_result(identifier: str):
+        return workbench().results.package(identifier)
+
+    @app.post("/api/results/restore")
+    def restore_result(value: dict):
+        path = Path(value["path"]).resolve()
+        if path.name!="run.json":
+            raise ValueError("请选择结果目录中的 run.json")
+        run = json.loads(path.read_text(encoding="utf-8"))
+        if run.get("contract_version")==3:
+            return workbench().restore_sequence(str(path))
+        if run.get("mode")=="split_correlation" or "config" in run and "source" in run:
+            return workbench().split.restore(str(path))
+        raise ValueError("此历史运行格式需通过项目文件打开")
+
+    @app.get("/api/result-downloads/{ticket}")
+    def package_download(ticket: str):
+        entry = workbench().results.take_download(ticket)
+        return DownloadResponse(entry["path"],entry["name"],lambda:workbench().results.finish_download(ticket,entry))
 
     @app.get("/api/browse")
     def browse(path: str | None = None, mode: str = "data"):
@@ -232,9 +289,17 @@ def create_app(workspace: Path | None = None, restore_session: Path | None = Non
                 path = directory / result["output_directory"] / (names[file] if file in names else result["artifacts"][0])
         else:
             raise ValueError("未知导出类型")
+        if not path.resolve().is_relative_to(Path(job["directory"]).resolve()):
+            raise ValueError("导出路径超出结果目录")
         if not path.is_file():
             raise HTTPException(404, "输出文件已移走")
         return FileResponse(path, filename=f"{identifier}-{path.name}")
+
+    @app.post("/api/jobs/{identifier}/download-link")
+    def download_link(identifier: str,value: dict):
+        with workbench().results.lock,workbench().lock:
+            response = download(identifier,value.get("file","manifest"),value.get("source",0),value.get("side_output"))
+            return workbench().results.file_link(identifier,response.path,response.filename)
 
     @app.post("/api/project/save")
     def save_project(value: dict):
@@ -289,6 +354,17 @@ def create_app(workspace: Path | None = None, restore_session: Path | None = Non
         if file not in names or not (directory/names[file]).is_file():
             raise ValueError("该任务没有所选导出内容")
         return FileResponse(directory/names[file],filename=f"{identifier}-{names[file]}")
+
+    @app.post("/api/split/jobs/{identifier}/download-link")
+    def split_download_link(identifier: str,value: dict):
+        response = split_download(identifier,value.get("file","manifest"),value.get("time_index",0),value.get("lag_index",0))
+        if isinstance(response,FileResponse):
+            return workbench().results.file_link(identifier,response.path,response.filename)
+        folder = workbench().workspace/".eip-cache"/"downloads"
+        folder.mkdir(parents=True,exist_ok=True)
+        path = folder/(secrets.token_hex(24)+".tif")
+        path.write_bytes(response.body)
+        return workbench().results.file_link(identifier,path,f"{identifier}-t{value.get('time_index',0)}-q{value.get('lag_index',0)}.tif",temporary=True)
 
     @app.post("/api/project/load")
     def load_project(value: dict):

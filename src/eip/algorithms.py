@@ -138,8 +138,9 @@ def preserve_dtype(value: np.ndarray, dtype: np.dtype) -> np.ndarray:
 
 
 class BuiltinAlgorithm:
-    def __init__(self, identifier: str):
+    def __init__(self, identifier: str, backend=None):
         self.identifier = identifier
+        self.backend = backend
 
     def prepare(self, parameters: dict, context: RunContext):
         self.parameters = parameters
@@ -149,6 +150,9 @@ class BuiltinAlgorithm:
         parameters = self.parameters
         if pixels.dtype.kind in "ui" and pixels.dtype.itemsize > 4:
             raise ValueError("内置算法暂不处理 64 位整数；请接入声明精度策略的专业插件")
+        if self.backend is not None and self.backend.name=="gpu":
+            from eip.gpu_ops import element_operation
+            return self.backend.host(element_operation(self.identifier,pixels,parameters,self.backend.xp))
         if self.identifier == "intensity":
             return preserve_dtype(pixels.astype(np.float64) * parameters["gain"] + parameters["offset"], pixels.dtype)
         if self.identifier == "affine":
@@ -175,7 +179,8 @@ class BuiltinAlgorithm:
         return preserve_dtype(result, pixels.dtype)
 
     def close(self):
-        pass
+        if self.backend is not None:
+            self.backend.close()
 
 
 class Pipeline:
@@ -211,7 +216,10 @@ class Pipeline:
                     spec = next((s for s in BUILTINS if s.id == step.algorithm), None)
                     if spec is None:
                         raise ValueError(f"未知算法 {step.algorithm}")
-                    instance = BuiltinAlgorithm(spec.id)
+                    requested = step.execution.get("backend","cpu")
+                    from eip.modes.split_correlation.backend import Backend
+                    backend = Backend(requested,(step.execution.get("gpu_mb") or step.execution.get("memory_mb") or 256)*1024**2) if requested in {"auto","gpu"} else None
+                    instance = BuiltinAlgorithm(spec.id,backend)
                 parameters = validate_parameters(spec, step.parameters)
                 self.instances.append(instance)
                 instance.prepare(parameters, context)

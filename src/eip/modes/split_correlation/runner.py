@@ -236,6 +236,7 @@ def split_job_entry(payload,events,cancel):
             last_progress[0] = now
     run = {"schema_version":1,"mode":"split_correlation","mode_version":MODE_VERSION,"app_version":__version__,"run_id":payload["id"],"task":payload["task"],"status":"running","created_at":datetime.now(timezone.utc).isoformat(),"results":[],"source":payload["source"],"source_revision":payload["revision"],"provenance":payload.get("provenance",{}),"config":payload["config"]}
     run["display_name"] = payload.get("display_name",payload["id"])
+    run["resources"] = payload.get("resources")
     try:
         check()
         config = CorrelationConfig.from_dict(payload["config"])
@@ -248,6 +249,7 @@ def split_job_entry(payload,events,cancel):
             reader._budget = max(1,config.memory_mb*1024**2//10)
         estimate = preflight(asdict(reader.meta),config,payload["task"])
         geometry,photo = build_geometry(config,reader.meta.shape),Photometry(config.photometry)
+        geometry.resources = payload.get("resources")
         geometry.context = RunContext(cancel.is_set, lambda message:emit({"type":"log","message":message}))
         if "module_fingerprints" in payload and payload["module_fingerprints"]!=estimate["module_fingerprints"]:
             raise ValueError("模块校准文件在排队期间已变化，请重新提交")
@@ -293,7 +295,8 @@ def split_job_entry(payload,events,cancel):
             timestamps[:] = np.nan
             numbers[:] = np.iinfo(np.int64).min
         if payload["task"] != "statistics":
-            backend = Backend(config.backend,config.memory_mb*1024**2)
+            gpu_budget = int(payload["resources"]["gpu_mb"]*.75) if payload.get("resources") else config.memory_mb
+            backend = Backend(config.backend,gpu_budget*1024**2)
             run.update(backend=backend.name,backend_fallback_reason=backend.reason)
             q = region
             baseline = stats["mean"][:,q.y:q.y+q.height,q.x:q.x+q.width]/stats["scales"][:,None,None]

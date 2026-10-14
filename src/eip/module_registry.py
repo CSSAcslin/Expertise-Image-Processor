@@ -108,6 +108,8 @@ def catalog(plugins=()):
     for key, spec in {**STRUCTURAL, **AXIS_MODULES, **WORKBENCH}.items():
         result[key] = dict(deepcopy(spec), id=key, version="1.0", manifest=None, code_hash=None, execution_scope="sequence" if key in {"statistics", "sequence_statistics", "global_statistics", *CORRELATIONS, "time_crop", "time_sample", "time_smooth", "time_bin", "data_tap", "axis_slice"} else "frame", output_kind="image", repeatable=True)
     for spec in result.values():
+        from eip.gpu_ops import GPU_MODULES
+        spec["backends"] = ["cpu","gpu"] if spec["id"] in GPU_MODULES else ["cpu"]
         spec["defaults"] = defaults(spec)
         spec["bindable_parameters"] = sorted({p["key"] for p in spec["parameters"] if p["kind"] in {"int","float"}} if spec.get("manifest") else REFERENCABLE.get(spec["id"],set()))
         from eip.module_documentation import enrich
@@ -198,13 +200,15 @@ def normalize_nodes(nodes, *, check_types=True, input_type="sensor", input_kind=
         execution = node.get("execution", {})
         if not isinstance(execution, dict) or set(execution)-{"backend", "memory_mb", "precision"}:
             raise ValueError("模块执行设置无效")
-        if execution.get("backend", "cpu") not in {"cpu", "auto", "gpu"} or execution.get("precision", "native") not in {"native", "float32", "float64"}:
+        if execution.get("backend", "inherit") not in {"inherit", "cpu", "auto", "gpu"} or execution.get("precision", "native") not in {"native", "float32", "float64"}:
             raise ValueError("模块设备或精度设置无效")
-        integer(execution.get("memory_mb", 256), "模块内存预算", 16)
-        if execution.get("memory_mb", 256)>4096:
-            raise ValueError("模块内存预算不能超过 4096 MiB")
-        if execution.get("backend")=="gpu" and algorithm not in CORRELATIONS:
-            raise ValueError("此模块当前支持 CPU；GPU 仅用于二阶关联")
+        if execution.get("memory_mb") is not None:
+            integer(execution["memory_mb"], "模块内存上限", 16)
+            if execution["memory_mb"]>131072:
+                raise ValueError("模块内存上限不能超过 131072 MiB")
+        from eip.gpu_ops import GPU_MODULES
+        if execution.get("backend")=="gpu" and algorithm not in GPU_MODULES:
+            raise ValueError("此模块当前支持 CPU，请选择继承或 CPU")
         node["execution"] = deepcopy(execution)
         if algorithm in {*STRUCTURAL,*AXIS_MODULES,*WORKBENCH}-{"spatial_smooth","gain_offset"} and node["target"] != "both":
             raise ValueError("双路结构与时序模块作用于完整输入；左 / 右路范围仅适用于逐帧算法")

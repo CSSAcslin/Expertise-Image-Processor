@@ -94,7 +94,7 @@ class WorkflowGeometry(Geometry):
 
     def apply(self, pixels, photometry):
         if self.engine is None:
-            self.engine = FrameModules(self.upstream, self.source_shape, getattr(self,"context",None))
+            self.engine = FrameModules(self.upstream, self.source_shape, getattr(self,"context",None),resources=getattr(self,"resources",None))
             if self.engine.record["calibrations"] != self.calibrations:
                 self.engine.close()
                 self.engine = None
@@ -108,7 +108,7 @@ class WorkflowGeometry(Geometry):
         if not self.downstream:
             return values
         if self.post_engine is None:
-            self.post_engine = FrameModules(self.downstream, self.shape, getattr(self,"context",None), input_type="map")
+            self.post_engine = FrameModules(self.downstream, self.shape, getattr(self,"context",None), input_type="map",resources=getattr(self,"resources",None))
         processed = np.asarray(self.post_engine.execute(values), dtype=np.float64)
         return np.where(np.isfinite(values), processed, np.nan)
 

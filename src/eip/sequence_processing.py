@@ -42,7 +42,7 @@ def process_sequence_job(payload,emit,cancelled):
                     raise ValueError("来源自导入后已变化，请重新打开")
                 item["data_spec"] = asdict(reader.meta)
                 with tempfile.TemporaryDirectory(prefix="index-",dir=staging) as workdir:
-                    engine = SequenceEngine(reader,payload["steps"],context,workdir=workdir,center=payload.get("center"),single=payload["mode"]=="trial",input_kind=payload.get("input_kinds",["image"]*len(payload["sources"]))[position],dependencies=payload.get("preview_dependencies",[]))
+                    engine = SequenceEngine(reader,payload["steps"],context,workdir=workdir,center=payload.get("center"),single=payload["mode"]=="trial",input_kind=payload.get("input_kinds",["image"]*len(payload["sources"]))[position],dependencies=payload.get("preview_dependencies",[]),resources=payload.get("resources"))
                     c = engine.output
                     # A trial of a non-correlation chain evaluates one edited
                     # output sample. A τ scan remains a complete Q curve.

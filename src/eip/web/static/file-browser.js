@@ -67,6 +67,7 @@ export class FileBrowser {
       data: "导入本地数据",
       plugin: "接入 Python 算法",
       load: "打开项目",
+      result: "打开历史结果",
       save: "保存项目",
       output: "选择输出目录",
     };
@@ -78,7 +79,7 @@ export class FileBrowser {
         ? "目录单击进入；文件支持 Ctrl / Shift 多选。原始文件保持在本机。"
         : mode === "plugin"
           ? "仅选择可信的算法描述 JSON；注册只读取描述，运行时才执行代码。"
-          : "项目记录引用路径及参数，不复制原始数据。";
+          : mode === "result" ? "选择结果目录中的 run.json。" : "项目记录引用路径及参数，不复制原始数据。";
     try {
       await this.browse(initial);
     } catch {

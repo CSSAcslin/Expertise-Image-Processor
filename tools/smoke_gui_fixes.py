@@ -110,6 +110,7 @@ def main():
                 np.testing.assert_array_equal(actual, pixels[5:15].astype(np.float64)*2)
 
                 page.locator("[data-library-tab='sources']").click()
+                page.locator("#manage-results").click()
                 page.locator(f"[data-sequence-result='{saved['id']}']").click()
                 expect(page.locator("#sequence-readout")).to_contain_text("来源帧 6")
                 expect(page.locator("#frame-info")).to_contain_text("第 1 帧 / 60")

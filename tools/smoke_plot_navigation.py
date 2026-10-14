@@ -180,6 +180,7 @@ def main():
                 report = {"panels":panels}
                 for identifier, name in ((point, "point"), (histogram, "histogram"), (profile, "profile")):
                     print(f"checking {name}", flush=True)
+                    page.locator("#manage-results").click()
                     page.locator(f"[data-sequence-result='{identifier}']").click()
                     expect(page.locator("#result-meta")).to_contain_text({"point":"T:60", "histogram":"B:32", "profile":"R:32"}[name])
                     expect(chart).to_be_visible()
@@ -259,6 +260,7 @@ def main():
                 page.screenshot(path=str(output / "legacy-delay.png"), full_page=True)
                 page.locator("#split-curve-axis").select_option("time", force=True)
                 assert domain()==[-.1, .1], domain()
+                page.locator("#manage-results").click()
                 page.locator(f"[data-sequence-result='{point}']").click()
                 expect(page.locator("#result-meta")).to_contain_text("T:60")
                 expect(chart.locator("text").last).to_have_text("编辑后样本号")

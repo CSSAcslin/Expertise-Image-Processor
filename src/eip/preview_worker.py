@@ -21,6 +21,8 @@ def preview_entry(commands, results):
                 reader = None
                 key = None
                 reader = open_source(source)
+                from eip.resources import configure_reader
+                configure_reader(reader,command.get("reader_cache_bytes",64*1024**2))
                 key = source.key
                 last_ref = None
             action = command["action"]

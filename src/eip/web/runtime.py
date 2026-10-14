@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict, deque
+from functools import wraps
 from dataclasses import asdict
 from pathlib import Path
 import base64
@@ -8,6 +9,7 @@ import csv
 import io
 import json
 import math
+import os
 import multiprocessing
 import queue
 import threading
@@ -32,10 +34,20 @@ from eip.web.inspection import InspectionBroker
 from eip.module_registry import catalog, normalize_nodes, temporal, output_shape, migrate_workbench_nodes
 from eip.module_contracts import compile_flow, source_contract
 from eip.sequence_processing import sequence_job_entry
+from eip.resources import load_resources, ResourceSettings, process_memory, system_memory, MIB
+
+
+def workspace_locked(method):
+    @wraps(method)
+    def wrapped(self,*args,**kwargs):
+        with self.lock:
+            return method(self,*args,**kwargs)
+    return wrapped
 
 
 class PreviewBroker:
-    def __init__(self):
+    def __init__(self,budget_bytes=64*MIB):
+        self.budget_bytes = budget_bytes
         self.context = multiprocessing.get_context("spawn")
         self.lock = threading.Lock()
         self.capacity = threading.BoundedSemaphore(2)
@@ -56,7 +68,7 @@ class PreviewBroker:
                     self._dispose()
                     self._start()
                 identifier = uuid.uuid4().hex
-                self.commands.put({"id": identifier, "source": source, "action": action, **values}, timeout=2)
+                self.commands.put({"id": identifier, "source": source, "action": action, "reader_cache_bytes":self.budget_bytes, **values}, timeout=2)
                 try:
                     result = self.results.get(timeout=60)
                 except queue.Empty as error:
@@ -81,9 +93,17 @@ class PreviewBroker:
         with self.lock:
             self._dispose()
 
+    def reset(self,budget_bytes=None):
+        with self.lock:
+            if budget_bytes is not None:
+                self.budget_bytes = budget_bytes
+            self._dispose()
+            self._start()
+
 
 class FrameStore:
-    def __init__(self):
+    def __init__(self,budget_bytes=128*MIB):
+        self.budget_bytes = budget_bytes
         self.frames = OrderedDict()
         self.size = 0
         self.lock = threading.RLock()
@@ -91,12 +111,21 @@ class FrameStore:
     def add(self, pixels, ref, origin, base_shape, kind):
         token = uuid.uuid4().hex
         with self.lock:
-            while self.frames and (self.size + pixels.nbytes > 128 * 1024 * 1024 or len(self.frames) >= 6):
+            if pixels.nbytes>self.budget_bytes:
+                raise ValueError(f"单帧 {pixels.nbytes/MIB:.1f} MiB 超过预览缓存份额，请在运行设置提高预览缓存")
+            while self.frames and (self.size + pixels.nbytes > self.budget_bytes or len(self.frames) >= 6):
                 _, old = self.frames.popitem(last=False)
                 self.size -= old["pixels"].nbytes
             self.frames[token] = {"pixels": pixels, "ref": ref, "origin": origin, "base_shape": base_shape, "kind": kind}
             self.size += pixels.nbytes
         return token
+
+    def clear(self,budget_bytes=None):
+        with self.lock:
+            self.frames.clear()
+            self.size = 0
+            if budget_bytes is not None:
+                self.budget_bytes = budget_bytes
 
     def get(self, token):
         with self.lock:
@@ -154,7 +183,9 @@ class FrameStore:
 class Workbench:
     def __init__(self, workspace: Path, restored: dict | None = None):
         self.workspace = workspace.resolve()
-        self.frames = FrameStore()
+        self.resource_path = self.workspace/".eip-resources.json"
+        self.resources = load_resources(self.resource_path)
+        self.frames = FrameStore(self.resources.preview_mb*MIB//2)
         self.lock = threading.RLock()
         self.sources = OrderedDict()
         self.algorithms = {spec.id: spec for spec in BUILTINS}
@@ -166,9 +197,12 @@ class Workbench:
         self.closed = threading.Event()
         if restored:
             self.restore_session(restored)
-        self.preview = PreviewBroker()
+        self.preview = PreviewBroker(self.resources.preview_mb*MIB//2)
         self.inspection = InspectionBroker()
         self.split = SplitService(self)
+        from eip.web.result_management import ResultManager
+        self.results = ResultManager(self)
+        self.result_recovery_errors = self.results.restore_index()
         self.monitor = threading.Thread(target=self._monitor, name="EIP-job-monitor", daemon=True)
         self.monitor.start()
 
@@ -211,8 +245,40 @@ class Workbench:
 
     def state(self):
         with self.lock:
-            return {"workspace": str(self.workspace), "output_dir": str(self.workspace / "outputs"), "project_path": self.project_path, "sources": list(self.sources.values()), "algorithms": [asdict(spec) for spec in self.algorithms.values()], "modules":catalog(self.algorithms.values()), "modes": ["general","split_correlation"], "split_devices": self.split.devices}
+            return {"workspace": str(self.workspace), "output_dir": str(self.workspace / "outputs"), "project_path": self.project_path, "sources": list(self.sources.values()), "algorithms": [asdict(spec) for spec in self.algorithms.values()], "modules":catalog(self.algorithms.values()), "modes": ["general","split_correlation"], "split_devices": self.split.devices,"resources":self.resources.record(),"result_recovery_errors":self.result_recovery_errors}
 
+    def resource_status(self):
+        with self.lock:
+            processes = [("工作台",os.getpid()),("数据读取",self.preview.process.pid),
+                         ("阶段检查",self.inspection.process.pid if self.inspection.process else None),
+                         ("正式 / 试算",self.active["process"].pid if self.active else None)]
+            rows = [dict(name=name,pid=pid,resident_bytes=process_memory(pid)) for name,pid in processes if pid]
+            return dict(settings=self.resources.record(),processing_mb=self.resources.processing_mb,job_mb=self.resources.job_mb,inspection_mb=self.resources.inspection_mb,
+                        system=system_memory(),processes=rows,frame_cache_bytes=self.frames.size,
+                        frame_cache_count=len(self.frames.frames),devices=self.split.devices,
+                        busy=bool(self.pending or self.active or self.inspection.active))
+
+    def update_resources(self,value):
+        settings = ResourceSettings.from_dict(value)
+        with self.lock:
+            if self.pending or self.active or self.inspection.active:
+                raise ValueError("请等待或取消正在运行的任务 / 阶段检查后修改资源设置；现有任务保留提交时预算")
+            write_json(self.resource_path,settings.record())
+            self.resources = settings
+            self.frames.clear(settings.preview_mb*MIB//2)
+            self.preview.reset(settings.preview_mb*MIB//2)
+            self.inspection.release_idle()
+        return self.resource_status()
+
+    def clear_caches(self):
+        with self.lock:
+            before = self.frames.size
+            self.frames.clear()
+            self.preview.reset()
+            released = self.inspection.release_idle()
+        return dict(released_frame_bytes=before,inspection_released=released,**self.resource_status())
+
+    @workspace_locked
     def open(self, value: dict, role="input", **extra):
         source = SourceSpec(**value)
         source = SourceSpec(str(Path(source.path).resolve()), source.kind, source.interval)
@@ -245,10 +311,17 @@ class Workbench:
             self.sources[identifier] = entry
         return {"source": entry, "frame": snapshot}
 
+    @workspace_locked
     def promote(self, identifier):
         entry = self.get_source(identifier)
         if entry["role"] != "result":
             raise ValueError("请选择正式保存的处理结果")
+        if entry["source"]["kind"]=="dataset" and entry.get("run_id") in self.jobs:
+            job = self.job(entry["run_id"])
+            position = entry.get("source_position")
+            if position is None:
+                position = next(i for i,item in enumerate(job["run"]["results"]) if Path(entry["source"]["path"]).parent.name==item["output_directory"])
+            return self.sequence_promote(entry["run_id"],dict(source=position,side_output=entry.get("side_output"),target="input"))
         if entry.get("side_output"):
             return self.sequence_promote(entry["run_id"],dict(source=entry["source_position"],side_output=entry["side_output"],target="input"))
         output_path = Path(entry["source"]["path"])
@@ -435,7 +508,7 @@ class Workbench:
         return self.inspection.request(entry["source"],inspection_id=identifier,
                                        revision=entry["meta"]["revision"],nodes=list(nodes),
                                        dependencies=list(dependencies),index=index,channel=channel,side_output=side_output,
-                                       input_kind=entry.get("result_kind","image"))
+                                       input_kind=entry.get("result_kind","image"),resources=self.resources.record())
 
     def inspect_module(self, value):
         event = self.module_sample(value)
@@ -481,6 +554,7 @@ class Workbench:
         payload = json.loads(json.dumps(payload,allow_nan=False))
         payload["input_kinds"] = [e.get("result_kind","image") for e in entries]
         payload["preview_dependencies"] = list(dependencies)
+        payload["resources"] = self.resources.record()
         if boundary:
             payload["execution_scope"] = boundary
         job = dict(id=identifier,mode=mode,engine="sequence",contract_version=3,name=name,source_name=entries[0]["meta"]["name"],source_ids=identifiers,source_count=len(entries),status="queued",completed=0,total=None,logs=[],payload=payload,created=time.time(),summary=f"{len(nodes)} 个模块 · {plans[0]['output']['label']}",base_shape=entries[0]["meta"]["shape"][:2])
@@ -546,6 +620,7 @@ class Workbench:
             raise ValueError("结果目录超出运行目录")
         return position,item,path
 
+    @workspace_locked
     def sequence_promote(self,identifier,value):
         """Explicitly add a saved intermediate result to either shared viewer."""
         job = self.job(identifier)
@@ -568,6 +643,8 @@ class Workbench:
         extra = dict(run_id=identifier,display_name=item.get("name",job["name"]),result_kind=item["result_kind"],origin=item.get("origin",[0,0]),base_shape=item.get("base_shape"),source_position=position,side_output=value.get("side_output"),run_manifest=str(manifest),temporary=False,lineage=lineage)
         if target=="result":
             extra["input_id"] = input_id
+        if target=="input":
+            extra["parent_result_id"] = f"result_{SourceSpec(str(path/'dataset.json'),'dataset').key}"
         return self.open(asdict(SourceSpec(str(path/"dataset.json"),"dataset")),role=target,**extra)
 
     def restore_sequence(self,path):
@@ -580,6 +657,8 @@ class Workbench:
         payload = run["spec"]
         with self.lock:
             if identifier in self.jobs:
+                if Path(self.jobs[identifier].get("directory","")).resolve()!=path.parent:
+                    raise ValueError("运行标识与已有输出目录冲突，请先移除原工作区记录")
                 return dict(id=identifier,engine="sequence")
         good = [r for r in run["results"] if r["status"]=="succeeded"]
         if not good:
@@ -600,6 +679,7 @@ class Workbench:
         ids = [p["source_id"] for p in payload.get("provenance",[])]
         job = dict(id=identifier,mode=payload["mode"],engine="sequence",contract_version=3,name=run.get("display_name",identifier),source_name=good[0]["data_spec"]["name"],source_ids=ids,source_count=len(payload["sources"]),status=run["status"],completed=sum(r["completed_frames"] for r in good),total=None,logs=[],payload=payload,run=run,directory=str(path.parent),result_available=True,created=datetime.fromisoformat(run["created_at"]).timestamp(),summary=f"{len(payload['steps'])} 个模块 · {good[0]['contract']['label']}")
         self.enqueue(identifier,job,queue_job=False)
+        self.results.remember()
         if payload["mode"]=="run":
             for position,item in enumerate(run["results"]):
                 if item["status"]=="succeeded" and not any(s.get("run_id")==identifier and Path(s["source"]["path"]).parent.name==item["output_directory"] for s in self.sources.values()):
@@ -635,6 +715,8 @@ class Workbench:
                 self.jobs.pop(oldest)
             self.jobs[identifier] = job
             if queue_job:
+                job["payload"].setdefault("resources",self.resources.record())
+                self.inspection.release_idle()
                 self.pending.append(identifier)
 
     def job_list(self):
@@ -666,6 +748,7 @@ class Workbench:
             for entry in self.sources.values():
                 if entry.get("run_id") == identifier:
                     entry["display_name"] = name
+            self.results.remember()
             return {"id":identifier,"name":name}
 
     def cancel(self, identifier):
@@ -723,6 +806,7 @@ class Workbench:
                     active["results"].cancel_join_thread()
                     active["results"].close()
                     self.active = None
+                    self.results.remember()
 
     def _handle(self, active, event):
         with self.lock:
@@ -756,7 +840,7 @@ class Workbench:
                             continue
                         try:
                             path = Path(event["directory"])/item["output_directory"]/"dataset.json"
-                            self.open(asdict(SourceSpec(str(path),"dataset")),role="result",input_id=job["source_ids"][position],result_kind=item["result_kind"],run_id=job["id"],display_name=job["name"])
+                            self.open(asdict(SourceSpec(str(path),"dataset")),role="result",input_id=job["source_ids"][position],result_kind=item["result_kind"],run_id=job["id"],display_name=job["name"],source_position=position)
                         except Exception as error:
                             job["logs"].append(f"结果已保存，自动预览失败：{error}")
                     self._publish_sequence_sides(job)
@@ -894,3 +978,4 @@ class Workbench:
                 self.active["results"].close()
         self.preview.close()
         self.inspection.close()
+        self.results.close()

@@ -28,7 +28,7 @@ def process_job(payload: dict, emit, cancelled):
     selection = selection_from_dict(payload["selection"])
     steps = [StepSpec(**value) for value in payload["steps"]]
     context = RunContext(cancelled, lambda text: emit({"type": "log", "message": text}), payload.get("seed", 0))
-    pipeline = Pipeline(steps, context)
+    pipeline = Pipeline(steps, context,resources=payload.get("resources"))
     passthrough = not any(step.enabled for step in steps)
     if passthrough:
         pipeline.output_kind = payload.get("input_kinds", ["image"])[0]
@@ -36,6 +36,8 @@ def process_job(payload: dict, emit, cancelled):
         reader = None
         try:
             reader = open_source(source_from_dict(payload["sources"][0]))
+            from eip.resources import configure_reader
+            configure_reader(reader,payload.get("resources",{}).get("cache_mb",128)*1024**2//4)
             if reader.meta.revision != payload["revisions"][0]:
                 raise ValueError("输入文件已变化，请重新打开数据")
             context.check_cancelled()
@@ -77,6 +79,8 @@ def process_job(payload: dict, emit, cancelled):
             out_dir.mkdir()
             try:
                 reader = open_source(source_from_dict(source_value))
+                from eip.resources import configure_reader
+                configure_reader(reader,payload.get("resources",{}).get("cache_mb",128)*1024**2//4)
                 if reader.meta.revision != payload["revisions"][position]:
                     raise ValueError("来源发生变化，请重新打开后运行")
                 item["data_spec"] = asdict(reader.meta)

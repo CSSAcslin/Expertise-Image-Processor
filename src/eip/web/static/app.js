@@ -11,6 +11,7 @@ import { PreviewEngine } from "./preview.js";
 import { setupWorkbench } from "./workbench.js";
 import { svgIcon } from "./icons.js";
 import { fitPlot, plotZoom } from "./plot-navigation.js";
+import { setupManagement } from "./management.js";
 
 const $ = (id) => document.getElementById(id);
 const escape = (value) =>
@@ -200,10 +201,21 @@ const sequenceResults=new SequenceResults({
   },
   signals:()=>{resultOwner="sequence";result=null;formalResult=null;resultViewer.clear();if($("display-target").value==="result")fillDisplayControls(null,resultDisplay);},
   shown:reveal=>{resultOwner="sequence";$("stale").hidden=true;$("welcome").hidden=true;if(reveal)setMode(!active||$("viewers").dataset.mode==="result"?"result":"compare");redraw();},
-  promote:async(id,position)=>{sources=(await api("state")).sources;const job=await api(`jobs/${id}`),path=job.directory+"/"+job.run.results[position].output_directory+"/dataset.json";const entry=sources.find(s=>s.role==="result"&&s.run_id===id&&s.source.path.replaceAll("\\","/")===path.replaceAll("\\","/"));if(!entry)throw Error("该结果未能自动加入来源，请查看任务日志");formalResult=entry;await promoteResult();}
+  promote:async(id,position)=>{const opened=await api(`jobs/${id}/sequence/promote`,{source:position,target:"input"});await useManagedInput(opened);toast("已作为新输入，可以配置下一阶段处理");}
 });
 
 const workbench=setupWorkbench({editor:generalEditor,layout,source:()=>active,input:()=>input,viewer:originalViewer,resultViewer,scene,resultScene,notify:toast,save:scheduleDraft,inspect:(side,tool=null)=>previewModule(generalEditor,side,!!tool,tool==="point",tool),raw:async()=>{axisEditing=null;axisStage=false;scene.annotation=null;scene.tool="pan";$("axis-stage-note").hidden=true;$("module-preview-tools").hidden=true;if(input)await setInput(input);},currentJobs:()=>jobs,poll:pollJobs,submit});
+async function useManagedInput(opened){sources=(await api("state")).sources;generalSequenceContext=null;generalEditor.replace([]);$("batch").checked=false;$("scope").value="all";$("range-fields").hidden=true;await selectSource(opened.source.id);updateSources();scheduleDraft();}
+const management=setupManagement({sourceDetail:showSourceDetails,removeReference:removeSource,openLibrary:tab=>workbench.openLibrary(tab),pickResult:()=>openDialog("result"),jobs:()=>jobs,sources:()=>sources,report:toast,detail:jobDetail,promoted:useManagedInput,currentResult:()=>resultOwner==="sequence"?sequenceResults.id:resultOwner==="split"?split.resultId:formalResult?.run_id,
+ inheritFlow:()=>{for(const node of steps){node.execution??={};Object.assign(node.execution,{backend:"inherit",memory_mb:null});}generalEditor.changed();scheduleDraft();},
+ recoveryErrors:()=>state?.result_recovery_errors||[],
+ reveal:()=>{if($("viewers").dataset.mode==="input"||layout.state.windows.result.hidden)setMode(active?"compare":"result");},
+ currentOutput:()=>resultOwner==="sequence"?{source:sequenceResults.source||0,side_output:sequenceResults.sideOutput||null}:resultOwner==="split"?{source:0,side_output:null,lag_index:split.lagIndex||0}:null,
+ renamed:(id,name)=>{if(sequenceResults.id===id){sequenceResults.meta.name=name;$("result-label").textContent=sequenceResults.item?.name||name;}if(split.resultId===id)$("split-result-title").textContent=name;},
+ refresh:async()=>{sources=(await api("state")).sources;await pollJobs(true);scheduleDraft();},
+ view:async(job,output)=>{if(job.reference_id)await selectSource(job.reference_id);else if(job.engine==="sequence")await sequenceResults.load(job.id,output.source,output.side_output);else if(job.mode==="split"){sequenceResults.hide();await split.loadResult(job.id);if(job.task==="run"){split.lagIndex=output.lag_index||0;$("split-result-lag").value=split.lagIndex;await split.showSlice();}}else{const entry=sources.find(s=>s.role==="result"&&s.run_id===job.id);if(entry)await selectSource(entry.id);else throw Error("结果预览引用已移除，请重新打开历史结果");}},
+ removed:async id=>{fetchedJobs.delete(id);if(sequenceResults.id===id){sequenceResults.hide();sequenceResults.id=null;result=null;formalResult=null;resultViewer.clear();$("result-label").textContent="处理结果";$("result-meta").textContent="";$("split-result-empty").hidden=false;$("result-tools-empty").hidden=false;}if(formalResult?.run_id===id){formalResult=null;result=null;resultViewer.clear();}if(split.resultId===id){split.resultId=null;$("split-result-controls").hidden=true;$("split-curve").hidden=true;resultViewer.clear();}sources=(await api("state")).sources;updateSources();}
+});
 function moduleTools(node,host,editor){workbench.moduleTools(node,host,editor);}
 async function submitModules(nodes,mode="run",name=null,extra={}){
   if(!active||!input)return;
@@ -397,27 +409,20 @@ function updateSummary() {
   }
   $("scrubber").disabled =
     !active || !input || (timePosition() && !active.meta.duration);
-  $("promote-result").disabled = !formalResult;
+  $("promote-result").disabled = !formalResult && !(resultOwner==="sequence"&&sequenceResults.id&&sequenceResults.meta?.mode==="run");
   $("flow-summary").textContent = active
     ? `${active.lineage?.length ? "阶段 " + (active.lineage.length + 1) + " · " : ""}${active.display_name || active.meta.name} → ${count} 个处理步骤 → ${formalResult ? "已保存输出" : result ? "当前帧试算" : "待处理"}`
     : "导入来源 → 配置算法 → 检查结果";
 }
 function updateSources() {
-  const inputs = sources.filter((s) => s.role === "input"),
-    results = sources.filter((s) => s.role === "result"&&s.source.kind!=="dataset");
+  const inputs = sources.filter((s) => s.role === "input");
   $("source-count").textContent = inputs.length;
-  const splitResults=jobs.filter(j=>j.mode==="split"&&j.status==="succeeded");
-  const sequenceJobs=jobs.filter(j=>j.engine==="sequence"&&["succeeded","completed_with_errors"].includes(j.status));
-  $("result-count").textContent = results.length+splitResults.length+sequenceJobs.length;
   const card = (s) =>
     `<div class="source-card ${s.id === active?.id || s.id === formalResult?.id ? "selected" : ""}" tabindex="0" role="button" data-source="${s.id}" aria-label="预览 ${escape(s.display_name || s.meta.name)}"><img src="${s.thumbnail}" alt=""><div class="source-copy"><strong title="${escape(s.source.path)}">${escape(s.display_name || s.meta.name)}</strong><span class="source-kind">${s.role === "result" ? "处理结果" : s.lineage?.length ? "派生输入 · 阶段 " + (s.lineage.length + 1) : s.meta.kind === "video" ? "视频" : s.meta.kind === "sequence" ? "图像序列" : "图像"}</span><small>${s.meta.contract?escape(s.meta.contract.label):`${s.meta.shape[1]} × ${s.meta.shape[0]}`} · ${escape(s.meta.contract?.dtype||s.meta.dtype)}</small><button class="text-button source-info" data-info="${s.id}">属性 / 来源</button></div><button class="icon-button source-remove" data-remove="${s.id}" aria-label="移除 ${escape(s.display_name || s.meta.name)}">${icon("close")}</button></div>`;
   $("source-list").innerHTML = inputs.length
     ? inputs.map(card).join("")
     : '<div class="library-empty">导入图像、视频<br>或图像序列目录</div>';
-  $("result-list").innerHTML = results.map(card).join("")+splitResults.map(j=>`<div class="split-result-card ${split.resultId===j.id?"selected":""}" data-split-result="${j.id}" tabindex="0" role="button" aria-label="打开处理结果 ${escape(j.name)}"><strong>${escape(j.name)}</strong><span class="source-kind">${({statistics:"全源统计",trial:"空间图试算",curve:"τ 扫描曲线",run:"空间系数图"}[j.task])}</span><small>${escape(j.summary||j.source_name||"")}</small><small>${new Date(j.created*1000).toLocaleString()} · ${escape(j.id.slice(0,6))}</small></div>`).join("");
-  $("result-list").insertAdjacentHTML("beforeend",sequenceJobs.map(j=>`<div class="split-result-card" data-sequence-result="${j.id}" tabindex="0" role="button"><strong>${escape(j.name)}</strong><span class="source-kind">${j.mode==="trial"?"模块试算":"模块处理"}</span><small>${escape(j.summary||"")}</small><small>${new Date(j.created*1000).toLocaleString()} · ${escape(j.id.slice(0,6))}</small></div>`).join(""));
-  document.querySelectorAll("[data-sequence-result]").forEach(el=>{el.onclick=safe(()=>sequenceResults.load(el.dataset.sequenceResult));el.onkeydown=e=>{if(e.key==="Enter")el.click();};});
-  document.querySelectorAll("[data-split-result]").forEach(el=>{el.onclick=safe(async()=>{sequenceResults.hide();await split.loadResult(el.dataset.splitResult);});el.onkeydown=e=>{if(e.key==="Enter")el.click();};});
+  management.update();
   document.querySelectorAll("[data-source]").forEach((el) => {
     el.onclick = safe(() => selectSource(el.dataset.source));
     el.onkeydown = (e) => {
@@ -528,6 +533,9 @@ async function removeSource(id) {
   toast("已移除来源引用，原始文件和输出保持完整");
 }
 async function promoteResult() {
+  if(resultOwner==="sequence"&&sequenceResults.id&&sequenceResults.meta?.mode==="run"){
+    const opened=await api(`jobs/${sequenceResults.id}/sequence/promote`,{source:sequenceResults.source,side_output:sequenceResults.sideOutput,target:"input"});await useManagedInput(opened);toast("已创建下一阶段输入，添加模块即可继续处理");return;
+  }
   if (!formalResult) return;
   const entry = formalResult;
   const opened = await api(`sources/${entry.id}/promote`, {});
@@ -1085,6 +1093,10 @@ async function submitDialog() {
         return;
       }
       toast(`已导入 ${report.length} 个来源`);
+    } else if (fileBrowser.mode === "result") {
+      if(!fileBrowser.selected.length)throw Error("请选择运行记录");
+      $("result-restore-path").value=fileBrowser.selected[0];
+      $("file-dialog").close();$("result-restore").click();
     } else if (fileBrowser.mode === "plugin") {
       if (!fileBrowser.selected.length) throw Error("请选择算法 JSON 文件");
       const spec = await api("plugins/register", {
