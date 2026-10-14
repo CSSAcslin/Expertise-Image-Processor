@@ -71,7 +71,7 @@ def main():
                 page.goto(url)
                 expect(page.locator("#frame-info")).to_contain_text("第 1 帧 / 60")
                 page.locator("[data-window='inspector'] [data-window-action='hide']").click()
-                page.locator("[data-library-tab='sources']").click()
+                if not page.locator("#library-sources").is_visible(): page.locator("#toggle-data-sources").click()
                 chart = page.locator("#split-curve svg")
 
                 def drag_separator(key, dx=0, dy=0):
@@ -89,7 +89,7 @@ def main():
                 assert width()==315, width()
                 page.locator("#open-module-library").click()
                 assert width()==315
-                page.locator("[data-library-tab='sources']").click()
+                if not page.locator("#library-sources").is_visible(): page.locator("#toggle-data-sources").click()
                 drag_separator("tasks", dy=-130)
                 assert height()==172, height()
                 assert page.locator(".preview-workspace").bounding_box()["height"]<initial_preview["height"]

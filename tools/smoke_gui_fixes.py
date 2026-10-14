@@ -109,7 +109,7 @@ def main():
                 actual = np.load(Path(saved["directory"])/"source_000/values.npy", allow_pickle=False)
                 np.testing.assert_array_equal(actual, pixels[5:15].astype(np.float64)*2)
 
-                page.locator("[data-library-tab='sources']").click()
+                if not page.locator("#library-sources").is_visible(): page.locator("#toggle-data-sources").click()
                 page.locator("#manage-results").click()
                 page.locator(f"[data-sequence-result='{saved['id']}']").click()
                 expect(page.locator("#sequence-readout")).to_contain_text("来源帧 6")

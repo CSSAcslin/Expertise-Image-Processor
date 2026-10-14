@@ -186,7 +186,9 @@ def test_promoted_result_chains_coordinates_provenance_and_project(client, tmp_p
     state = client.get("/api/state").json()
     second_result = next(s for s in state["sources"] if s.get("run_id") == second["id"])
     assert second_result["input_id"] == derived["source"]["id"]
-    assert client.post(f'/api/sources/{result["id"]}/remove', json={}).status_code == 400
+    assert client.post(f'/api/sources/{result["id"]}/remove', json={}).status_code == 200
+    assert Path(first["directory"]).is_dir()
+    assert next(s for s in client.get("/api/state").json()["sources"] if s["id"]==derived["source"]["id"])["lineage"][0]["manifest_sha256"]
     project = tmp_path / "chain.json"
     assert client.post("/api/project/save", json={"path": str(project), "view": {"steps": []}}).status_code == 200
     time.sleep(.25)
@@ -194,7 +196,7 @@ def test_promoted_result_chains_coordinates_provenance_and_project(client, tmp_p
     assert restored.status_code == 200, restored.text
     source = next(s for s in restored.json()["state"]["sources"] if s["id"] == derived["source"]["id"])
     assert source["lineage"] == derived["source"]["lineage"]
-    assert any(s["id"] == result["id"] for s in restored.json()["state"]["sources"])
+    assert not any(s["id"] == result["id"] for s in restored.json()["state"]["sources"])
     continued = client.post(f'/api/sources/{second_result["id"]}/promote', json={})
     assert continued.status_code == 200 and len(continued.json()["source"]["lineage"]) == 2
 

@@ -1,5 +1,6 @@
 import { api } from "./api.js";
 import { setupResultLibrary } from "./result-library.js";
+import { setupSourceLibrary } from "./source-library.js";
 const $=id=>document.getElementById(id);
 const mib=v=>v==null?"未知":(v/1048576).toFixed(1)+" MiB";
 export function setupManagement(bridge){
@@ -21,5 +22,6 @@ export function setupManagement(bridge){
  });
  $("resource-clear").onclick=guard(async()=>{await api("resources/clear",{});await resources();bridge.report("空闲缓存已释放，重新定位即可恢复原值查询");});
  $("resource-inherit-flow").onclick=()=>{bridge.inheritFlow();bridge.report("当前流程已继承统一设备与内存预算，可撤销");};
- return {...setupResultLibrary(bridge),resources};
+ const results=setupResultLibrary(bridge),inputs=setupSourceLibrary(bridge);
+ return {...results,inputs,resources,update:()=>{inputs.update();results.update();}};
 }

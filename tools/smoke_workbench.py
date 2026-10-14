@@ -154,7 +154,7 @@ def main():
                 before = {j["id"] for j in api.get("/api/jobs").json()}
                 page.locator("#run").click()
                 saved = completed(before)
-                page.locator("[data-library-tab='sources']").click()
+                if not page.locator("#library-sources").is_visible(): page.locator("#toggle-data-sources").click()
                 page.locator("#manage-results").click()
                 page.locator(f"[data-sequence-result='{saved['id']}']").click()
                 page.locator("#open-result-tools").click()
@@ -190,7 +190,7 @@ def main():
                 expect(page.locator("#steps [data-instance]")).to_have_count(0)
                 page.locator("#flow-undo").click()
                 expect(page.locator("#steps [data-instance]")).to_have_count(count)
-                page.locator("[data-library-tab='sources']").click()
+                if not page.locator("#library-sources").is_visible(): page.locator("#toggle-data-sources").click()
                 page.locator(f"#source-list [data-source='{source['id']}']").click()
                 page.locator("#manage-results").click()
                 page.locator(f"[data-sequence-result='{saved['id']}']").click()
@@ -316,7 +316,7 @@ def main():
                 add("distribution");parameter("output","side");parameter("bins",8)
                 before={j["id"] for j in api.get("/api/jobs").json()}
                 page.locator("#run").click();extracted=completed(before)
-                page.locator("[data-library-tab='sources']").click()
+                if not page.locator("#library-sources").is_visible(): page.locator("#toggle-data-sources").click()
                 page.locator("#manage-results").click()
                 page.locator(f"[data-sequence-result='{extracted['id']}']").click()
                 page.locator("#open-result-tools").click()
@@ -349,7 +349,7 @@ def main():
                 add("point_extract");parameter("x",3);parameter("y",4);parameter("output","main")
                 before={j["id"] for j in api.get("/api/jobs").json()}
                 page.locator("#trial").click();qjob=completed(before)
-                page.locator("[data-library-tab='sources']").click()
+                if not page.locator("#library-sources").is_visible(): page.locator("#toggle-data-sources").click()
                 page.locator("#manage-results").click()
                 page.locator(f"[data-sequence-result='{qjob['id']}']").click()
                 expect(page.locator("#split-curve")).to_contain_text("有符号 τ")

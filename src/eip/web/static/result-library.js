@@ -13,6 +13,7 @@ const iconButton = (action, icon, label, disabled = false) => `<button type="but
 
 export function setupResultLibrary(bridge) {
   let selected = null, generation = 0, deletion = null, filter = "all", listKey = "", exporting = false;
+  const checked = new Set(); let batchDeletion=[];
   const guard = fn => async (...args) => { try { return await fn(...args); } catch (error) { bridge.report(error.message, true); } };
   const jobs = () => {
     const saved = bridge.jobs().filter(ended), known = new Set(saved.map(job => job.id));
@@ -31,7 +32,9 @@ export function setupResultLibrary(bridge) {
     const all = jobs(), query = $("result-search").value.trim().toLocaleLowerCase();
     const rows = all.filter(job => (filter === "all" || (filter === "trial") === trial(job)) &&
       `${job.name} ${job.source_name || ""} ${job.id}`.toLocaleLowerCase().includes(query));
+    const available=new Set(all.map(job=>job.id));for(const id of checked)if(!available.has(id))checked.delete(id);
     $("result-count").textContent = all.length;
+    syncSelection(rows);
     const errors = bridge.recoveryErrors?.() || [];
     $("result-recovery-note").hidden = !errors.length;
     $("result-recovery-note").textContent = `${errors.length} 项未恢复`;
@@ -50,6 +53,7 @@ export function setupResultLibrary(bridge) {
       const time = job.created ? date.toLocaleDateString(undefined, {month:"2-digit", day:"2-digit"}) + " " + date.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"}) : "来源引用";
       const active = selected?.id === job.id;
       return `<article class="result-entry ${active ? "selected" : ""}" data-result-id="${esc(job.id)}" data-manage-result="${esc(job.id)}" ${job.engine === "sequence" ? `data-sequence-result="${esc(job.id)}"` : job.mode === "split" ? `data-split-result="${esc(job.id)}"` : ""} tabindex="0" role="button" aria-pressed="${active}" aria-label="预览 ${esc(job.name)}">
+        <input type="checkbox" data-result-check="${esc(job.id)}" aria-label="选择 ${esc(job.name)}"/>
         <div class="result-thumbnail">${thumb ? `<img src="${thumb}" alt=""/>` : svgIcon(viewable(job) ? "image" : "warning")}</div>
         <div class="result-entry-copy"><strong title="${esc(job.name)}">${esc(job.name)}</strong><small><span class="result-status-dot ${job.status}" title="${statuses[job.status]}"></span>${trial(job) ? "试算" : "正式"}<span> · ${time}</span></small></div>
         <div class="result-entry-actions">${iconButton("promote", "input", "作为新输入", !reusable(job))}${iconButton("export", "download", "导出运行包", !job.directory)}</div>
@@ -58,9 +62,11 @@ export function setupResultLibrary(bridge) {
     list.scrollTop = scroll;
     for (const row of list.querySelectorAll("[data-result-id]")) {
       row.onclick = guard(event => {
+        if(event.target.closest("[data-result-check]"))return;
         const action = event.target.closest("[data-result-action]")?.dataset.resultAction;
         return action ? quickAction(row.dataset.resultId, action) : select(row.dataset.resultId);
       });
+      row.querySelector("[data-result-check]").onchange=event=>{event.target.checked?checked.add(row.dataset.resultId):checked.delete(row.dataset.resultId);syncSelection(rows);};
       row.onkeydown = guard(event => {
         if (event.target !== row) return;
         if (["Enter", " "].includes(event.key)) { event.preventDefault(); event.stopPropagation(); return select(row.dataset.resultId); }
@@ -73,6 +79,7 @@ export function setupResultLibrary(bridge) {
         }
       });
     }
+    syncSelection(rows);
     if (focusId) {
       const row = [...list.children].find(element => element.dataset.resultId === focusId);
       (focusAction ? row?.querySelector(`[data-result-action="${focusAction}"]`) : row)?.focus({preventScroll:true});
@@ -272,5 +279,55 @@ export function setupResultLibrary(bridge) {
   });
   $("result-restore-path").onkeydown = event => { if (event.key === "Enter") { event.preventDefault(); $("result-restore").click(); } };
   for (const id of ["result-delete-dialog", "result-restore-dialog"]) $(id).querySelectorAll("[data-close-dialog]").forEach(button => button.onclick = () => $(id).close());
+  function filtered(){
+    const query=$("result-search").value.trim().toLocaleLowerCase();
+    return jobs().filter(job=>(filter==="all"||(filter==="trial")===trial(job))&&`${job.name} ${job.source_name||""} ${job.id}`.toLocaleLowerCase().includes(query));
+  }
+  function syncSelection(rows=filtered()){
+    const count=rows.filter(job=>checked.has(job.id)).length;
+    $("result-select-all").checked=!!rows.length&&count===rows.length;
+    $("result-select-all").indeterminate=count>0&&count<rows.length;
+    $("result-select-all").disabled=!rows.length;
+    $("result-selection-count").textContent=checked.size?checked.size+" 已选":"";
+    $("result-batch-remove").disabled=!checked.size;
+    const selectedJobs=jobs().filter(job=>checked.has(job.id));
+    $("result-batch-export").disabled=!checked.size||selectedJobs.some(job=>!job.directory);
+    $("result-batch-export").title=checked.size&&selectedJobs.some(job=>!job.directory)?"所选结果包含无磁盘输出的试算或历史引用":"打包导出所选结果";
+    for(const row of $("result-list").querySelectorAll("[data-result-id]")){
+      const selected=checked.has(row.dataset.resultId);row.classList.toggle("batch-selected",selected);row.querySelector("[data-result-check]").checked=selected;
+    }
+  }
+  $("result-select-all").onchange=event=>{for(const job of filtered())event.target.checked?checked.add(job.id):checked.delete(job.id);syncSelection();};
+  $("result-batch-export").onclick=guard(async()=>{
+    const ids=[...checked],button=$("result-batch-export");button.disabled=true;button.classList.add("is-loading");
+    try{const link=await api("results/package-selected",{ids});const a=document.createElement("a");a.href=link.url;a.download=link.filename;document.body.append(a);a.click();a.remove();}finally{button.classList.remove("is-loading");syncSelection();}
+  });
+  $("result-batch-remove").onclick=guard(async()=>{
+    const button=$("result-batch-remove");button.disabled=true;button.classList.add("is-loading");batchDeletion=[];
+    try{
+      for(const job of jobs().filter(job=>checked.has(job.id))){
+        batchDeletion.push(job.reference_id?{id:job.id,source_id:job.reference_id,name:job.name}:await api(`results/${job.id}/delete-preview`));
+      }
+      $("result-batch-summary").textContent=batchDeletion.length+" 个结果 · 保留文件";
+      $("result-batch-items").innerHTML=batchDeletion.map(row=>`<div class="batch-delete-item"><strong>${esc(row.name)}</strong></div>`).join("");
+      $("result-batch-delete-dialog").showModal();
+    }finally{button.classList.remove("is-loading");syncSelection();}
+  });
+  $("result-batch-confirm").onclick=guard(async()=>{
+    const button=$("result-batch-confirm"),errors=[];let count=0;
+    button.disabled=true;button.classList.add("is-loading");
+    try{
+      for(const row of batchDeletion){
+        try{
+          if(row.source_id)await bridge.removeReference(row.source_id);
+          else {await api(`results/${row.id}/delete`,{mode:"reference",confirmation:row.confirmation});await bridge.removed(row.id);}
+          checked.delete(row.id);count++;
+        }catch(error){errors.push(row.name+"："+error.message);}
+      }
+      $("result-batch-delete-dialog").close();await bridge.refresh();update();
+      bridge.report(`已移除 ${count} 个结果${errors.length?"；"+errors.join("；"):""}`,!!errors.length);
+    }finally{button.disabled=false;button.classList.remove("is-loading");}
+  });
+  $("result-batch-delete-dialog").querySelectorAll("[data-close-dialog]").forEach(button=>button.onclick=()=>$("result-batch-delete-dialog").close());
   return {open:guard(open), update};
 }

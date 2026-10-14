@@ -345,11 +345,28 @@ class Workbench:
     def remove(self, identifier):
         with self.lock:
             self.get_source(identifier)
-            if any(identifier in job["source_ids"] and job["status"] in {"queued", "running", "cancelling"} for job in self.jobs.values()):
-                raise ValueError("该来源仍有待处理任务，请等待或取消任务")
-            if any(entry.get("input_id") == identifier or entry.get("parent_result_id") == identifier for entry in self.sources.values()):
-                raise ValueError("该来源仍关联处理结果，请先移除对应结果引用")
+            busy=[job["name"] for job in self.jobs.values() if identifier in job["source_ids"] and job["status"] in {"queued", "running", "cancelling"}]
+            if busy:
+                raise ValueError("来源被任务占用："+ "、".join(busy)+"；请等待完成或取消该任务")
+            # Removing a workspace reference never removes the file. Completed
+            # runs and derived inputs retain their own source/lineage snapshots.
             del self.sources[identifier]
+
+    def remove_sources(self, identifiers):
+        if not isinstance(identifiers,list) or not 1<=len(identifiers)<=64 or any(not isinstance(i,str) for i in identifiers):
+            raise ValueError("请选择 1–64 个输入来源")
+        removed,failed = [],[]
+        with self.lock:
+            for identifier in dict.fromkeys(identifiers):
+                try:
+                    entry = self.get_source(identifier)
+                    if entry["role"]!="input":
+                        raise ValueError("输入批量操作不包含处理结果")
+                    self.remove(identifier)
+                    removed.append(identifier)
+                except ValueError as error:
+                    failed.append(dict(id=identifier,error=str(error)))
+        return dict(removed=removed,failed=failed)
 
     def get_source(self, identifier):
         with self.lock:

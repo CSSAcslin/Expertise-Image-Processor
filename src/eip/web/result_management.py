@@ -168,7 +168,6 @@ class ResultManager:
             for key in removed:
                 del self.workbench.sources[key]
             del self.workbench.jobs[identifier]
-            self.workbench.frames.clear()
             self.remember()
             return dict(ok=True,removed_sources=removed,files_deleted=mode=="files")
 
@@ -190,32 +189,42 @@ class ResultManager:
 
     def package(self,identifier):
         """ZIP64 copies in bounded chunks to disk, then a single-use download."""
+        return self.package_many([identifier])
+
+    def package_many(self,identifiers):
+        if not isinstance(identifiers,list) or not 1<=len(identifiers)<=64 or any(not isinstance(i,str) for i in identifiers):
+            raise ValueError("请选择 1–64 个处理结果")
         with self.lock:
             self._expire()
             if sum(e.get("temporary",True) for e in self.downloads.values())>=2:
                 raise ValueError("已有两个待下载运行包，请下载后重试")
-            job = self.workbench.job(identifier)
-            if job["status"] not in TERMINAL:
-                raise ValueError("请等待任务结束后导出")
-            root = self._directory(job)
-            if root is None:
-                raise ValueError("此临时试算没有磁盘输出，请正式运行后导出")
+            roots = []
+            for identifier in dict.fromkeys(identifiers):
+                job = self.workbench.job(identifier)
+                if job["status"] not in TERMINAL:
+                    raise ValueError("请等待任务结束后导出")
+                root = self._directory(job)
+                if root is None:
+                    raise ValueError("此临时试算没有磁盘输出，请正式运行后导出")
+                roots.append(root)
             folder = self.workbench.workspace/".eip-cache"/"downloads"
             folder.mkdir(parents=True,exist_ok=True)
-            size = sum(p.stat().st_size for p in self._files(root))
+            size = sum(p.stat().st_size for root in roots for p in self._files(root))
             if shutil.disk_usage(folder).free<size+32*1024**2:
                 raise ValueError("打包临时磁盘空间不足，可从结果工具分别导出数值文件")
             token = secrets.token_urlsafe(32)
             target = folder/f"{token}.zip"
             try:
                 with zipfile.ZipFile(target,"w",compression=zipfile.ZIP_STORED,allowZip64=True) as archive:
-                    for path in self._files(root):
-                        archive.write(path,str(Path(root.name)/path.relative_to(root)))
-                self.downloads[token] = dict(path=target,expires=time.monotonic()+300,name=f"{root.name}.zip")
+                    for root in roots:
+                        for path in self._files(root):
+                            archive.write(path,str(Path(root.name)/path.relative_to(root)))
+                name = f"{roots[0].name}.zip" if len(roots)==1 else f"results_{len(roots)}.zip"
+                self.downloads[token] = dict(path=target,expires=time.monotonic()+300,name=name)
             except Exception:
                 target.unlink(missing_ok=True)
                 raise
-            return dict(url=f"/api/result-downloads/{token}",filename=f"{root.name}.zip",size_bytes=target.stat().st_size)
+            return dict(url=f"/api/result-downloads/{token}",filename=name,size_bytes=target.stat().st_size)
 
     def take_download(self,token):
         with self.lock:

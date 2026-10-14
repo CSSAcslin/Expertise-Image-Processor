@@ -144,6 +144,14 @@ def create_app(workspace: Path | None = None, restore_session: Path | None = Non
         workbench().remove(identifier)
         return {"ok": True}
 
+    @app.post("/api/sources/remove-selected")
+    def remove_selected_sources(value: dict):
+        return workbench().remove_sources(value.get("ids"))
+
+    @app.post("/api/results/package-selected")
+    def package_selected_results(value: dict):
+        return workbench().results.package_many(value.get("ids"))
+
     @app.post("/api/sources/{identifier}/frame")
     def frame(identifier: str, value: dict):
         return workbench().frame(identifier, value)

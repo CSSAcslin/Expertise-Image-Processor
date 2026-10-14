@@ -153,6 +153,76 @@ def test_aborted_download_releases_lease(client,tmp_path,spec_version,abort):
     assert client.get(f"/api/results/{job['id']}/delete-preview").json()["can_delete_files"]
 
 
+def test_remove_input_reference_retains_result_and_lineage(client,tmp_path):
+    entry,values=source(client,tmp_path/"raw.tif")
+    gain=new_node("gain_offset");gain["parameters"]["gain"]=2
+    job=run(client,entry,[gain])
+    derived=client.post(f"/api/jobs/{job['id']}/sequence/promote",json=dict(target="input")).json()["source"]
+    result=next(s for s in client.get("/api/state").json()["sources"] if s["role"]=="result")
+    assert client.post(f"/api/sources/{entry['id']}/remove",json={}).status_code==200
+    assert client.post(f"/api/sources/{result['id']}/remove",json={}).status_code==200
+    saved=next(s for s in client.get("/api/state").json()["sources"] if s["id"]==derived["id"])
+    assert saved["lineage"][0]["run_id"]==job["id"]
+    assert Path(saved["lineage"][0]["manifest"]).is_file()
+    link=client.post(f"/api/jobs/{job['id']}/download-link",json=dict(file="array")).json()
+    np.testing.assert_array_equal(np.load(io.BytesIO(client.get(link["url"]).content)),values*2)
+    assert (tmp_path/"raw.tif").is_file()
+
+
+def test_remove_selected_inputs_is_scoped_and_reports_busy(client,tmp_path):
+    first,_=source(client,tmp_path/"a.tif");second,_=source(client,tmp_path/"b.tif")
+    job=run(client,first,[])
+    result=next(s for s in client.get("/api/state").json()["sources"] if s["role"]=="result")
+    workbench=client.app.state.workbench
+    with workbench.lock:
+        workbench.jobs["held"]=dict(id="held",name="占用来源",source_ids=[first["id"]],status="queued")
+    try:
+        response=client.post("/api/sources/remove-selected",json=dict(ids=[first["id"],second["id"],result["id"]]))
+        assert response.status_code==200,response.text
+        outcome=response.json()
+        assert outcome["removed"]==[second["id"]]
+        assert {item["id"] for item in outcome["failed"]}=={first["id"],result["id"]}
+        assert "任务" in outcome["failed"][0]["error"]
+    finally:
+        with workbench.lock:workbench.jobs.pop("held")
+    state=client.get("/api/state").json()
+    assert {s["id"] for s in state["sources"]}=={first["id"],result["id"]}
+    assert (tmp_path/"b.tif").is_file() and Path(job["directory"]).is_dir()
+    assert client.post("/api/sources/remove-selected",json=dict(ids=[])).status_code==400
+
+
+def test_selected_results_package_contains_each_complete_run(client,tmp_path):
+    entry,values=source(client,tmp_path/"raw.tif")
+    first=run(client,entry,[])
+    gain=new_node("gain_offset");gain["parameters"]["gain"]=2
+    second=run(client,entry,[gain])
+    response=client.post("/api/results/package-selected",json=dict(ids=[first["id"],second["id"],first["id"]]))
+    assert response.status_code==200,response.text
+    link=response.json()
+    assert link["filename"]=="results_2.zip"
+    with zipfile.ZipFile(io.BytesIO(client.get(link["url"]).content)) as archive:
+        for job,multiplier in [(first,1),(second,2)]:
+            prefix=Path(job["directory"]).name
+            assert json.loads(archive.read(prefix+"/run.json"))["run_id"]==job["id"]
+            np.testing.assert_array_equal(np.load(io.BytesIO(archive.read(prefix+"/source_000/values.npy"))),values*multiplier)
+    assert client.get(link["url"]).status_code==400
+    assert client.post("/api/results/package-selected",json=dict(ids=[entry["id"]])).status_code==400
+    assert client.post("/api/results/package-selected",json=dict(ids=[])).status_code==400
+    assert (tmp_path/"raw.tif").is_file()
+
+
+def test_remove_result_record_keeps_input_pixel_cache(client,tmp_path):
+    entry,values=source(client,tmp_path/"raw.tif")
+    job=run(client,entry,[])
+    frame=client.post(f"/api/sources/{entry['id']}/frame",json=dict(index=0)).json()
+    preview=client.get(f"/api/results/{job['id']}/delete-preview").json()
+    response=client.post(f"/api/results/{job['id']}/delete",json=dict(mode="reference",confirmation=preview["confirmation"]))
+    assert response.status_code==200,response.text
+    response=client.get(f"/api/frames/{frame['token']}/pixel",params=dict(x=0,y=0))
+    assert response.status_code==200,response.text
+    assert response.json()["value"]==int(values[0,0,0])
+
+
 def test_resources_snapshot_cache_release_and_restart(tmp_path):
     policy=dict(memory_mb=192,preview_mb=32,cache_mb=16,gpu_mb=64,backend="cpu")
     with TestClient(create_app(tmp_path)) as client:

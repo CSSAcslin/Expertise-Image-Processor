@@ -206,7 +206,7 @@ const sequenceResults=new SequenceResults({
 
 const workbench=setupWorkbench({editor:generalEditor,layout,source:()=>active,input:()=>input,viewer:originalViewer,resultViewer,scene,resultScene,notify:toast,save:scheduleDraft,inspect:(side,tool=null)=>previewModule(generalEditor,side,!!tool,tool==="point",tool),raw:async()=>{axisEditing=null;axisStage=false;scene.annotation=null;scene.tool="pan";$("axis-stage-note").hidden=true;$("module-preview-tools").hidden=true;if(input)await setInput(input);},currentJobs:()=>jobs,poll:pollJobs,submit});
 async function useManagedInput(opened){sources=(await api("state")).sources;generalSequenceContext=null;generalEditor.replace([]);$("batch").checked=false;$("scope").value="all";$("range-fields").hidden=true;await selectSource(opened.source.id);updateSources();scheduleDraft();}
-const management=setupManagement({sourceDetail:showSourceDetails,removeReference:removeSource,openLibrary:tab=>workbench.openLibrary(tab),pickResult:()=>openDialog("result"),jobs:()=>jobs,sources:()=>sources,report:toast,detail:jobDetail,promoted:useManagedInput,currentResult:()=>resultOwner==="sequence"?sequenceResults.id:resultOwner==="split"?split.resultId:formalResult?.run_id,
+const management=setupManagement({activeSource:()=>active?.id,selectSource,removeSources:removeSelectedSources,runSources:async ids=>{if(!ids.length)return;if(!ids.includes(active?.id))await selectSource(ids[0]);return submit("run",null,ids);},sourceDetail:showSourceDetails,removeReference:removeSource,openLibrary:tab=>workbench.openLibrary(tab),pickResult:()=>openDialog("result"),jobs:()=>jobs,sources:()=>sources,report:toast,detail:jobDetail,promoted:useManagedInput,currentResult:()=>resultOwner==="sequence"?sequenceResults.id:resultOwner==="split"?split.resultId:formalResult?.run_id,
  inheritFlow:()=>{for(const node of steps){node.execution??={};Object.assign(node.execution,{backend:"inherit",memory_mb:null});}generalEditor.changed();scheduleDraft();},
  recoveryErrors:()=>state?.result_recovery_errors||[],
  reveal:()=>{if($("viewers").dataset.mode==="input"||layout.state.windows.result.hidden)setMode(active?"compare":"result");},
@@ -415,34 +415,7 @@ function updateSummary() {
     : "导入来源 → 配置算法 → 检查结果";
 }
 function updateSources() {
-  const inputs = sources.filter((s) => s.role === "input");
-  $("source-count").textContent = inputs.length;
-  const card = (s) =>
-    `<div class="source-card ${s.id === active?.id || s.id === formalResult?.id ? "selected" : ""}" tabindex="0" role="button" data-source="${s.id}" aria-label="预览 ${escape(s.display_name || s.meta.name)}"><img src="${s.thumbnail}" alt=""><div class="source-copy"><strong title="${escape(s.source.path)}">${escape(s.display_name || s.meta.name)}</strong><span class="source-kind">${s.role === "result" ? "处理结果" : s.lineage?.length ? "派生输入 · 阶段 " + (s.lineage.length + 1) : s.meta.kind === "video" ? "视频" : s.meta.kind === "sequence" ? "图像序列" : "图像"}</span><small>${s.meta.contract?escape(s.meta.contract.label):`${s.meta.shape[1]} × ${s.meta.shape[0]}`} · ${escape(s.meta.contract?.dtype||s.meta.dtype)}</small><button class="text-button source-info" data-info="${s.id}">属性 / 来源</button></div><button class="icon-button source-remove" data-remove="${s.id}" aria-label="移除 ${escape(s.display_name || s.meta.name)}">${icon("close")}</button></div>`;
-  $("source-list").innerHTML = inputs.length
-    ? inputs.map(card).join("")
-    : '<div class="library-empty">导入图像、视频<br>或图像序列目录</div>';
   management.update();
-  document.querySelectorAll("[data-source]").forEach((el) => {
-    el.onclick = safe(() => selectSource(el.dataset.source));
-    el.onkeydown = (e) => {
-      if (e.target === el && e.key === "Enter") el.click();
-    };
-  });
-  document.querySelectorAll("[data-info]").forEach(
-    (b) =>
-      (b.onclick = (event) => {
-        event.stopPropagation();
-        safe(() => showSourceDetails(b.dataset.info))();
-      }),
-  );
-  document.querySelectorAll("[data-remove]").forEach(
-    (b) =>
-      (b.onclick = (event) => {
-        event.stopPropagation();
-        safe(() => removeSource(b.dataset.remove))();
-      }),
-  );
   updateSummary();
 }
 async function showSourceDetails(id) {
@@ -501,21 +474,27 @@ async function showSourceDetails(id) {
     `<table class="metadata-table">${rows.map(([k, v]) => `<tr><td>${escape(k)}</td><td>${escape(v)}</td></tr>`).join("")}</table><p class="small-copy">${escape((entry.meta.notes || []).join("；"))}</p>${(entry.lineage || []).map((p, i) => `<div class="lineage-item"><strong>上游阶段 ${i + 1} · ${escape(p.run_id)}</strong>${p.crop_origin?`<br>裁剪原点：${escape(p.crop_origin.join(", "))} px`:""}${p.lag_frames!=null?`<br>延迟：${escape(p.lag_frames)} 帧 · 平均窗口：${escape(p.window)} 帧`:""}<br>来源：${escape(p.parent_source.path)}<br>运行记录：${escape(p.manifest)}</div>`).join("")}`;
   $("source-dialog").showModal();
 }
-async function removeSource(id) {
-  await api(`sources/${id}/remove`, {});
-  sources = sources.filter((s) => s.id !== id);
-  sourceViews.delete(id);
-  if (formalResult?.id === id) {
+async function syncRemovedSources(ids) {
+  sources = sources.filter((s) => !ids.includes(s.id));
+  for(const id of ids)sourceViews.delete(id);
+  if (ids.includes(formalResult?.id)) {
     formalResult = result = null;
     resultViewer.clear();
     setMode("input");
   }
-  if (active?.id === id) {
+  if (ids.includes(active?.id)) {
     stopPlay();
+    sequenceResults.hide();
+    sequenceResults.id = null;
+    split.resultId = null;
+    $("split-result-controls").hidden = true;
+    $("split-curve").hidden = true;
     active = input = result = formalResult = null;
     sourceGeneration++;
     originalViewer.clear();
     resultViewer.clear();
+    $("result-label").textContent = "处理结果";
+    $("result-meta").textContent = "";
     scene.roi = null;
     roiUndo = roiRedo = [];
     committedROI = null;
@@ -530,7 +509,16 @@ async function removeSource(id) {
   }
   updateSources();
   scheduleDraft();
-  toast("已移除来源引用，原始文件和输出保持完整");
+}
+async function removeSource(id) {
+  await api(`sources/${id}/remove`, {});
+  await syncRemovedSources([id]);
+  toast("已移除来源引用，文件保留");
+}
+async function removeSelectedSources(ids) {
+  const outcome=await api("sources/remove-selected",{ids});
+  await syncRemovedSources(outcome.removed);
+  return outcome;
 }
 async function promoteResult() {
   if(resultOwner==="sequence"&&sequenceResults.id&&sequenceResults.meta?.mode==="run"){
@@ -893,14 +881,14 @@ function renderSteps() {
   generalEditor.render();updateSummary();
 }
 function addStep(){workbench.openLibrary();}
-async function submit(mode,stopAfter=null) {
+async function submit(mode,stopAfter=null,sourceIds=null) {
   if (!active || !input) return;
   if(stopAfter&&!steps.some(n=>n.id===stopAfter))throw Error("请先选择运行终点模块");
   const error=stopAfter?null:generalEditor.validate();if(error)throw Error(error);
   for (const el of $("general-module-fields").querySelectorAll("input"))
     if (!el.reportValidity()) return;
   const end=steps.find(n=>n.id===stopAfter),name=$("job-name").value.trim();
-  return submitModules(steps,mode,end?`${name||active.display_name||active.meta.name} · 至 ${end.name||generalEditor.specs[end.algorithm]?.name}`:name||null,{stop_after:stopAfter,sample_index:generalEditor.previewSample||0,source_ids:mode==="run"&&$("batch").checked?sources.filter(s=>s.role==="input").map(s=>s.id):[active.id]});
+  return submitModules(steps,mode,end?`${name||active.display_name||active.meta.name} · 至 ${end.name||generalEditor.specs[end.algorithm]?.name}`:name||null,{stop_after:stopAfter,sample_index:generalEditor.previewSample||0,source_ids:sourceIds|| (mode==="run"&&$("batch").checked?sources.filter(s=>s.role==="input").map(s=>s.id):[active.id])});
 }
 const trialSignatures = new Map();
 const statusText = {

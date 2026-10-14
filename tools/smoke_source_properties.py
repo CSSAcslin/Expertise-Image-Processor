@@ -92,7 +92,7 @@ def main():
                 page.on("pageerror", lambda error: errors.append(str(error)))
                 page.on("request", lambda r: calculations.append(r.url) if r.method == "POST" and (r.url.endswith("/api/jobs") or r.url.endswith("/api/modules/inspect") or r.url.endswith("/sequence")) else None)
                 page.goto(url)
-                page.locator("[data-library-tab='sources']").click()
+                if not page.locator("#library-sources").is_visible(): page.locator("#toggle-data-sources").click()
                 report = {}
                 for name, source, expected in opened:
                     page.locator(f"[data-info='{source['id']}']").click()

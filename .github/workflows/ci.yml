@@ -48,3 +48,6 @@ jobs:
       - name: Browser result workflow
         if: matrix.python == '3.14'
         run: python tools/smoke_result_interaction_0_8_1.py
+      - name: Browser data management
+        if: matrix.python == '3.14'
+        run: python tools/smoke_data_management_0_8_2.py

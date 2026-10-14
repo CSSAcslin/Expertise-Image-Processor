@@ -8,9 +8,9 @@
 
 ~~~powershell
 python -m venv .venv
-..venvScriptspython.exe -m pip install -r requirements-dev.txt
-..venvScriptspython.exe -m pip install --no-deps -e .
-..venvScriptspython.exe run_web.py --no-browser
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m pip install --no-deps -e .
+.\.venv\Scripts\python.exe run_web.py --no-browser
 ~~~
 
 默认地址为 http://127.0.0.1:8765。前端位于 src/eip/web/static，直接加载，无需打包。Web 不依赖 Qt；需要验证 Qt 时安装 requirements-desktop.txt。可选 GPU 依赖通过项目 gpu 扩展安装，配置见 [资源与 GPU](docs/RESULT_RESOURCE_GPU_0_8_0.md)。
@@ -26,10 +26,11 @@ python -m venv .venv
 ## 验证
 
 ~~~powershell
-..venvScriptspython.exe -m pytest -q
-..venvScriptspython.exe toolssmoke_result_interaction_0_8_1.py
-..venvScriptspython.exe toolssmoke_result_resources_gpu.py
-..venvScriptspython.exe toolssmoke_module_revision_0_7_4.py
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe tools\smoke_data_management_0_8_2.py
+.\.venv\Scripts\python.exe tools\smoke_result_interaction_0_8_1.py
+.\.venv\Scripts\python.exe tools\smoke_result_resources_gpu.py
+.\.venv\Scripts\python.exe tools\smoke_module_revision_0_7_4.py
 ~~~
 
 选择与改动相关的回归；科学计算应以独立参考公式核对数值、无效值、精度、时间 / 坐标与来源，避免只检查界面文本。CPU 测试生成小型模拟数据；CUDA 测试在没有硬件时明确跳过。浏览器验收需要 Playwright，Windows 使用已安装的 Edge，服务和数据写入独立的 .test-output 子目录。
