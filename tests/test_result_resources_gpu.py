@@ -121,7 +121,10 @@ def test_direct_download_is_single_use_protects_files_and_validates_format(clien
     assert (Path(job["directory"])/"source_000/values.npy").is_file()
 
 
-def test_aborted_download_releases_lease(client,tmp_path):
+@pytest.mark.parametrize("spec_version,abort",[
+    ("2.0","send_failure"),("2.4","send_failure"),("2.0","disconnect"),
+])
+def test_aborted_download_releases_lease(client,tmp_path,spec_version,abort):
     entry,_=source(client,tmp_path/"raw.tif")
     job=run(client,entry,[])
     link=client.post(f"/api/jobs/{job['id']}/download-link",json=dict(file="array")).json()
@@ -129,12 +132,22 @@ def test_aborted_download_releases_lease(client,tmp_path):
     manager=client.app.state.workbench.results
     saved=manager.take_download(ticket)
     response=DownloadResponse(saved["path"],saved["name"],lambda:manager.finish_download(ticket,saved))
-    async def disconnected():
-        return {"type":"http.disconnect"}
+    async def receive():
+        if abort=="disconnect":
+            return {"type":"http.disconnect"}
+        # Keep the connection alive until send fails; two simultaneous abort
+        # signals race in frameworks that listen for disconnection.
+        await asyncio.Event().wait()
     async def send(message):
-        if message["type"]=="http.response.body":raise RuntimeError("client aborted")
-    with pytest.raises(RuntimeError,match="client aborted"):
-        asyncio.run(response(dict(type="http",method="GET",headers=[],extensions={}),disconnected,send))
+        if abort=="send_failure" and message["type"]=="http.response.body":
+            raise RuntimeError("client aborted")
+    scope=dict(type="http",method="GET",headers=[],extensions={},
+               asgi=dict(version="3.0",spec_version=spec_version))
+    if abort=="send_failure":
+        with pytest.raises(RuntimeError,match="client aborted"):
+            asyncio.run(response(scope,receive,send))
+    else:
+        asyncio.run(response(scope,receive,send))
     assert not manager.active_files
     assert saved["path"].is_file()
     assert client.get(f"/api/results/{job['id']}/delete-preview").json()["can_delete_files"]
