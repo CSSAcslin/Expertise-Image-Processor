@@ -71,6 +71,7 @@ def main():
                 page.goto(url)
                 expect(page.locator("#frame-info")).to_contain_text("第 1 帧 / 60")
                 page.locator("[data-window='inspector'] [data-window-action='hide']").click()
+                page.locator("#open-data-library").click()
                 if not page.locator("#library-sources").is_visible(): page.locator("#toggle-data-sources").click()
                 chart = page.locator("#split-curve svg")
 
@@ -89,6 +90,7 @@ def main():
                 assert width()==315, width()
                 page.locator("#open-module-library").click()
                 assert width()==315
+                page.locator("#open-data-library").click()
                 if not page.locator("#library-sources").is_visible(): page.locator("#toggle-data-sources").click()
                 drag_separator("tasks", dy=-130)
                 assert height()==172, height()

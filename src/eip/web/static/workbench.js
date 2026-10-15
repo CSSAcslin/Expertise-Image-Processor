@@ -4,7 +4,17 @@ import { svgIcon } from "./icons.js";
 const $=id=>document.getElementById(id),esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
 export function setupWorkbench(bridge){
  const editor=bridge.editor;let proposal=null,pendingTemplate=null;const guard=fn=>async(...args)=>{try{return await fn(...args);}catch(e){bridge.notify(e.message,true);}};
- function openLibrary(tab="modules"){document.body.classList.toggle("browsing-results",tab==="results");if(tab!=="modules"){bridge.layout.openData(tab);return;}document.querySelector(".workspace").classList.remove("library-collapsed");bridge.layout.apply();editor.renderLibrary();$("module-search").focus();}
+ function openLibrary(tab="modules"){
+  document.body.classList.toggle("browsing-results",tab==="results");
+  if(["sources","results"].includes(tab)){bridge.layout.openData(tab);return;}
+  bridge.layout.openLibrary(tab);
+  if(tab==="modules"){editor.renderLibrary();$("module-search").focus();}
+ }
+ document.querySelector(".library-switch").addEventListener("keydown",e=>{
+  if(!["ArrowLeft","ArrowRight","Home","End"].includes(e.key))return;
+  e.preventDefault();const tab=e.key==="Home"?"data":e.key==="End"?"modules":bridge.layout.state.libraryTab==="data"?"modules":"data";
+  openLibrary(tab);document.querySelector(`[data-library-tab="${tab}"]`).focus();
+ });
  document.querySelectorAll("[data-library-tab]").forEach(b=>b.onclick=()=>openLibrary(b.dataset.libraryTab));$("module-search").oninput=()=>editor.renderLibrary();document.querySelectorAll("[data-category-filter]").forEach(b=>b.onclick=()=>{editor.filter=b.dataset.categoryFilter;document.querySelectorAll("[data-category-filter]").forEach(v=>v.classList.toggle("selected",v===b));editor.renderLibrary();});$("flow-undo").onclick=()=>editor.undo();$("flow-redo").onclick=()=>editor.undo(true);$("flow-clear").onclick=()=>{editor.replace([]);bridge.notify("模块已清空，可撤销恢复");};
  for(const[id,dialog]of[["open-run-settings","run-settings-dialog"],["open-display","display-dialog"],["open-result-tools","result-tools-dialog"]])$(id).onclick=()=>$(dialog).showModal();document.querySelectorAll("[data-close-dialog]").forEach(b=>b.onclick=()=>b.closest("dialog").close());$("stage-sample").onchange=()=>{if($("stage-sample").reportValidity())editor.previewSample=Number($("stage-sample").value)-1;};$("inspect-input").onclick=guard(()=>bridge.inspect("input"));$("inspect-output").onclick=guard(()=>bridge.inspect("output"));$("geometry-return").onclick=guard(()=>bridge.raw());
  $("cancel-active").onclick=guard(async()=>{const job=bridge.currentJobs().find(j=>["running","queued"].includes(j.status));if(job){await api(`jobs/${job.id}/cancel`,{});await bridge.poll();}});

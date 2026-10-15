@@ -109,6 +109,7 @@ def main():
                 actual = np.load(Path(saved["directory"])/"source_000/values.npy", allow_pickle=False)
                 np.testing.assert_array_equal(actual, pixels[5:15].astype(np.float64)*2)
 
+                page.locator("#open-data-library").click()
                 if not page.locator("#library-sources").is_visible(): page.locator("#toggle-data-sources").click()
                 page.locator("#manage-results").click()
                 page.locator(f"[data-sequence-result='{saved['id']}']").click()

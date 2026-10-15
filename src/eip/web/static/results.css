@@ -87,4 +87,4 @@
 .is-loading:after{content:"";position:absolute;inset:6px;border:2px solid #8bbdab;border-top-color:transparent;border-radius:50%;animation:result-busy .8s linear infinite}
 @keyframes result-busy{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.is-loading:after{animation:none}}
-@media(max-width:1100px){.browsing-results .processing:not(.is-floating):not(.is-maximized){display:none!important}}
+@media(max-width:1279px){.browsing-results .processing:not(.is-floating):not(.is-maximized){display:none!important}}

@@ -22,12 +22,13 @@ python -m venv .venv
 - 试算与正式处理共用实现；结果保留真实时间、贡献样本、坐标和来源。
 - 大数据按需读取，工作数组和缓存有预算；CPU 保持完整可用，GPU 可选。
 - 结果复用与清理保留引用检查和可追溯记录。
+- 左侧仅设「数据 / 模块」两个选项卡，输入与处理结果在数据页内纵向折叠；任务记录保持中央底部窄栏，优先保留公共预览空间。
 
 ## 验证
 
 ~~~powershell
 .\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe tools\smoke_data_management_0_8_2.py
+.\.venv\Scripts\python.exe tools\smoke_sidebar_data_0_8_3.py
 .\.venv\Scripts\python.exe tools\smoke_result_interaction_0_8_1.py
 .\.venv\Scripts\python.exe tools\smoke_result_resources_gpu.py
 .\.venv\Scripts\python.exe tools\smoke_module_revision_0_7_4.py

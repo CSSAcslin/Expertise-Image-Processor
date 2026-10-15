@@ -1,6 +1,12 @@
 # 使用指南
 
-安装与启动见 [项目首页](../README.md)，版本变化见 [更新日志](../CHANGELOG.md)。以下说明对应 0.8.2 的数据预览、模块处理与结果导出；底部面板与独立批选见 [数据管理](DATA_MANAGEMENT_0_8_2.md)。
+安装与启动见 [项目首页](../README.md)，版本变化见 [更新日志](../CHANGELOG.md)。以下说明对应 0.8.3 的数据预览、模块处理与结果导出；当前侧栏与独立批选见 [布局与数据管理](SIDEBAR_LAYOUT_0_8_3.md)。
+
+## 工作台布局
+
+左侧只有「数据」「模块」两个并列选项卡。「数据」内的「输入」「处理」上下排列，标题分别显示数量，点击标题可独立折叠。勾选框用于各组批选，点击条目用于预览；切换选项卡保留选择和当前结果样本。
+
+中央上方编排模块，下方共用数据和结果画布、定位及播放工具；右侧设置所选模块的参数。中央底部的「任务」窄栏仅显示数量及队列状态，按需展开查看、取消任务或打开详情。小窗口默认收起右侧检查器，可从窗口菜单打开。
 
 ## Web 架构
 
@@ -105,6 +111,8 @@ class MyAlgorithm:
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 .\.venv\Scripts\python.exe -m pytest -q
+# 0.8.3 左侧数据 / 模块、输入 / 处理折叠、独立批选及预览空间
+.\.venv\Scripts\python.exe tools\smoke_sidebar_data_0_8_3.py
 # 0.8.1 图标结果页、键盘、搜索、所选输出导出及历史恢复
 .\.venv\Scripts\python.exe tools\smoke_result_interaction_0_8_1.py
 # 0.8.0 结果管理、资源预算、直接下载及大小窗口
@@ -139,7 +147,7 @@ class MyAlgorithm:
 
 `smoke_split_workflow.py` 核对 0.4.1 双视窗、ROI、模块拖排 / 复制、独立任务入口、命名、导出与刷新恢复。`smoke_split.py` 是旧界面浏览器回归的兼容入口，核对分幅、曲线、ROI 编辑、时间 / 延迟导航、刷新恢复、导出及来源显示，并检查 1440×960 / 1100×760 布局。`smoke_split_cine.py` 对全部 370,801 帧建立完整基线，独立解码 194 帧核对 6 个窗口 × 9 个延迟的 16×16 图及曲线；首次基线实测约 377 秒，后续同一标定复用缓存。测试矩形不能代替实验标定；详情见专项说明。
 
-0.7.0 当前界面回归使用 `smoke_workbench.py`；`smoke_axis_modules.py` 等旧界面脚本保留用于历史协议，不能用来验收新布局。`smoke_axis_cine.py` 对选定201帧的矩阵和区域信号分别直接套用标准 g² 公式，核对共享内核的输出与真实时间差。
+当前布局回归使用 `smoke_sidebar_data_0_8_3.py`，公共工作台仍使用 `smoke_workbench.py`；`smoke_data_management_0_8_2.py`、`smoke_axis_modules.py` 等旧界面脚本保留用于对应历史版本，不能用来验收新布局。`smoke_axis_cine.py` 对选定201帧的矩阵和区域信号分别直接套用标准 g² 公式，核对共享内核的输出与真实时间差。
 
 维护时可用 `--workspace <目录>` 指定工作目录，`--restore-session <本地快照.json>` 恢复已结束的来源/任务记录。维护快照保留会话令牌，仅用于本机维护，不能替代项目文件；原值帧缓存需重新定位或试算后恢复。
 

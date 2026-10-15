@@ -128,6 +128,7 @@ def main():
                 assert len(rows) == 1 and abs(float(rows[0]["value_1"]) - 20.25) < 1e-10
                 assert rows[0]["time_seconds"] == ""
                 assert [n["algorithm"] for n in saved["run"]["spec"]["steps"]] == ["gain_offset", "spatial_smooth", "time_statistics", "global_statistics"]
+                page.locator("#open-data-library").click()
                 if not page.locator("#library-sources").is_visible(): page.locator("#toggle-data-sources").click()
                 page.locator("#manage-results").click()
                 page.locator(f"[data-sequence-result='{saved['id']}']").click()
