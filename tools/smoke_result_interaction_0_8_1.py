@@ -139,7 +139,7 @@ def main():
                 expect(row(original)).to_have_count(0)
                 assert not Path(original["directory"]).exists() and (folder / "raw.tif").is_file()
 
-                page.locator("#result-restore-open").click(); page.locator("#result-restore-pick").click()
+                page.locator("#result-restore-open").click(); page.locator("[data-result-restore-kind=record]").click(); page.locator("#result-restore-pick").click()
                 expect(page.locator("#dialog-title")).to_have_text("打开历史结果")
                 page.locator("#browse-path").fill(doubled["directory"]); page.locator("#browse-go").click()
                 page.locator("#file-list .file-row").filter(has=page.locator("span", has_text="run.json")).click()

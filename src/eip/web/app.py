@@ -108,15 +108,15 @@ def create_app(workspace: Path | None = None, restore_session: Path | None = Non
 
     @app.post("/api/results/restore")
     def restore_result(value: dict):
-        path = Path(value["path"]).resolve()
-        if path.name!="run.json":
-            raise ValueError("请选择结果目录中的 run.json")
-        run = json.loads(path.read_text(encoding="utf-8"))
-        if run.get("contract_version")==3:
-            return workbench().restore_sequence(str(path))
-        if run.get("mode")=="split_correlation" or "config" in run and "source" in run:
-            return workbench().split.restore(str(path))
-        raise ValueError("此历史运行格式需通过项目文件打开")
+        return workbench().results.restore(value["path"])
+
+    @app.post("/api/results/restore-directory")
+    def restore_result_directory(value: dict):
+        return workbench().results.restore_directory(value["path"])
+
+    @app.post("/api/results/{identifier}/source")
+    def open_historical_source(identifier: str,value: dict):
+        return workbench().results.open_source(identifier,value)
 
     @app.get("/api/result-downloads/{ticket}")
     def package_download(ticket: str):

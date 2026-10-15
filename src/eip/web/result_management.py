@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 import hashlib
 import json
+import os
 import re
 import secrets
 import shutil
@@ -28,7 +29,7 @@ class ResultManager:
     def remember(self):
         """Only local references; numerical data and run manifests stay authoritative."""
         with self.workbench.lock:
-            rows = [{k:j[k] for k in ("id","mode","engine","contract_version","task","name","source_name","source_ids","source_count","status","completed","total","created","directory","summary") if k in j}
+            rows = [{k:j[k] for k in ("id","mode","engine","contract_version","task","name","source_name","source_ids","source_count","status","completed","total","created","directory","summary","error") if k in j}
                     for j in self.workbench.jobs.values() if j["status"] in TERMINAL and j.get("directory")]
             write_json(self.index_path,dict(schema_version=1,results=rows))
 
@@ -55,6 +56,159 @@ class ResultManager:
         except (ValueError,OSError) as error:
             errors.append(str(error))
         return errors
+
+    def _read_run(self,path):
+        path = Path(path).expanduser().resolve()
+        if path.is_dir():
+            path = path/"run.json"
+        if path.name!="run.json" or not path.is_file():
+            raise ValueError("请选择导出目录或其中的 run.json")
+        if path.stat().st_size>8*1024**2:
+            raise ValueError("运行记录超过 8 MiB，请选择更具体的导出目录")
+        run = json.loads(path.read_text(encoding="utf-8-sig"))
+        if not isinstance(run,dict) or not isinstance(run.get("run_id"),str) or not re.fullmatch(r"[a-zA-Z0-9_-]{1,80}",run["run_id"]):
+            raise ValueError("此文件不是有效的 EIP 运行记录")
+        return path,run
+
+    def _register_run(self,path,run):
+        """Recover metadata only; opening a directory never loads or copies arrays."""
+        from datetime import datetime
+        identifier = run["run_id"]
+        sequence = run.get("contract_version")==3
+        split = not sequence and run.get("mode")=="split_correlation"
+        if split:
+            if run.get("schema_version")!=1 or not isinstance(run.get("config"),dict) or not isinstance(run.get("source"),dict):
+                raise ValueError("分幅运行记录不完整")
+            payload = dict(source=run["source"],provenance=run.get("provenance",{}))
+            specs = [run["source"]]
+        else:
+            if (not sequence and run.get("schema_version")!=1) or not isinstance(run.get("spec"),dict) or not isinstance(run.get("results"),list):
+                raise ValueError("不支持此历史运行格式")
+            payload = run["spec"]
+            specs = payload.get("sources",[])
+        good = [item for item in run.get("results",[]) if isinstance(item,dict) and item.get("status")=="succeeded"]
+        status = run.get("status")
+        incomplete = status not in TERMINAL or path.parent.name.endswith(".partial")
+        if status not in TERMINAL or incomplete and status in {"succeeded","completed_with_errors"}:
+            status = "failed"
+        if not split and not good and status in {"succeeded","completed_with_errors"}:
+            status = "failed"
+        source_name = Path(specs[0].get("path","未知来源")).name if specs else "未知来源"
+        provenance = payload.get("provenance",[])
+        provenance = [provenance] if isinstance(provenance,dict) else provenance
+        created = path.stat().st_mtime
+        try:
+            created = datetime.fromisoformat(run.get("created_at") or run.get("started_at") or "").timestamp()
+        except (ValueError,TypeError):
+            pass
+        job = dict(id=identifier,mode="split" if split else payload.get("mode","run"),engine="sequence" if sequence else "legacy",name=run.get("display_name") or source_name,source_name=source_name,source_ids=[item.get("source_id") for item in provenance if isinstance(item,dict)],source_count=len(specs),status=status,completed=sum(item.get("completed_frames",0) for item in good),total=None,created=created,directory=str(path.parent),summary="历史分幅结果" if split else "历史模块结果" if sequence else "历史图像序列",run=run,payload=payload,logs=[],result_available=status in {"succeeded","completed_with_errors"})
+        if sequence:
+            job["contract_version"] = 3
+        if split:
+            job["task"] = run.get("task","run")
+        if incomplete:
+            job["error"] = "上次运行未完成或输出未发布，仅保留记录供检查与清理"
+        elif run.get("error"):
+            job["error"] = str(run["error"])
+        with self.workbench.lock:
+            existing = self.workbench.jobs.get(identifier)
+            if existing:
+                if Path(existing.get("directory") or "").resolve()!=path.parent:
+                    raise ValueError("此运行标识已对应另一目录，请先移除原记录再打开此目录")
+                return dict(id=identifier,existing=True)
+            if len(self.workbench.jobs)>=64:
+                raise ValueError("结果列表已达 64 项，请先清理或移除部分记录，再次打开此目录")
+            self.workbench.enqueue(identifier,job,queue_job=False)
+        return dict(id=identifier,existing=False)
+
+    def restore(self,value):
+        path,run = self._read_run(value)
+        if not path.parent.name.endswith(".partial"):
+            if run.get("contract_version")==3 and run.get("status") in {"succeeded","completed_with_errors"}:
+                return self.workbench.restore_sequence(str(path))
+            if run.get("mode")=="split_correlation" and run.get("status")=="succeeded":
+                return self.workbench.split.restore(str(path))
+        with self.lock:
+            result = self._register_run(path,run)
+            self.remember()
+            return result
+
+    def restore_directory(self,value):
+        root = Path(value).expanduser().resolve()
+        if not root.is_dir():
+            raise ValueError("请选择已有的导出文件夹")
+        restored,failed,existing = [],[],0
+        pending,visited,entries = [root],0,0
+        reason = None
+        deadline = time.monotonic()+10
+        with self.lock:
+            while pending:
+                if visited>=2500 or entries>=20000 or time.monotonic()>deadline:
+                    reason = "目录较大，本次扫描达到上限；可选择更具体的导出子目录继续找回"
+                    break
+                folder = pending.pop();visited += 1
+                manifest = folder/"run.json"
+                try:
+                    if manifest.is_file():
+                        if manifest.is_symlink():
+                            raise ValueError("运行记录为链接，请直接选择其真实导出目录")
+                        path,run = self._read_run(manifest)
+                        with self.workbench.lock:
+                            full = run["run_id"] not in self.workbench.jobs and len(self.workbench.jobs)>=64
+                        if full:
+                            reason = "结果列表已达 64 项，请先清理或移除部分记录，再次打开此目录"
+                            break
+                        result = self._register_run(path,run)
+                        if result["existing"]:
+                            existing += 1
+                        else:
+                            restored.append(result["id"])
+                        # A run's children contain outputs, not additional run roots.
+                        continue
+                    with os.scandir(folder) as children:
+                        for child in children:
+                            entries += 1
+                            if entries>=20000 or time.monotonic()>deadline:
+                                reason = "目录较大，本次扫描达到上限；可选择更具体的导出子目录继续找回"
+                                break
+                            if not child.name.startswith(".") and child.is_dir(follow_symlinks=False) and not Path(child.path).is_junction():
+                                pending.append(Path(child.path))
+                    if reason:
+                        break
+                except (ValueError,OSError,KeyError,TypeError) as error:
+                    failed.append(dict(path=str(folder),error=str(error)))
+                    if len(failed)>=64:
+                        reason = "未识别记录较多，请选择更具体的导出子目录"
+                        break
+            if restored:
+                try:
+                    self.remember()
+                except OSError as error:
+                    failed.append(dict(path=str(self.index_path),error=f"结果已找回，但索引未能保存：{error}"))
+        return dict(path=str(root),restored=restored,existing=existing,failed=failed,truncated=bool(reason),limit_reason=reason)
+
+    def open_source(self,identifier,value):
+        """Read an older TIFF export on demand, preserving its recorded coordinates."""
+        job = self.workbench.job(identifier)
+        if job.get("engine")=="sequence" or job["mode"]=="split" or job["status"] not in {"succeeded","completed_with_errors"}:
+            raise ValueError("此记录没有可打开的旧版图像序列")
+        rows = job["run"]["results"]
+        position = value.get("source")
+        if position is None:
+            position = next((i for i,item in enumerate(rows) if item.get("status")=="succeeded"),-1)
+        if not isinstance(position,int) or not 0<=position<len(rows) or rows[position].get("status")!="succeeded":
+            raise ValueError("请选择完整的来源输出")
+        item = rows[position];name = item["output_directory"]
+        if not isinstance(name,str) or name in {".",".."} or Path(name).name!=name:
+            raise ValueError("历史输出目录无效")
+        root = Path(job["directory"]).resolve();folder = (root/name).resolve()
+        if not folder.is_relative_to(root) or not folder.is_dir():
+            raise ValueError("历史输出目录缺失或已移动")
+        with self.workbench.lock:
+            entry = next((s for s in self.workbench.sources.values() if s["role"]=="result" and s.get("run_id")==identifier and Path(s["source"]["path"]).resolve()==folder),None)
+            if entry:
+                return dict(source=entry)
+        return self.workbench.open(dict(path=str(folder),kind="sequence"),role="result",run_id=identifier,source_position=position,display_name=job["name"],input_id=job["source_ids"][position] if position<len(job["source_ids"]) else None,origin=item.get("origin",[0,0]),base_shape=item.get("base_shape") or item.get("data_spec",{}).get("shape",[])[:2],result_kind=item.get("result_kind","image"))
 
     def _directory(self,job):
         if not job.get("directory"):

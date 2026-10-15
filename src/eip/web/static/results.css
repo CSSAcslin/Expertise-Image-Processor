@@ -67,6 +67,7 @@
 #managed-metadata dd{margin:0 0 4px;overflow-wrap:anywhere;user-select:text;line-height:1.6}
 .result-inline-warning{margin:0;padding:6px 9px;font-size:11px;line-height:1.6;color:#e8bd92;overflow-wrap:anywhere}
 #result-delete-dialog,#result-restore-dialog{width:min(440px,94vw);max-height:90dvh}
+#result-restore-report{white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px;line-height:1.6;max-height:220px;overflow:auto;color:#b8ccdd}
 #result-delete-dialog .dialog-body,#result-restore-dialog .dialog-body{gap:12px;max-height:calc(90dvh - 65px)}
 #result-delete-name{font-size:13px;overflow-wrap:anywhere}
 .result-delete-choices{display:grid;grid-template-columns:1fr 1fr;gap:9px}

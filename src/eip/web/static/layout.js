@@ -1,11 +1,24 @@
 import { svgIcon } from "./icons.js";
 const clamp=(n,a,b)=>Math.min(Math.max(n,a),Math.max(a,b));
-const initial=()=>({schema:6,libraryTab:"data",dataSections:{sources:true,results:true},library:null,libraryHidden:false,flowHeight:innerHeight<820?220:245,tasks:128,tasksCollapsed:true,compare:.5,windows:Object.fromEntries(["flow","inspector","input","result"].map(k=>[k,{mode:"dock",hidden:false,bounds:null}]))});
+const initial=()=>({schema:6,libraryTab:"data",dataSplit:.4,dataSections:{sources:true,results:true},library:null,libraryHidden:false,flowHeight:innerHeight<820?220:245,tasks:128,tasksCollapsed:true,compare:.5,windows:Object.fromEntries(["flow","inspector","input","result"].map(k=>[k,{mode:"dock",hidden:false,bounds:null}]))});
 export class WorkbenchLayout{
  constructor(changed){this.root=document.querySelector(".workspace");this.changed=changed;this.state=initial();this.z=400;this.root.classList.toggle("library-collapsed",this.state.libraryHidden);this.root.classList.add("task-collapse");document.querySelectorAll("[data-window]").forEach(el=>{const key=el.dataset.window;el.querySelectorAll("[data-window-action]").forEach(b=>b.onclick=()=>this.action(key,b.dataset.windowAction));this.bindDrag(el);new ResizeObserver(()=>{if(this.state.windows[key].mode==="float"){const r=el.getBoundingClientRect();const previous=this.state.windows[key].bounds;if(!previous||Math.abs(previous.width-r.width)>1||Math.abs(previous.height-r.height)>1){this.state.windows[key].bounds={x:r.x,y:r.y,width:r.width,height:r.height};this.changed();}}}).observe(el);});document.querySelectorAll("[data-show-window]").forEach(b=>b.onclick=()=>this.show(b.dataset.showWindow));document.getElementById("reset-layout").onclick=()=>this.reset();this.addFlowResizer();this.addDockResizers();this.bindDataPanel();window.addEventListener("resize",()=>this.apply());this.apply();}
  bindDataPanel(){
   for(const key of ["sources","results"])document.getElementById("toggle-data-"+key).onclick=()=>{this.state.dataSections[key]=!this.state.dataSections[key];this.apply();this.changed();};
   document.getElementById("open-data-management").onclick=()=>this.openLibrary("data");
+  const panel=document.getElementById("library-data"),results=panel.querySelector('[data-data-group="results"]'),handle=document.createElement("div");
+  handle.className="data-group-divider";handle.dataset.resize="data-groups";handle.tabIndex=0;handle.setAttribute("role","separator");handle.setAttribute("aria-orientation","horizontal");handle.setAttribute("aria-label","调整输入与处理区域高度");handle.title="拖动调整输入 / 处理高度；双击恢复";results.before(handle);
+  const resize=ratio=>{this.state.dataSplit=ratio;this.applyDataSections();};
+  handle.onpointerdown=e=>{
+   if(e.button!==0)return;e.preventDefault();handle.setPointerCapture(e.pointerId);
+   const start=e.clientY,height=panel.querySelector('[data-data-group="sources"]').getBoundingClientRect().height,total=panel.clientHeight-handle.offsetHeight;
+   this.root.dataset.resizing="rows";
+   const move=v=>resize((height+v.clientY-start)/Math.max(1,total));
+   const end=v=>{if(v.pointerId!==e.pointerId)return;handle.removeEventListener("pointermove",move);for(const type of["pointerup","pointercancel","lostpointercapture"])handle.removeEventListener(type,end);delete this.root.dataset.resizing;if(handle.hasPointerCapture(e.pointerId))handle.releasePointerCapture(e.pointerId);this.changed();};
+   handle.addEventListener("pointermove",move);for(const type of["pointerup","pointercancel","lostpointercapture"])handle.addEventListener(type,end);
+  };
+  handle.onkeydown=e=>{if(!["ArrowUp","ArrowDown","Home","End"].includes(e.key))return;e.preventDefault();resize(e.key==="Home"?0:e.key==="End"?1:this.state.dataSplit+(e.key==="ArrowUp"?-.025:.025));this.changed();};
+  handle.ondblclick=()=>{resize(.4);this.changed();};
  }
  applyDataSections(){
   for(const key of ["sources","results"]){
@@ -19,6 +32,12 @@ export class WorkbenchLayout{
    document.getElementById("library-"+key).hidden=!active;
    button.classList.toggle("selected",active);button.setAttribute("aria-selected",String(active));button.tabIndex=active?0:-1;
   }
+  const panel=document.getElementById("library-data"),handle=panel.querySelector(".data-group-divider");
+  handle.hidden=!this.state.dataSections.sources||!this.state.dataSections.results;
+  const total=panel.clientHeight-handle.offsetHeight,minimum=total>0?Math.min(120,total*.35)/total:.15,maximum=total>0?1-Math.min(200,total*.4)/total:.85;
+  const ratio=clamp(Number.isFinite(this.state.dataSplit)?this.state.dataSplit:.4,minimum,maximum);this.state.dataSplit=ratio;
+  panel.style.setProperty("--data-input-share",ratio);panel.style.setProperty("--data-result-share",1-ratio);
+  handle.setAttribute("aria-valuemin",Math.round(minimum*100));handle.setAttribute("aria-valuemax",Math.round(maximum*100));handle.setAttribute("aria-valuenow",Math.round(ratio*100));
  }
  openLibrary(tab="data"){
   this.state.libraryTab=tab==="modules"?"modules":"data";

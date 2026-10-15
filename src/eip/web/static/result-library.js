@@ -13,7 +13,7 @@ const iconButton = (action, icon, label, disabled = false) => `<button type="but
 
 export function setupResultLibrary(bridge) {
   let selected = null, generation = 0, deletion = null, filter = "all", listKey = "", exporting = false;
-  const checked = new Set(); let batchDeletion=[];
+  const checked = new Set(); let batchDeletion=[], restoreKind="directory", restoring=false;
   const guard = fn => async (...args) => { try { return await fn(...args); } catch (error) { bridge.report(error.message, true); } };
   const jobs = () => {
     const saved = bridge.jobs().filter(ended), known = new Set(saved.map(job => job.id));
@@ -144,7 +144,7 @@ export function setupResultLibrary(bridge) {
         `<option value="${position}">${results.length > 1 ? `来源 ${position + 1} · ` : ""}主输出</option>`,
         ...(result.side_outputs || []).filter(side => side.status === "succeeded").map(side => `<option value="${position}|${esc(side.id)}">${results.length > 1 ? `来源 ${position + 1} · ` : ""}${esc(side.name || side.port)}</option>`)
       ]).join("");
-      $("managed-output").parentElement.hidden = job.engine !== "sequence" || !$("managed-output").options.length;
+      $("managed-output").parentElement.hidden = (job.engine !== "sequence" && job.mode === "split") || !$("managed-output").options.length;
       const current = bridge.currentResult?.() === id ? bridge.currentOutput?.() : null;
       const preferred = current ? `${current.source || 0}${current.side_output ? "|" + current.side_output : ""}` : null;
       if (preferred && [...$("managed-output").options].some(option => option.value === preferred)) $("managed-output").value = preferred;
@@ -156,11 +156,12 @@ export function setupResultLibrary(bridge) {
       return ticket === generation;
     } finally { if (ticket === generation) $("result-list").removeAttribute("aria-busy"); }
   }
+  function resetFilters(){
+    $("result-search").value = ""; filter = "all";
+    document.querySelectorAll("[data-result-filter]").forEach(button => { const active = button.dataset.resultFilter === "all"; button.classList.toggle("selected", active); button.setAttribute("aria-pressed", String(active)); });
+  }
   async function open(id = null) {
-    if (id) {
-      $("result-search").value = ""; filter = "all";
-      document.querySelectorAll("[data-result-filter]").forEach(button => { const active = button.dataset.resultFilter === "all"; button.classList.toggle("selected", active); button.setAttribute("aria-pressed", String(active)); });
-    }
+    if (id) resetFilters();
     bridge.openLibrary("results"); update();
     const rows = jobs();
     if (rows.length) await select(rows.some(job => job.id === id) ? id : selected?.id || rows.find(job => job.id === bridge.currentResult?.())?.id || rows[0].id);
@@ -185,8 +186,7 @@ export function setupResultLibrary(bridge) {
     else if (job.engine === "sequence") opened = await api(`jobs/${job.id}/sequence/promote`, choice);
     else if (job.mode === "split") opened = await api(`split/jobs/${job.id}/promote`, {lag_index:choice.lag_index});
     else {
-      const source = bridge.sources().find(source => source.role === "result" && source.run_id === job.id);
-      if (!source) throw Error("请通过项目重新打开该结果");
+      const source = await bridge.historicalOutput(job,choice);
       opened = await api(`sources/${source.id}/promote`, {});
     }
     await bridge.promoted(opened); bridge.openLibrary("sources"); bridge.report("已作为新输入");
@@ -272,10 +272,35 @@ export function setupResultLibrary(bridge) {
     await bridge.removed(id); await bridge.refresh(); update(); bridge.report("结果已移除");
   });
   $("result-restore-open").onclick = () => $("result-restore-dialog").showModal();
-  $("result-restore-pick").onclick = guard(() => bridge.pickResult());
+  document.querySelectorAll("[data-result-restore-kind]").forEach(button => button.onclick = () => {
+    const next=button.dataset.resultRestoreKind;
+    if(next!==restoreKind)$("result-restore-path").value="";
+    restoreKind=next;
+    document.querySelectorAll("[data-result-restore-kind]").forEach(b=>{b.classList.toggle("selected",b===button);b.setAttribute("aria-pressed",String(b===button));});
+    $("result-restore-path").placeholder=restoreKind==="directory"?"历史导出文件夹路径":"run.json 路径";
+    $("result-restore-report").hidden=true;
+  });
+  $("result-restore-pick").onclick = guard(() => bridge.pickResult(restoreKind));
   $("result-restore").onclick = guard(async () => {
-    const data = await api("results/restore", {path:$("result-restore-path").value.trim()});
-    $("result-restore-dialog").close(); await bridge.refresh(); await open(data.id); bridge.report("结果已打开");
+    if(restoring)return;
+    const path=$("result-restore-path").value.trim();
+    if(!path){$("result-restore-path").focus();return;}
+    restoring=true;
+    const report=$("result-restore-report"),controls=[$("result-restore"),$("result-restore-pick"),$("result-restore-path"),...document.querySelectorAll("[data-result-restore-kind]")];
+    controls.forEach(control=>control.disabled=true);report.hidden=false;report.textContent="正在找回历史结果…";$("result-restore").setAttribute("aria-busy","true");
+    try{
+      const data=await api(restoreKind==="directory"?"results/restore-directory":"results/restore",{path});
+      await bridge.refresh();
+      if(restoreKind==="record"){
+        $("result-restore-dialog").close();await open(data.id);bridge.report("结果已打开");return;
+      }
+      resetFilters();bridge.openLibrary("results");update();
+      const count=data.restored.length+data.existing,summary=count?`已找回 ${data.restored.length} 项 · 已存在 ${data.existing} 项` : "未找到 EIP 运行记录，请选择包含 run.json 的导出文件夹";
+      report.textContent=[summary,data.limit_reason,...data.failed.map(item=>`${item.path}\n${item.error}`)].filter(Boolean).join("\n\n");
+      if(count&&!data.truncated&&!data.failed.length)$("result-restore-dialog").close();
+      bridge.report(summary,!!data.failed.length||data.truncated);
+    }catch(error){report.textContent=error.message;throw error;}
+    finally{restoring=false;controls.forEach(control=>control.disabled=false);$("result-restore").removeAttribute("aria-busy");}
   });
   $("result-restore-path").onkeydown = event => { if (event.key === "Enter") { event.preventDefault(); $("result-restore").click(); } };
   for (const id of ["result-delete-dialog", "result-restore-dialog"]) $(id).querySelectorAll("[data-close-dialog]").forEach(button => button.onclick = () => $(id).close());

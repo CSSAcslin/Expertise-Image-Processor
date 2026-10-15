@@ -206,14 +206,19 @@ const sequenceResults=new SequenceResults({
 
 const workbench=setupWorkbench({editor:generalEditor,layout,source:()=>active,input:()=>input,viewer:originalViewer,resultViewer,scene,resultScene,notify:toast,save:scheduleDraft,inspect:(side,tool=null)=>previewModule(generalEditor,side,!!tool,tool==="point",tool),raw:async()=>{axisEditing=null;axisStage=false;scene.annotation=null;scene.tool="pan";$("axis-stage-note").hidden=true;$("module-preview-tools").hidden=true;if(input)await setInput(input);},currentJobs:()=>jobs,poll:pollJobs,submit});
 async function useManagedInput(opened){sources=(await api("state")).sources;generalSequenceContext=null;generalEditor.replace([]);$("batch").checked=false;$("scope").value="all";$("range-fields").hidden=true;await selectSource(opened.source.id);updateSources();scheduleDraft();}
-const management=setupManagement({activeSource:()=>active?.id,selectSource,removeSources:removeSelectedSources,runSources:async ids=>{if(!ids.length)return;if(!ids.includes(active?.id))await selectSource(ids[0]);return submit("run",null,ids);},sourceDetail:showSourceDetails,removeReference:removeSource,openLibrary:tab=>workbench.openLibrary(tab),pickResult:()=>openDialog("result"),jobs:()=>jobs,sources:()=>sources,report:toast,detail:jobDetail,promoted:useManagedInput,currentResult:()=>resultOwner==="sequence"?sequenceResults.id:resultOwner==="split"?split.resultId:formalResult?.run_id,
+async function historicalOutput(job,choice){
+  const opened=await api(`results/${job.id}/source`,{source:choice.source});
+  sources=(await api("state")).sources;updateSources();
+  return opened.source;
+}
+const management=setupManagement({activeSource:()=>active?.id,selectSource,removeSources:removeSelectedSources,runSources:async ids=>{if(!ids.length)return;if(!ids.includes(active?.id))await selectSource(ids[0]);return submit("run",null,ids);},sourceDetail:showSourceDetails,historicalOutput,removeReference:removeSource,openLibrary:tab=>workbench.openLibrary(tab),pickResult:(kind="record")=>openDialog(kind==="directory"?"result-directory":"result"),jobs:()=>jobs,sources:()=>sources,report:toast,detail:jobDetail,promoted:useManagedInput,currentResult:()=>resultOwner==="sequence"?sequenceResults.id:resultOwner==="split"?split.resultId:formalResult?.run_id,
  inheritFlow:()=>{for(const node of steps){node.execution??={};Object.assign(node.execution,{backend:"inherit",memory_mb:null});}generalEditor.changed();scheduleDraft();},
  recoveryErrors:()=>state?.result_recovery_errors||[],
  reveal:()=>{if($("viewers").dataset.mode==="input"||layout.state.windows.result.hidden)setMode(active?"compare":"result");},
  currentOutput:()=>resultOwner==="sequence"?{source:sequenceResults.source||0,side_output:sequenceResults.sideOutput||null}:resultOwner==="split"?{source:0,side_output:null,lag_index:split.lagIndex||0}:null,
  renamed:(id,name)=>{if(sequenceResults.id===id){sequenceResults.meta.name=name;$("result-label").textContent=sequenceResults.item?.name||name;}if(split.resultId===id)$("split-result-title").textContent=name;},
  refresh:async()=>{sources=(await api("state")).sources;await pollJobs(true);scheduleDraft();},
- view:async(job,output)=>{if(job.reference_id)await selectSource(job.reference_id);else if(job.engine==="sequence")await sequenceResults.load(job.id,output.source,output.side_output);else if(job.mode==="split"){sequenceResults.hide();await split.loadResult(job.id);if(job.task==="run"){split.lagIndex=output.lag_index||0;$("split-result-lag").value=split.lagIndex;await split.showSlice();}}else{const entry=sources.find(s=>s.role==="result"&&s.run_id===job.id);if(entry)await selectSource(entry.id);else throw Error("结果预览引用已移除，请重新打开历史结果");}},
+ view:async(job,output)=>{if(job.reference_id)await selectSource(job.reference_id);else if(job.engine==="sequence")await sequenceResults.load(job.id,output.source,output.side_output);else if(job.mode==="split"){sequenceResults.hide();await split.loadResult(job.id);if(job.task==="run"){split.lagIndex=output.lag_index||0;$("split-result-lag").value=split.lagIndex;await split.showSlice();}}else await selectSource((await historicalOutput(job,output)).id);},
  removed:async id=>{fetchedJobs.delete(id);if(sequenceResults.id===id){sequenceResults.hide();sequenceResults.id=null;result=null;formalResult=null;resultViewer.clear();$("result-label").textContent="处理结果";$("result-meta").textContent="";$("split-result-empty").hidden=false;$("result-tools-empty").hidden=false;}if(formalResult?.run_id===id){formalResult=null;result=null;resultViewer.clear();}if(split.resultId===id){split.resultId=null;$("split-result-controls").hidden=true;$("split-curve").hidden=true;resultViewer.clear();}sources=(await api("state")).sources;updateSources();}
 });
 function moduleTools(node,host,editor){workbench.moduleTools(node,host,editor);}
@@ -1041,7 +1046,7 @@ const fileBrowser = new FileBrowser({
 async function openDialog(mode) {
   await fileBrowser.open(
     mode,
-    mode === "output" ? $("output-dir").value : state.workspace,
+    mode === "output" ? $("output-dir").value : mode === "result-directory" ? $("result-restore-path").value.trim() || $("output-dir").value : state.workspace,
     state.workspace,
   );
 }
@@ -1081,6 +1086,9 @@ async function submitDialog() {
         return;
       }
       toast(`已导入 ${report.length} 个来源`);
+    } else if (fileBrowser.mode === "result-directory") {
+      $("result-restore-path").value=fileBrowser.path;
+      $("file-dialog").close();$("result-restore").click();
     } else if (fileBrowser.mode === "result") {
       if(!fileBrowser.selected.length)throw Error("请选择运行记录");
       $("result-restore-path").value=fileBrowser.selected[0];

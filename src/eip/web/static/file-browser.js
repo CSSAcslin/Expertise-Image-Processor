@@ -68,6 +68,7 @@ export class FileBrowser {
       plugin: "接入 Python 算法",
       load: "打开项目",
       result: "打开历史结果",
+      "result-directory": "打开历史导出文件夹",
       save: "保存项目",
       output: "选择输出目录",
     };
@@ -79,7 +80,7 @@ export class FileBrowser {
         ? "目录单击进入；文件支持 Ctrl / Shift 多选。原始文件保持在本机。"
         : mode === "plugin"
           ? "仅选择可信的算法描述 JSON；注册只读取描述，运行时才执行代码。"
-          : mode === "result" ? "选择结果目录中的 run.json。" : "项目记录引用路径及参数，不复制原始数据。";
+          : mode === "result-directory" ? "进入历史导出文件夹后，点击使用当前导出目录。只找回引用，不复制文件。" : mode === "result" ? "选择结果目录中的 run.json。" : "项目记录引用路径及参数，不复制原始数据。";
     try {
       await this.browse(initial);
     } catch {
@@ -92,7 +93,7 @@ export class FileBrowser {
     $("file-list").setAttribute("aria-busy", "true");
     try {
       const data = await api(
-        `browse?path=${encodeURIComponent(path)}&mode=${this.mode === "output" ? "directory" : this.mode === "data" ? "data" : "json"}`,
+        `browse?path=${encodeURIComponent(path)}&mode=${["output","result-directory"].includes(this.mode) ? "directory" : this.mode === "data" ? "data" : "json"}`,
       );
       if (generation !== this.generation) return;
       this.path = data.path;
@@ -133,7 +134,7 @@ export class FileBrowser {
       await this.browse(info.path);
       return;
     }
-    if (this.mode === "output" || this.mode === "save")
+    if (["output","save","result-directory"].includes(this.mode))
       throw Error("此操作需要目录路径");
     if (this.mode === "data" && !info.supported_data)
       throw Error("当前仅支持图像、视频和图像序列");
@@ -168,6 +169,8 @@ export class FileBrowser {
       load: "打开项目",
       save: "保存项目",
       output: "使用当前目录",
+      result: "打开运行记录",
+      "result-directory": "使用当前导出目录",
     };
     $("dialog-submit").textContent =
       this.mode === "data"
@@ -176,7 +179,7 @@ export class FileBrowser {
           : "导入当前目录序列"
         : text[this.mode];
     $("dialog-submit").disabled =
-      ["data", "plugin", "load"].includes(this.mode) &&
+      ["data", "plugin", "load", "result"].includes(this.mode) &&
       !(this.mode === "data" && this.importMode === "sequence") &&
       !this.selected.length;
     $("selection-info").textContent = this.selected.length
