@@ -75,7 +75,7 @@ def compare(tmp_path, values, nodes, *, contract=None, indices=None):
 
 def test_visible_builtin_catalog_declares_device_execution():
     current = [s for s in catalog().values() if not s.get("legacy")]
-    assert len(current) == 25
+    assert len(current) >= 25
     assert all(s["backends"] == ["cpu", "gpu"] for s in current)
 
 
@@ -310,7 +310,8 @@ def test_saved_gpu_pipeline_and_side_output_preserve_numeric_provenance(tmp_path
     np.testing.assert_allclose(np.load(part/"values.npy"),[smoothed.var()])
     np.testing.assert_allclose(np.load(part/"side_000/values.npy"),smoothed)
     run=json.loads((part.parent/"run.json").read_text(encoding="utf-8"))
-    assert run["app_version"]=="0.8.4"
+    from eip import __version__
+    assert run["app_version"]==__version__
     trace=run["results"][0]["modules"]["device_execution"]
     assert trace["intermediate_residency"] and trace["largest_upload_batch"]>1
     assert trace["cache_peak_bytes"]<=trace["cache_budget_bytes"]

@@ -219,7 +219,7 @@ const management=setupManagement({activeSource:()=>active?.id,selectSource,remov
  renamed:(id,name)=>{if(sequenceResults.id===id){sequenceResults.meta.name=name;$("result-label").textContent=sequenceResults.item?.name||name;}if(split.resultId===id)$("split-result-title").textContent=name;},
  refresh:async()=>{sources=(await api("state")).sources;await pollJobs(true);scheduleDraft();},
  view:async(job,output)=>{if(job.reference_id)await selectSource(job.reference_id);else if(job.engine==="sequence")await sequenceResults.load(job.id,output.source,output.side_output);else if(job.mode==="split"){sequenceResults.hide();await split.loadResult(job.id);if(job.task==="run"){split.lagIndex=output.lag_index||0;$("split-result-lag").value=split.lagIndex;await split.showSlice();}}else await selectSource((await historicalOutput(job,output)).id);},
- removed:async id=>{fetchedJobs.delete(id);if(sequenceResults.id===id){sequenceResults.hide();sequenceResults.id=null;result=null;formalResult=null;resultViewer.clear();$("result-label").textContent="处理结果";$("result-meta").textContent="";$("split-result-empty").hidden=false;$("result-tools-empty").hidden=false;}if(formalResult?.run_id===id){formalResult=null;result=null;resultViewer.clear();}if(split.resultId===id){split.resultId=null;$("split-result-controls").hidden=true;$("split-curve").hidden=true;resultViewer.clear();}sources=(await api("state")).sources;updateSources();}
+ removed:async id=>{sequenceResults.comparison.removeJob(id);fetchedJobs.delete(id);if(sequenceResults.id===id){sequenceResults.hide();sequenceResults.id=null;result=null;formalResult=null;resultViewer.clear();$("result-label").textContent="处理结果";$("result-meta").textContent="";$("split-result-empty").hidden=false;$("result-tools-empty").hidden=false;}if(formalResult?.run_id===id){formalResult=null;result=null;resultViewer.clear();}if(split.resultId===id){split.resultId=null;$("split-result-controls").hidden=true;$("split-curve").hidden=true;resultViewer.clear();}sources=(await api("state")).sources;updateSources();}
 });
 function moduleTools(node,host,editor){workbench.moduleTools(node,host,editor);}
 async function submitModules(nodes,mode="run",name=null,extra={}){
@@ -235,7 +235,7 @@ async function previewModule(editor,side="input",drawing=false,point=false,tool=
     cancelInspection();generation=inspectionGeneration;
     stopPlay();const i=editor.nodes.indexOf(editor.selected),nodes=editor.nodes.slice(0,i+(side==="output"?1:0));
     let dependencies=[];if(nodes.some(n=>n.enabled&&n.algorithm==="calibration"&&n.parameters.black_left!==n.parameters.black_right)){const end=editor.nodes.findIndex((n,j)=>j>=nodes.length&&n.enabled&&n.algorithm==="alignment");if(end>=0)dependencies=structuredClone(editor.nodes.slice(nodes.length,end+1));}
-    const sideOutput=side==="output"&&editor.selected.enabled&&editor.selected.algorithm==="distribution"&&editor.selected.parameters.output==="side"?`${editor.selected.id}:data`:null;
+    const sideOutput=side==="output"&&editor.selected.enabled&&["distribution","paired_trace"].includes(editor.selected.algorithm)&&editor.selected.parameters.output==="side"?`${editor.selected.id}:data`:null;
     const request={editor,nodeId:editor.selected.id,side,drawing,point,tool:tool||(drawing?"roi":null),sourceId:active.id,sampleIndex:editor.previewSample||0,prefix:JSON.stringify(nodes)},key=JSON.stringify([active.id,active.meta.revision,nodes,dependencies,editor.previewSample||0,display,sideOutput]);
     let data=stageSnapshot?.key===key&&originalViewer.snapshot===stageSnapshot.data.frame?stageSnapshot.data:null;
     if(!data){inspectionRequest=crypto.randomUUID();$("inspection-state").hidden=false;$("inspection-message").textContent="正在读取此阶段 · 可继续预览原始数据";data=await api("modules/inspect",{inspection_id:inspectionRequest,source_id:active.id,steps:structuredClone(nodes),dependencies,sample_index:editor.previewSample||0,side_output:sideOutput,display});}
@@ -246,7 +246,7 @@ async function previewModule(editor,side="input",drawing=false,point=false,tool=
   finally{if(generation===inspectionGeneration){inspectionRequest=null;$("inspection-state").hidden=true;}}
 }
 async function drawModuleROI(editor=generalEditor,point=false){
-  try{if(!active)throw Error("请先导入来源");const added=!["roi_crop","spatial_roi"].includes(editor.selected?.algorithm);if(added)editor.add(state.modules.roi_crop?"roi_crop":"spatial_roi");const fresh=added||!editor.selected.parameters.width&&!editor.selected.parameters.height;await previewModule(editor,"input",true,point,fresh?"roi-new":"roi");}catch(e){toast(e.message,true);}
+  try{if(!active)throw Error("请先导入来源");const added=!["roi_crop","spatial_roi","paired_trace"].includes(editor.selected?.algorithm);if(added)editor.add(state.modules.roi_crop?"roi_crop":"spatial_roi");if(editor.selected.algorithm==="paired_trace"&&editor.selected.parameters.selection!=="region"){editor.selected.parameters.selection="region";editor.changed();}const fresh=added||!editor.selected.parameters.width&&!editor.selected.parameters.height;await previewModule(editor,"input",true,point,fresh?"roi-new":"roi");}catch(e){toast(e.message,true);}
 }
 function commitModuleROI(roi=scene.roi,remember=true){
   if(axisEditing?.tool&&!["roi","roi-new"].includes(axisEditing.tool)){workbench.commitRectangle(roi,axisEditing);return;}
@@ -1196,7 +1196,7 @@ function projectView() {
     split_mode:split.serialize(),
     web_job_name:$("job-name").value,
     web_sequence_context:generalSequenceContext,
-    web_sequence_result:resultOwner==="sequence"&&sequenceResults.id?{id:sequenceResults.id,source:sequenceResults.source,index:sequenceResults.index,side_output:sequenceResults.sideOutput,plot_axis:$("sequence-plot-axis").value,series:$("sequence-series").value,x:$("sequence-x").value,channel:$("sequence-channel").value}:null,
+    web_sequence_result:resultOwner==="sequence"&&sequenceResults.id?{id:sequenceResults.id,source:sequenceResults.source,index:sequenceResults.index,side_output:sequenceResults.sideOutput,plot_axis:$("sequence-plot-axis").value,series:$("sequence-series").value,x:$("sequence-x").value,channel:$("sequence-channel").value,comparison:sequenceResults.comparison.snapshot()}:null,
     web_selected_module:generalEditor.selected?.id||null,
     web_docks:layout.serialize(),
     web_preview:{schema:1,view:$("viewers").dataset.mode},
@@ -1245,7 +1245,7 @@ async function restoreProjectOptions(view) {
     try{await split.loadResult(view.split_mode.resultId,false);}catch(error){toast(`历史结果未能恢复：${error.message}；原始数据仍可预览`,true);}
   }
   if(active&&view.web_sequence_result&&(sequenceResults.id!==view.web_sequence_result.id||resultOwner!=="sequence")){
-    try{const saved=view.web_sequence_result;$("sequence-x").value=saved.x||"samples";$("sequence-channel").value=saved.channel||"0";$("sequence-plot-axis").value=saved.plot_axis||"sequence";await sequenceResults.load(saved.id,saved.source||0,saved.side_output||null);sequenceResults.index=saved.index||0;$("sequence-channel").value=saved.channel||"0";await sequenceResults.show();$("sequence-series").value=saved.series||"0";if(sequenceResults.plotData)sequenceResults.plot(sequenceResults.plotData);}catch(error){toast(`模块结果未能恢复：${error.message}；可从处理结果列表重开`,true);}
+    try{const saved=view.web_sequence_result;$("sequence-x").value=saved.x||"samples";$("sequence-channel").value=saved.channel||"0";$("sequence-plot-axis").value=saved.plot_axis||"sequence";await sequenceResults.load(saved.id,saved.source||0,saved.side_output||null);$("sequence-plot-axis").value=saved.plot_axis||"sequence";sequenceResults.index=saved.index||0;$("sequence-channel").value=saved.channel||"0";await sequenceResults.show();$("sequence-series").value=saved.series||"0";if(saved.comparison)await sequenceResults.comparison.restore(saved.comparison);else if(sequenceResults.plotData)sequenceResults.plot(sequenceResults.plotData);}catch(error){toast(`模块结果未能恢复：${error.message}；可从处理结果列表重开`,true);}
   }
   const previewMode=view.web_preview?.view||({both:"compare",data:"input",result:"result"}[view.split_mode?.layout]);
   if(["input","compare","result"].includes(previewMode))setMode(previewMode);
@@ -1388,7 +1388,7 @@ $("actual").onclick = () => {
 for (const tool of ["pan", "roi", "point"])
   $("tool-" + tool).onclick = safe(async() => {
     if(tool==="roi"){await drawModuleROI();return;}
-    if(tool==="point"){if(!active)throw Error("请先导入来源");if(generalEditor.selected?.algorithm!=="point_extract")generalEditor.add("point_extract");await previewModule(generalEditor,"input",true,true,"point");return;}
+    if(tool==="point"){if(!active)throw Error("请先导入来源");if(!["point_extract","paired_trace"].includes(generalEditor.selected?.algorithm))generalEditor.add("point_extract");if(generalEditor.selected?.algorithm==="paired_trace"&&generalEditor.selected.parameters.selection!=="point"){generalEditor.selected.parameters.selection="point";generalEditor.changed();}await previewModule(generalEditor,"input",true,true,"point");return;}
     if(splitActive()){$("split-tool").value=tool;split.setTool(tool);}
     scene.tool = tool;
     $("tool-pan").classList.toggle("selected", tool === "pan");

@@ -227,10 +227,17 @@ class SequenceEngine:
                     port=side["port"]
                     port_name={"mean":"均值","variance":"方差","count":"有效样本数","scale":"固定尺度","value":"变量值"}.get(port)
                     title=module_spec(n)[0]["name"]+(f" · {port_name}" if port_name else "")
+                    if a=="paired_trace":
+                        if p["selection"]=="point":
+                            title+=f" · 点 ({p['x']}, {p['y']})"
+                        else:
+                            x,y,w,h=roi_bounds(c,p)
+                            label={"mean":"均值","max":"最大值","min":"最小值","variance":"方差","std":"标准差","sum":"总和","count":"计数","quantile":f"分位值 q={p['quantile']}"}[p["mode"]]
+                            title+=f" · {label} ({x}, {y}; {w}×{h})"
                     self._sides.append(dict(id=f"{n['id']}:{port}",node_id=n["id"],port=port,name=p.get("name") or n.get("name") or title,contract=side_c,kind=a,stage=i,destination=p.get("destination","result"),export_format=p.get("export_format","dataset")))
                 # Temporary arrays as well as caches must fit the chosen budget.
                 elements = int(np.prod(c.shape,dtype=np.int64))
-                multiplier = 12 if a=="line_extract" and p["mode"]=="segment" else 8 if a in {"global_statistics","time_statistics","region_reduce"} else 1 if a in {"time_crop","time_sample","select_channel","data_tap","parameter_binding"} else 3 if a in {"affine","intensity","curve","threshold","spatial_roi","roi_crop",*MODIFIERS} else 12 if a in CORRELATIONS else 8
+                multiplier = 12 if a=="line_extract" and p["mode"]=="segment" else 8 if a in {"global_statistics","time_statistics","region_reduce","paired_trace"} else 1 if a in {"time_crop","time_sample","select_channel","data_tap","parameter_binding"} else 3 if a in {"affine","intensity","curve","threshold","spatial_roi","roi_crop",*MODIFIERS} else 12 if a in CORRELATIONS else 8
                 side_elements=max([int(np.prod(s["contract"].shape)) for s in self._sides if s["node_id"]==n["id"]] or [0])
                 working=max(elements,int(np.prod(after.shape)),side_elements)*8*multiplier
                 limit = min(self.budget,(n.get("execution",{}).get("memory_mb") or self.budget/MIB)*MIB)
@@ -442,6 +449,12 @@ class SequenceEngine:
         if a=="global_statistics":
             return self.global_fit(i)[0]
         value=get(index)
+        if a=="paired_trace":
+            x,y,w,h=roi_bounds(c,dict(p,width=1,height=1) if p["selection"]=="point" else p)
+            values=joint_values(value[:,y:y+h,x:x+w],True,p["validity"],xp)
+            if p["selection"]=="point":
+                return xp.asarray(values[:,0,0],dtype=xp.float64)
+            return reduce_finite(values,(1,2),p["mode"],p["quantile"],xp)[0]
         if a=="time_statistics":
             value=joint_values(value,c.paired,p["validity"],xp)
             axes=tuple(k for k,axis in enumerate(c.axes) if axis not in retained_axes(c.axes,"space_time"))

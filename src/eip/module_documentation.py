@@ -3,6 +3,7 @@ from copy import deepcopy
 
 
 ENTRIES = {
+    "paired_trace": ("algorithm", "chart", "双幅时序比较", "s_p(t)=A_p(t,y,x)；或 stat_finite(A_p(t,ROI))", "仅接配准后的 TPYX 强度。左右使用同一对应点 / 矩形区域，逐帧独立统计并保留 T、P；不执行 g²，不压缩时间。可重复添加；默认旁路，主路透传。"),
     "gain_offset": ("modifier", "sliders", "增益 / 偏置", "B=gA+b", "算法默认保留输入类型；整数舍入限幅。选择 float32/64 时直接输出浮点，不先量化。"),
     "spatial_smooth": ("modifier", "blur", "空间平滑", "mean: B=ΣA/(2r+1)²; gaussian: B=(K*(A·valid))/(K*valid)", "类型在模块内选择。均值采用反射边界，高斯采用边界复制；算法默认保留输入类型，浮点精度不先量化。"),
     "time_statistics": ("modifier", "statistics", "时序统计", "每个样本：mean / sum / min / max / variance / std / quantile / count", "逐样本归约空间 / 分量，保留 T 或 Q 及 P/C，不压缩时间。方差为总体方差（ddof=0）。"),
@@ -40,6 +41,7 @@ ENTRIES = {
 }
 
 LATEX = {
+    "paired_trace":r"s_p(t)=A_p(t,y,x)\quad\mathrm{or}\quad\operatorname{stat}_{j\in V_p(t,\Omega)} A_p(t,j),\qquad p\in\{L,R\}",
     "intensity":r"B=\operatorname{cast}_{d}\!\left(\operatorname{clip}_{d}(\operatorname{round}(gA+b))\right)",
     "affine":r"B=gA+b", "box_blur":r"B_{yx}=\frac{\sum_{i=-r}^{r}\sum_{j=-r}^{r} A_{y+i,x+j}}{(2r+1)^2}",
     "gaussian":r"K_k\propto\exp\!\left(-\frac{k^2}{2\sigma^2}\right),\quad B=\frac{K*(A\,V)}{K*V}",
@@ -68,6 +70,7 @@ LATEX["spatial_smooth"]=LATEX["box_blur"]+r",\quad\mathrm{or}\quad"+LATEX["gauss
 LATEX["time_statistics"]=LATEX["global_statistics"]=r"\mu=\frac{\sum_{j\in V}A_j}{n},\quad \sigma^2=\frac{\sum_{j\in V}(A_j-\mu)^2}{n},\quad m=\min_{j\in V}A_j,\quad M=\max_{j\in V}A_j,\quad Q_q=(1-f)A_{(\lfloor u\rfloor)}+fA_{(\lceil u\rceil)},\quad u=(n-1)q,\ f=u-\lfloor u\rfloor"
 
 VALIDITY = {
+    "paired_trace":"共同有效：每帧区域内左右同时有限的对应像素；独立有效：各路各自有限像素。空集合 count=0，其余统计量 NaN；方差为总体方差。点选共同有效时任一路无效则两路均为 NaN。",
     "box_blur":"输入必须全部有限；遇 NaN / Inf 直接报错。",
     "threshold":"NaN 比较为 false、输出0；±Inf按阈值比较；输出 uint8 标签。",
     "data_tap":"原始值、dtype、NaN / Inf 原样保留。",
@@ -96,6 +99,7 @@ VALIDITY["time_statistics"]=VALIDITY["global_statistics"]="仅有限值参与；
 SYMBOLS={"gain":"g","offset":"o / b","sigma":"σ","radius":"r","threshold":"θ","input_max":"M","gamma":"γ","quantile":"q","window":"W","map_lag":"q / τ","stride":"S","scale":"s","bins":"N","minimum":"e₀","maximum":"eₙ","samples":"N","step":"s","size":"B","center":"c"}
 
 IO = {
+    "paired_trace":("配准后的双路灰度强度 TPYX；仅时间 T，不接受 g² / 标签 / 延迟 Q","左右时序 TP，float64（区域 count 为 uint64）；默认旁路，主路保持 TPYX"),
     "calibration":("强度 / 传感器码值 T(P)YX(C) 或 T(P)(C)","同轴同形状 float64 强度；不接受标签 / g²"),
     "alignment":("灰度强度 TYX","对齐双路 TPYX，float64，公共有效区"),
     "correlation":("T(P=2)YX 或 TP 的双路强度；不接受C/标签/Q","固定τ：T′YX 或 T′；固定中心扫描：QYX 或 Q，标准g²"),
@@ -174,5 +178,5 @@ def enrich(spec):
     spec["formula"] = dict(latex=LATEX[spec["id"]], expression=expression, symbols=symbols, domain=spec.get("description", ""), validity=VALIDITY.get(spec["id"],"有限值参与统计 / 平滑；全部无效输出 NaN，具体集合和边界见公式及算法说明。"), boundary=boundary)
     input_,output_=IO.get(spec["id"],("数值矩阵 / 双路 / 标量 / 向量；64位整数不作隐式浮点计算","同轴同形状；实际dtype和语义见公式边界及实例契约"))
     spec["documentation"] = dict(summary=spec.get("description", ""), formula=deepcopy(spec["formula"]), input=input_, output=output_)
-    spec["effect"] = "pass" if spec["id"] in {"data_tap", "sequence_statistics", "parameter_binding"} else "selectable" if spec["id"] in {"region_reduce","time_statistics","global_statistics","point_extract","line_extract","axis_slice","distribution"} else "replace"
+    spec["effect"] = "pass" if spec["id"] in {"data_tap", "sequence_statistics", "parameter_binding"} else "selectable" if spec["id"] in {"region_reduce","time_statistics","global_statistics","point_extract","line_extract","axis_slice","distribution","paired_trace"} else "replace"
     return spec

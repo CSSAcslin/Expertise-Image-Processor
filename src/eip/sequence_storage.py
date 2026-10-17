@@ -99,11 +99,20 @@ class DatasetReader:
 
 def plot_signals(directory,contract,mappings=None,node_id=None):
     """Bounded static graphic; NPY and CSV always retain every numerical sample."""
+    values = np.load(Path(directory)/"values.npy",mmap_mode="r",allow_pickle=False)
+    try:
+        return _plot_signals(values,directory,contract,mappings,node_id)
+    finally:
+        # Matplotlib can retain renderer frames until cyclic GC. Release the
+        # file mapping explicitly before publishing/renaming a run on Windows.
+        values._mmap.close()
+
+
+def _plot_signals(values,directory,contract,mappings,node_id):
     import matplotlib
     matplotlib.use("Agg")
     from matplotlib import pyplot as plt
     directory = Path(directory)
-    values = np.load(directory/"values.npy",mmap_mode="r",allow_pickle=False)
     count = max(1,int(np.prod(contract["shape"])))
     if contract["semantic"]=="distribution" and contract["axes"]=="B":
         candidates = [(key,value) for key,value in (mappings or {}).items()

@@ -9,7 +9,7 @@ GPU_MODULES = frozenset({"intensity","affine","gain_offset","box_blur","gaussian
 GPU_MODULES = GPU_MODULES | frozenset({"time_crop","time_sample","time_smooth","time_bin",
     "time_statistics","global_statistics","region_reduce","distribution","alignment","calibration",
     "roi_crop","select_channel","point_extract","line_extract","axis_slice","color_convert",
-    "data_tap","parameter_binding"})
+    "data_tap","parameter_binding","paired_trace"})
 
 
 def preserve(value, dtype, xp):

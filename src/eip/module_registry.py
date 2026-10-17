@@ -50,6 +50,14 @@ STRUCTURAL["statistics"].update(name="上游序列统计与固定尺度",inputs=
 STRUCTURAL["calibration"]["inputs"] = ["sensor","pair"]
 
 WORKBENCH = {
+    "paired_trace": dict(description="在配准后的对应点或矩形区域逐帧提取左右值，用于时序比较；可重复添加且不依赖 g²。", parameters=[
+        field("selection","选取方式","str","point",choices=["point","region"]),
+        field("x","X","int",0,minimum=0),field("y","Y","int",0,minimum=0),
+        field("width","宽（留空至边界）","int",None,minimum=1,nullable=True),field("height","高（留空至边界）","int",None,minimum=1,nullable=True),
+        field("mode","区域统计量","str","mean",choices=["mean","max","min","variance","std","sum","quantile","count"]),
+        field("quantile","分位 q","float",.5,minimum=0,maximum=1),
+        field("validity","双路有效值","str","joint",choices=["joint","independent"]),
+        field("output","数据流作用","str","side",choices=["side","main"])]),
     "spatial_smooth": dict(description="选择均值或高斯空间平滑；输出类型由实例精度决定。", parameters=[
         field("method","平滑类型","str","mean",choices=["mean","gaussian"]),
         field("radius","空间半径 / px","int",1,minimum=1,maximum=32), field("sigma","高斯 σ / px","float",1.,minimum=1e-12,maximum=1e12)]),
@@ -87,7 +95,7 @@ for _key,_analysis in (("correlation_map","map"),("correlation_curve","curve")):
             _p["default"]=_analysis
 
 CORRELATIONS = {"correlation","correlation_map","correlation_curve"}
-MODIFIERS = {"region_reduce","time_statistics","global_statistics","point_extract","line_extract","axis_slice","distribution"}
+MODIFIERS = {"region_reduce","time_statistics","global_statistics","point_extract","line_extract","axis_slice","distribution","paired_trace"}
 
 
 def needs_full_sequence(nodes):

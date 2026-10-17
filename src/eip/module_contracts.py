@@ -82,6 +82,15 @@ def statistic_contract(c,a,p):
 
 def modifier_contract(c,a,p):
     """Contract of the selected output, before choosing main or side routing."""
+    if a=="paired_trace":
+        if c.axes!="PYX" or c.shape[0]!=2 or c.sequence_axis!="T" or c.semantic not in {"intensity","sensor_codes"}:
+            raise ValueError("双幅时序比较需要配准后的双路灰度强度 TPYX；请在双幅配准后、g² 前添加")
+        bounds=dict(p,width=1,height=1) if p["selection"]=="point" else p
+        x,y,w,h=roi_bounds(c,bounds)
+        mode="point" if p["selection"]=="point" else p["mode"]
+        return replace(c,axes="P",shape=(2,),dtype="uint64" if mode=="count" else "float64",statistics=False,
+                       semantic="statistic" if mode in {"variance","std","count"} else c.semantic,
+                       meaning=f"paired_{mode}_trace",spatial_operation=mode,origin=(c.origin[0]+x,c.origin[1]+y))
     if a in {"region_reduce","point_extract","line_extract"} and not c.spatial:
         raise ValueError("此提取需要 Y/X 空间轴；上游已没有空间矩阵")
     if a=="region_reduce":
@@ -246,7 +255,7 @@ def compile_flow(nodes, source, *, center=None, single=False, strict=True, follo
                         raise ValueError("双幅配准需要单幅灰度强度矩阵 YX")
                     from eip.modes.split_correlation.config import GeometryConfig
                     from eip.modes.split_correlation.geometry import geometry_bounds
-                    if int(np.prod(c.shape))*64>n.get("execution",{}).get("memory_mb",256)*1024**2*2/3:
+                    if int(np.prod(c.shape))*64>(n.get("execution",{}).get("memory_mb") or 256)*1024**2*2/3:
                         raise ValueError("配准工作数组超过此模块内存预算；请先裁剪或增加执行内存")
                     x0,y0,x1,y1 = geometry_bounds(GeometryConfig.from_dict(p),c.shape)
                     c = replace(c,axes="PYX",shape=(2,y1-y0,x1-x0),dtype="float64",statistics=False,origin=(0,0))

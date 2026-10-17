@@ -13,6 +13,8 @@ import tifffile
 from playwright.sync_api import expect, sync_playwright
 
 ROOT=Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT/"src"))
+from eip import __version__
 
 
 def main():
@@ -34,14 +36,14 @@ def main():
             else:raise AssertionError("isolated server failed")
             with httpx.Client(base_url=url,timeout=45) as api,sync_playwright() as pw:
                 state=api.get("/api/state").json()
-                assert state["version"]=="0.8.4"
+                assert state["version"]==__version__
                 api.headers["X-EIP-Token"]=state["session_token"]
                 r=api.post("/api/sources/open",json=dict(path=str(output/"source.tif"),interval=.01));r.raise_for_status()
                 browser=pw.chromium.launch(channel="msedge" if os.name=="nt" else "chromium",headless=True)
                 page=browser.new_page(viewport=dict(width=1600,height=1000),accept_downloads=True)
                 errors=[];page.on("pageerror",lambda e:errors.append(str(e)))
                 page.goto(url)
-                expect(page.locator("#version")).to_have_text("v0.8.4")
+                expect(page.locator("#version")).to_have_text("v"+__version__)
                 expect(page.locator("#frame-info")).to_contain_text("第 1 帧 / 121")
                 page.locator("#open-run-settings").click()
                 for key,value in dict(memory_mb=256,preview_mb=32,cache_mb=16,gpu_mb=128).items():
@@ -75,7 +77,7 @@ def main():
                 assert jobs[0]["status"]=="succeeded",jobs
                 job=api.get("/api/jobs/"+jobs[0]["id"]).json()
                 item=job["run"]["results"][0]
-                assert job["run"]["app_version"]=="0.8.4"
+                assert job["run"]["app_version"]==__version__
                 assert item["contract"]["full_axes"]=="N"
                 assert item["modules"]["resource_plan"][0]["temporal_strategy"]=="compensated_rolling_reduction"
                 r=api.post(f"/api/jobs/{job['id']}/download-link",json=dict(file="array"));r.raise_for_status()
@@ -99,7 +101,7 @@ def main():
                 assert page.evaluate("document.documentElement.scrollWidth<=innerWidth")
                 assert not errors,errors
                 devices=item["modules"]["devices"]
-                report=dict(version="0.8.4",gpu_available=state["split_devices"]["gpu"],actual_devices=devices,
+                report=dict(version=__version__,gpu_available=state["split_devices"]["gpu"],actual_devices=devices,
                     expected_variance=307496.,preview=True,numeric_export=True,package_export=True,javascript_errors=errors)
                 (output/"report.json").write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8")
                 print(json.dumps(dict(output=str(output),**report),ensure_ascii=False))

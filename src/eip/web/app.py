@@ -245,6 +245,22 @@ def create_app(workspace: Path | None = None, restore_session: Path | None = Non
             providers[node["id"]] = node
         return dict(nodes=normalized,report=report)
 
+    @app.get("/api/curves/candidates")
+    def curve_candidates():
+        from eip.web.curve_comparison import candidates
+        return candidates(workbench())
+
+    @app.post("/api/curves/compare")
+    def curve_compare(value: dict):
+        from eip.web.curve_comparison import compare
+        with workbench().results.lock:
+            return compare(workbench(),value)
+
+    @app.post("/api/curves/export")
+    def curve_export(value: dict):
+        from eip.web.curve_comparison import export
+        return export(workbench(),value)
+
     @app.get("/api/jobs/{identifier}/sequence")
     def sequence_result(identifier: str):
         return workbench().sequence_result(identifier)
