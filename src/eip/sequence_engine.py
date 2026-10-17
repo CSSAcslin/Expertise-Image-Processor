@@ -155,6 +155,9 @@ class SequenceEngine:
         self.mappings,self.backends = {},{}
         self.device_backends,self.device_records = {},{}
         self.resource_plan = []
+        self.temporal_states = {}
+        from eip.gpu_pipeline import DevicePipeline
+        self.device = DevicePipeline(self)
         self.last_correlation = {}
         self.resolved_bindings = {}
         self._sides = []
@@ -227,7 +230,7 @@ class SequenceEngine:
                     self._sides.append(dict(id=f"{n['id']}:{port}",node_id=n["id"],port=port,name=p.get("name") or n.get("name") or title,contract=side_c,kind=a,stage=i,destination=p.get("destination","result"),export_format=p.get("export_format","dataset")))
                 # Temporary arrays as well as caches must fit the chosen budget.
                 elements = int(np.prod(c.shape,dtype=np.int64))
-                multiplier = 12 if a=="line_extract" and p["mode"]=="segment" else 8 if a=="global_statistics" else 1 if a in {"time_crop","time_sample","select_channel","data_tap","parameter_binding"} else 3 if a in {"affine","intensity","curve","threshold","spatial_roi","roi_crop",*MODIFIERS} else 12 if a in CORRELATIONS else 8
+                multiplier = 12 if a=="line_extract" and p["mode"]=="segment" else 8 if a in {"global_statistics","time_statistics","region_reduce"} else 1 if a in {"time_crop","time_sample","select_channel","data_tap","parameter_binding"} else 3 if a in {"affine","intensity","curve","threshold","spatial_roi","roi_crop",*MODIFIERS} else 12 if a in CORRELATIONS else 8
                 side_elements=max([int(np.prod(s["contract"].shape)) for s in self._sides if s["node_id"]==n["id"]] or [0])
                 working=max(elements,int(np.prod(after.shape)),side_elements)*8*multiplier
                 limit = min(self.budget,(n.get("execution",{}).get("memory_mb") or self.budget/MIB)*MIB)
@@ -245,6 +248,19 @@ class SequenceEngine:
                 if retained+working+nested+cache_budget>self.budget:
                     raise ValueError("重复统计保留数组与工作数组合计超过流程预算；请减少统计节点、先裁剪或提高内存预算")
                 self.resource_plan.append(dict(node_id=n["id"],working_bytes=working,retained_bytes=retained,nested_bytes=nested,limit_bytes=int(limit),window_storage="disk" if a=="time_smooth" and p["mode"]=="quantile" else None))
+                if a in {"time_smooth","time_bin"}:
+                    self.resource_plan[-1]["temporal_strategy"]="exact_ring" if p["mode"]=="quantile" else "compensated_rolling_reduction"
+                if i in self.backends and self.backends[i].name=="gpu":
+                    gpu_retained=sum(r.get("device_retained_bytes",0) for r in self.resource_plan[:-1])
+                    persistent = elements*(128 if a=="alignment" else 32 if a in {"time_smooth","time_bin"} else 24 if a in CORRELATIONS else 16 if a=="global_statistics" else 0)
+                    if a=="global_statistics":
+                        from eip.module_contracts import statistic_contract
+                        persistent=max(1,int(np.prod(statistic_contract(c,a,p).shape)))*16
+                    if a=="time_smooth" and p["mode"]=="quantile":
+                        persistent=min(elements*p["window"]*8,self.device.scratch(i)//8)
+                    if working+gpu_retained+persistent+self.device.cache_budget>self.device.budget*.75:
+                        raise ValueError(f"{n.get('name') or a} 工作数组、状态和缓存超过显存预算；请裁剪输入、提高显存上限或对此实例选择 CPU")
+                    self.resource_plan[-1].update(device_retained_bytes=persistent,device_working_bytes=working)
             self.plan = self._actual_plan()
         except Exception:
             self.close()
@@ -276,12 +292,12 @@ class SequenceEngine:
             # A nonspatial colour vector has the same threshold reduction as CPU.
             if a=="threshold" and not c.spatial and "C" in c.axes:
                 xp=backend.xp
-                return backend.host((xp.mean(xp.asarray(arr,dtype=xp.float64)[...,:3],axis=-1)>=p["threshold"]).astype(xp.uint8))
+                return (xp.mean(xp.asarray(arr,dtype=xp.float64)[...,:3],axis=-1)>=p["threshold"]).astype(xp.uint8)
             result = element_operation(a,arr,p,backend.xp,color_order=c.color_order,
                                        preserve_input=a in {"gain_offset","spatial_smooth"} and n.get("execution",{}).get("precision","native")=="native")
-            return backend.host(result)
+            return result
         if c.paired and a not in {"fixed_normalize","grayscale"}:
-            return np.stack([transform(arr) if n["target"] in {"both",side} else arr for arr,side in zip(value,("left","right"))])
+            return backend.xp.stack([transform(arr) if n["target"] in {"both",side} else arr for arr,side in zip(value,("left","right"))])
         return transform(value)
 
     def _actual_plan(self):
@@ -295,7 +311,7 @@ class SequenceEngine:
                 upstream.append({key:value for key,value in n.items() if key!="name"})
             fingerprint = hashlib.sha256(json.dumps(dict(source_revision=self.source.reader.meta.revision,contract_version=3,upstream=upstream,preview_dependencies=self.dependencies),sort_keys=True,ensure_ascii=False,separators=(",",":")).encode()).hexdigest()
             stages.append(dict(id=n["id"],algorithm=n["algorithm"],enabled=n["enabled"],input=before.record(),output=self.contracts[active].record(),upstream_fingerprint=fingerprint,side_outputs=[dict(port=s["port"],contract=s["contract"].record()) for s in self._sides if s["node_id"]==n["id"]]))
-        return dict(self.plan,stages=stages,output=self.contracts[-1].record(),preview_dependencies=list(self.dependencies),resolved_bindings=self.resolved_bindings,devices=self.device_records,resources=self.resources.record() if self.resources else None,resource_role="inspection" if self.inspection else "job",worker_budget_bytes=self.budget,resource_plan=self.resource_plan)
+        return dict(self.plan,stages=stages,output=self.contracts[-1].record(),preview_dependencies=list(self.dependencies),resolved_bindings=self.resolved_bindings,devices=self.device_records,resources=self.resources.record() if self.resources else None,resource_role="inspection" if self.inspection else "job",worker_budget_bytes=self.budget,resource_plan=self.resource_plan,device_execution=self.device.record())
 
     def _resolve_parameters(self,node,position):
         from copy import deepcopy
@@ -352,6 +368,8 @@ class SequenceEngine:
             return np.asarray(p["value"],dtype=np.float64)
         if a=="data_tap":
             return self.get(i,index)
+        if i in self.backends and self.backends[i].name=="gpu":
+            return self.device.host(self.device.modifier(i,index,self.backends[i]),self.backends[i])
         return self._modifier_value(i,index)
 
     def side_ref(self,identifier,index):
@@ -365,7 +383,7 @@ class SequenceEngine:
         selected=p["index"] if op["algorithm"]=="axis_slice" and p["axis"]==self.contracts[i].sequence_axis else index
         return dict(self.ref(i,selected),sample_index=index,side_output=identifier,selection=p)
 
-    def _histogram_edges(self,i):
+    def _histogram_edges(self,i,*,xp=np,get_sample=None,host=np.asarray,batch_size=1):
         op = self.operations[i]
         p, mapping = op["parameters"], self.mappings[op["node"]["id"]]
         if "edges" in mapping:
@@ -377,20 +395,21 @@ class SequenceEngine:
             seed=self.context.seed),sort_keys=True,ensure_ascii=False).encode()).hexdigest()
         detected = self.range_cache.get(fingerprint) if self.range_cache is not None else None
         if detected is None:
-            minimum,maximum = None,None
+            minimum,maximum = xp.asarray(xp.inf),xp.asarray(-xp.inf)
             self.context.log(f"分布统计：正在自动识别边界（{contract.length} 个上游样本）")
             interval = max(1,contract.length//20)
-            for sample in range(contract.length):
+            for sample in range(0,contract.length,batch_size):
                 self.context.check_cancelled()
-                value = self.get(i,sample)
-                finite = value[np.isfinite(value)]
-                if finite.size:
-                    low,high = float(finite.min()),float(finite.max())
-                    minimum = low if minimum is None else min(minimum,low)
-                    maximum = high if maximum is None else max(maximum,high)
-                if (sample+1)%interval==0 or sample+1==contract.length:
-                    self.context.log(f"分布边界识别：{sample+1}/{contract.length}")
-            if minimum is None:
+                stop=min(contract.length,sample+batch_size)
+                get=get_sample or (lambda j:self.get(i,j))
+                value=xp.stack([get(j) for j in range(sample,stop)]) if stop-sample>1 else get(sample)
+                finite = xp.isfinite(value)
+                minimum=xp.minimum(minimum,xp.min(xp.where(finite,value,xp.inf)))
+                maximum=xp.maximum(maximum,xp.max(xp.where(finite,value,-xp.inf)))
+                if sample//interval!=stop//interval or stop==contract.length:
+                    self.context.log(f"分布边界识别：{stop}/{contract.length}")
+            minimum,maximum=float(host(minimum)),float(host(maximum))
+            if not np.isfinite([minimum,maximum]).all():
                 raise ValueError("分布自动边界无法识别：上游范围没有有限值，请手动设置上下界")
             detected = dict(minimum=minimum,maximum=maximum,samples=contract.length)
             if self.range_cache is not None:
@@ -415,48 +434,49 @@ class SequenceEngine:
                        detected=detected,range_scope="complete_upstream_sequence")
         return mapping["edges"]
 
-    def _modifier_value(self,i,index):
+    def _modifier_value(self,i,index,*,xp=np,get_sample=None):
         op=self.operations[i]; a,p=op["algorithm"],op["parameters"]; c=self.contracts[i]
+        get=get_sample or (lambda j:self.get(i,j))
         if a=="axis_slice" and p["axis"]==c.sequence_axis:
-            return self.get(i,p["index"])
+            return get(p["index"])
         if a=="global_statistics":
             return self.global_fit(i)[0]
-        value=self.get(i,index)
+        value=get(index)
         if a=="time_statistics":
-            value=joint_values(value,c.paired,p["validity"])
+            value=joint_values(value,c.paired,p["validity"],xp)
             axes=tuple(k for k,axis in enumerate(c.axes) if axis not in retained_axes(c.axes,"space_time"))
-            return reduce_finite(value,axes,p["mode"],p["quantile"])[0]
+            return reduce_finite(value,axes,p["mode"],p["quantile"],xp)[0]
         if a=="region_reduce":
             if c.paired and p["validity"]=="joint":
-                value=np.where(np.isfinite(value).all(axis=0)[None,...],value,np.nan)
-            return reduce_finite(value,tuple(c.axes.index(axis) for axis in "YX"),p["mode"],p["quantile"])[0]
+                value=xp.where(xp.isfinite(value).all(axis=0)[None,...],value,xp.nan)
+            return reduce_finite(value,tuple(c.axes.index(axis) for axis in "YX"),p["mode"],p["quantile"],xp)[0]
         if a=="point_extract":
             slices=[slice(None)]*value.ndim
             slices[c.axes.index("Y")],slices[c.axes.index("X")]=p["y"],p["x"]
             return value[tuple(slices)]
         if a=="line_extract":
             if p["mode"]=="axis":
-                return np.take(value,p["index"],axis=c.axes.index("Y" if p["axis"]=="X" else "X"))
-            ys=np.linspace(p["y0"],p["y1"],p["samples"]); xs=np.linspace(p["x0"],p["x1"],p["samples"])
-            matrix=np.moveaxis(value,(c.axes.index("Y"),c.axes.index("X")),(-2,-1))
+                return xp.take(value,p["index"],axis=c.axes.index("Y" if p["axis"]=="X" else "X"))
+            ys=xp.linspace(p["y0"],p["y1"],p["samples"]); xs=xp.linspace(p["x0"],p["x1"],p["samples"])
+            matrix=xp.moveaxis(value,(c.axes.index("Y"),c.axes.index("X")),(-2,-1))
             if p["interpolation"]=="nearest":
-                line=matrix[...,np.floor(ys+.5).astype(int),np.floor(xs+.5).astype(int)]
+                line=matrix[...,xp.floor(ys+.5).astype(int),xp.floor(xs+.5).astype(int)]
             else:
-                y0=np.floor(ys).astype(int); x0=np.floor(xs).astype(int); y1=np.minimum(y0+1,matrix.shape[-2]-1); x1=np.minimum(x0+1,matrix.shape[-1]-1)
+                y0=xp.floor(ys).astype(int); x0=xp.floor(xs).astype(int); y1=xp.minimum(y0+1,matrix.shape[-2]-1); x1=xp.minimum(x0+1,matrix.shape[-1]-1)
                 dy,dx=ys-y0,xs-x0
-                line=np.zeros((*matrix.shape[:-2],p["samples"]),dtype=np.float64)
-                valid=np.ones_like(line,dtype=bool)
+                line=xp.zeros((*matrix.shape[:-2],p["samples"]),dtype=xp.float64)
+                valid=xp.ones_like(line,dtype=bool)
                 for yy,xx,weight in ((y0,x0,(1-dy)*(1-dx)),(y0,x1,(1-dy)*dx),(y1,x0,dy*(1-dx)),(y1,x1,dy*dx)):
                     sample=matrix[...,yy,xx]
-                    valid &= np.isfinite(sample)|(weight==0)
-                    line += np.where(weight==0,0,sample*weight)
-                line=np.where(valid,line,np.nan)
-            return np.moveaxis(line,-1,c.axes.index("Y"))
+                    valid &= xp.isfinite(sample)|(weight==0)
+                    line += xp.where(weight==0,0,sample*weight)
+                line=xp.where(valid,line,xp.nan)
+            return xp.moveaxis(line,-1,c.axes.index("Y"))
         if a=="axis_slice":
-            return np.take(value,p["index"],axis=c.axes.index(p["axis"]))
+            return xp.take(value,p["index"],axis=c.axes.index(p["axis"]))
         if a=="distribution":
-            edges = self._histogram_edges(i)
-            return np.histogram(value[np.isfinite(value)],bins=p["bins"],range=(edges[0],edges[-1]))[0].astype(np.int64)
+            edges = self._histogram_edges(i,xp=xp,get_sample=get_sample,host=self.backends[i].host if get_sample else np.asarray)
+            return xp.histogram(value[xp.isfinite(value)],bins=p["bins"],range=(edges[0],edges[-1]))[0].astype(xp.int64)
         raise ValueError("未知修饰操作")
 
     @property
@@ -472,6 +492,9 @@ class SequenceEngine:
         hit = self.cache.get(key)
         if hit is not None:
             return hit
+        backend=self.device.backend(stage)
+        if backend is not None:
+            return self.cache.put(key,np.asarray(self.device.host(self.device.get(stage,index,backend),backend)))
         if stage==0:
             value = self.source.get(index)
         else:
@@ -487,23 +510,20 @@ class SequenceEngine:
                 size = p["window"] if a=="time_smooth" else p["size"]
                 first = index if a=="time_smooth" else index*size
                 if p["mode"]=="quantile":
-                    from eip.window_statistics import window_quantile
-                    value = window_quantile(lambda j:self.get(i,j),before.shape,first,size,p["quantile"],max(1024,self.resource_plan[i]["limit_bytes"]//8),self.workdir,self.context.check_cancelled)
+                    from eip.window_statistics import WindowQuantile
+                    if i not in self.temporal_states:
+                        self.temporal_states[i]=WindowQuantile(before.shape,size,self.resource_plan[i]["limit_bytes"]//8,self.workdir)
+                    value = self.temporal_states[i].get(lambda j:self.get(i,j),first,p["quantile"],self.context.check_cancelled)
                 else:
-                    total,count = np.zeros(before.shape),np.zeros(before.shape,dtype=np.uint32)
-                    for j in range(first,first+size):
-                        arr = self.get(i,j)
-                        valid = np.isfinite(arr)
-                        total += np.where(valid,arr,0)
-                        count += valid
-                    value = np.where(count,total/np.maximum(count,1) if p["mode"]=="mean" else total,np.nan)
+                    from eip.window_statistics import RollingReduction
+                    if i not in self.temporal_states:
+                        self.temporal_states[i]=RollingReduction(before.shape)
+                    value=self.temporal_states[i].get(lambda j:self.get(i,j),first,size,p["mode"],self.context.check_cancelled)
             elif a=="statistics":
                 stats = self.fit(i)
                 value = self.get(i,index)/stats["scales"]
             elif a in {"data_tap","sequence_statistics","parameter_binding"}:
                 value=self.get(i,index)
-            elif a in GPU_MODULES and a not in CORRELATIONS and self.backends[i].name=="gpu":
-                value=self._gpu_apply(i,self.get(i,index))
             elif a=="fixed_normalize":
                 scale=np.asarray(p["scale"],dtype=np.float64)
                 if not np.isfinite(scale).all() or (scale<=0).any():
@@ -589,7 +609,12 @@ class SequenceEngine:
     def global_fit(self,i):
         if i not in self.global_statistics:
             op=self.operations[i]
-            value,count=global_statistic(self.contracts[i],op["parameters"],lambda j:self.get(i,j),self.context,self.workdir)
+            backend=self.backends.get(i)
+            if backend is not None and backend.name=="gpu":
+                values=self.device.global_fit(i,backend)
+                value,count=(self.device.host(a,backend) for a in values)
+            else:
+                value,count=global_statistic(self.contracts[i],op["parameters"],lambda j:self.get(i,j),self.context,self.workdir)
             precision=op["node"].get("execution",{}).get("precision","native")
             if precision!="native":
                 value=np.asarray(value,dtype=precision)
@@ -627,29 +652,32 @@ class SequenceEngine:
         self.statistics[i] = dict(mean=mean,variance=variance,count=count,scales=scales,frames=c.length)
         return self.statistics[i]
 
-    def correlate(self,i,index):
+    def correlate(self,i,index,*,device=False):
         from eip.modes.split_correlation.correlation import RollingMoments
         op = self.operations[i]
         p = op["parameters"]
         center,lag = (op["centers"][0],op["lags"][index]) if p["analysis"]=="curve" else (op["centers"][index],op["lags"][0])
+        backend=self.backends[i]
+        xp=backend.xp
+        get=(lambda j:self.device.get(i,j,backend)) if backend.name=="gpu" else (lambda j:self.get(i,j))
         # Use a nearby positive-intensity baseline for stable fluctuations when
         # no statistics node is present. It is a numerical identity, not a filter.
-        baseline = np.nan_to_num(self.get(i,center),nan=0.,posinf=0.,neginf=0.)
+        baseline = xp.nan_to_num(get(center),nan=0.,posinf=0.,neginf=0.)
         previous = self.last_correlation.get(i)
         can_roll = previous and previous["lag"]==lag and 0<center-previous["center"]<p["window"] and index%256!=0
         if can_roll:
             moments = previous["moments"]
             old = previous["center"]
             for j in range(old-p["window"]//2,center-p["window"]//2):
-                moments.add(self.get(i,j)[0],self.get(i,j+lag)[1],-1)
+                moments.add(get(j)[0],get(j+lag)[1],-1)
             indices = range(old+p["window"]//2+1,center+p["window"]//2+1)
         else:
             moments = RollingMoments(baseline,SimpleNamespace(**p),self.backends[i])
             indices = range(center-p["window"]//2,center+p["window"]//2+1)
         for j in indices:
-            moments.add(self.get(i,j)[0],self.get(i,j+lag)[1])
+            moments.add(get(j)[0],get(j+lag)[1])
         self.last_correlation[i] = dict(lag=lag,center=center,moments=moments)
-        return moments.result()
+        return moments.result(device=device)
 
     def ref(self,stage,index):
         self.context.check_cancelled()
@@ -705,10 +733,16 @@ class SequenceEngine:
         return dict(r,sample_index=index)
 
     def close(self):
+        if hasattr(self,"device"):
+            self.device.close()
+        for state in self.temporal_states.values():
+            if hasattr(state,"close"):
+                state.close()
+        self.temporal_states.clear()
+        self.last_correlation.clear()
         for instance in self.instances.values():
             if hasattr(instance,"close"):
                 instance.close()
-        self.last_correlation.clear()
         for backend in self.device_backends.values():
             backend.close()
         self.instances.clear()

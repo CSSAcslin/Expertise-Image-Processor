@@ -1,6 +1,6 @@
 # Expertise Image Processor
 
-**0.8.3 · 本机 Web 工作台 · Python 3.12–3.14**
+**0.8.4 · 本机 Web 工作台 · Python 3.12–3.14**
 
 面向科研数据的图像与视频工作台，将 **数据预览 → 模块处理 → 结果对比 → 导出与复用** 放在同一工作流中。浏览器负责交互，独立 Python 进程负责解码和计算。
 
@@ -41,7 +41,7 @@ Qt 兼容入口为 [start_desktop.cmd](start_desktop.cmd)，需另装 [requireme
 - **控制资源**：在运行设置中统一设置应用内存、缓存、显存和默认计算设备；大序列按需读取，结果使用磁盘映射。
 - **扩展算法**：统一模块契约与本机 Python 插件，保留完整参数、运行版本、样本映射和来源记录。
 
-CPU 可完整运行。部分内置数值模块及关联算法支持可选 CuPy / CUDA 后端；本机没有 CUDA 硬件时使用 CPU。安装、支持范围与回退规则见 [资源与 GPU 说明](docs/RESULT_RESOURCE_GPU_0_8_0.md)。实际 CUDA 硬件上的数值和速度仍需验证。
+CPU 可完整运行。当前 25 个内置模块均可接入可选 CuPy / CUDA 后端，连续 GPU 节点复用设备数据，按预算批量传输；时间滑窗、统计、配准及标定补齐设备实现。插件与旧序列统计仍使用 CPU，自动模式在 CUDA 不可用时回退。支持范围、预算与验证边界见 [0.8.4 大序列处理与 GPU](docs/GPU_PIPELINE_0_8_4.md)；实际 CUDA 硬件上的数值和速度仍需验证。
 
 ## 操作顺序
 
@@ -56,6 +56,7 @@ CPU 可完整运行。部分内置数值模块及关联算法支持可选 CuPy /
 | 内容 | 入口 |
 | --- | --- |
 | 完整操作、格式与兼容边界 | [使用指南](docs/USER_GUIDE.md) |
+| 0.8.4 大序列、滑窗复用与 GPU | [处理链与验证边界](docs/GPU_PIPELINE_0_8_4.md) |
 | 0.8.3 左侧双选项卡与预览优先布局 | [布局与数据管理](docs/SIDEBAR_LAYOUT_0_8_3.md) |
 | 结果导出、内存预算与 GPU | [0.8.0 说明](docs/RESULT_RESOURCE_GPU_0_8_0.md) |
 | 模块公式、参数与输入输出 | [当前模块清单](docs/MODULE_INVENTORY_CURRENT.md) |
@@ -72,6 +73,8 @@ CPU 可完整运行。部分内置数值模块及关联算法支持可选 CuPy /
 ~~~powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 .\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m pytest tests\test_gpu_pipeline_0_8_4.py -q
+.\.venv\Scripts\python.exe tools\smoke_gpu_pipeline_0_8_4.py
 .\.venv\Scripts\python.exe tools\smoke_sidebar_data_0_8_3.py
 .\.venv\Scripts\python.exe tools\smoke_result_interaction_0_8_1.py
 ~~~

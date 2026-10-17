@@ -116,6 +116,7 @@ def process_sequence_job(payload,emit,cancelled):
                             calibrations[engine.nodes[i]["id"]] = instance.record
                             if instance.lut is not None:
                                 np.save(part/f"lut_{engine.nodes[i]['id']}.npy",instance.lut,allow_pickle=False)
+                    engine.plan=engine._actual_plan()
                     item.update(status="succeeded",contract=output_c.record(),base_shape=[c.shape[c.axes.index(a)] for a in "YX"] if c.spatial else [],origin=list(c.origin),result_kind="label" if c.semantic=="label" else "coefficient" if c.semantic in {"g2","processed_g2"} else "image",modules=engine.plan,mappings=engine.mappings,calibrations=calibrations)
                     # This manifest is written only after all numeric samples and
                     # references succeeded. Partial datasets cannot be promoted.

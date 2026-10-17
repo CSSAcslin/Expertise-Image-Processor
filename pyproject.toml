@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "expertise-image-processor"
-version = "0.8.3"
+version = "0.8.4"
 description = "Local image/video preview and extensible processing workbench"
 readme = "README.md"
 requires-python = ">=3.12,<3.15"

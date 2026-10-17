@@ -33,7 +33,7 @@ class RollingMoments:
         self.sums[2] += sign*(dl*dr)
         self.sums[3] += sign*valid
 
-    def result(self):
+    def result(self, *, device=False):
         xp = self.xp
         n = self.sums[3]
         safe = xp.maximum(n,1)
@@ -44,6 +44,8 @@ class RollingMoments:
         with np.errstate(divide="ignore",invalid="ignore",over="ignore"):
             result = xp.where(valid,1+covariance/(il*ir),xp.nan)
         result = xp.where(xp.isfinite(result),result,xp.nan)
+        if device:
+            return result,n.round().astype(xp.uint32)
         return self.backend.host(result),self.backend.host(n).round().astype(np.uint32)
 
 
