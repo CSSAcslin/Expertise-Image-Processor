@@ -14,6 +14,8 @@ import tifffile
 from playwright.sync_api import expect,sync_playwright
 
 ROOT=Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT/"src"))
+from eip import __version__
 
 
 def main():
@@ -32,7 +34,7 @@ def main():
                 time.sleep(.1)
             else:raise AssertionError("isolated server did not start")
             with httpx.Client(base_url=url,timeout=45) as api,sync_playwright() as pw:
-                state=api.get("/api/state").json();assert state["version"]=="0.8.5"
+                state=api.get("/api/state").json();assert state["version"]==__version__
                 api.headers["X-EIP-Token"]=state["session_token"]
                 opened=api.post("/api/sources/open",json=dict(path=str(output/"source.tif"),interval=.01));opened.raise_for_status()
                 browser=pw.chromium.launch(channel="msedge" if os.name=="nt" else "chromium",headless=True)

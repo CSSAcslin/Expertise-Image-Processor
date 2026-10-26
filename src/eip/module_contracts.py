@@ -42,7 +42,7 @@ class Contract:
         value["full_axes"] = self.sequence_axis+self.axes
         value["full_shape"] = [self.length, *self.shape]
         value["label"] = " × ".join(f"{a}:{'?' if n is None else n}" for a,n in zip(value["full_axes"],value["full_shape"]))
-        meanings={"T":"时间样本","Q":"有符号延迟","N":"静态记录","R":"沿线距离 / 像素","B":"分布箱","P":"对齐双路","Y":"空间Y","X":"空间X","C":self.color_order+"颜色分量"}
+        meanings={"T":"时间样本","Q":"有符号延迟","W":"平均窗长 / 上游样本数","N":"静态记录","R":"沿线距离 / 像素","B":"分布箱","P":"对齐双路","Y":"空间Y","X":"空间X","C":self.color_order+"颜色分量"}
         value["axis_meanings"]={a:meanings.get(a,a) for a in value["full_axes"]}
         return value
 
@@ -307,13 +307,19 @@ def compile_flow(nodes, source, *, center=None, single=False, strict=True, follo
                 elif a in CORRELATIONS:
                     if not c.paired or "C" in c.axes or c.semantic not in {"intensity","sensor_codes"} or c.sequence_axis!="T":
                         raise ValueError("标准 g² 需要对齐双路强度矩阵 PYX 或双路标量 P")
-                    if p.get("roi_estimator")!="pixel_mean":
+                    if a!="correlation_window" and p.get("roi_estimator")!="pixel_mean":
                         raise ValueError("区域总强度请用关联之前的 ROI 求和模块表达；关联不再隐含空间归约")
-                    downstream_sequence = needs_full_sequence(canonical[i+1:])
-                    lags,centers,_,_ = correlation_layout(c,p,center,single and not downstream_sequence)
-                    c = replace(c,axes=c.axes[1:],shape=c.shape[1:],length=len(lags) if p["analysis"]=="curve" else None if centers is None else len(centers),sequence_axis="Q" if p["analysis"]=="curve" else "T",semantic="g2",dtype="float64",statistics=False,meaning=f"regional_{c.spatial_operation}_signal_g2" if c.spatial_operation else "pixel_g2")
-                    if p["analysis"]=="curve" and c.spatial:
-                        warning="当前 τ 扫描仍输出逐像素矩阵；需要单条曲线时，请在关联前归约区域信号，或在关联后对像素 g² 添加空间归约。"
+                    if a=="correlation_window":
+                        from eip.correlation_windows import window_scan_layout
+                        windows,_ = window_scan_layout(c.length,p)
+                        length,axis = len(windows),"W"
+                    else:
+                        downstream_sequence = needs_full_sequence(canonical[i+1:])
+                        lags,centers,_,_ = correlation_layout(c,p,center,single and not downstream_sequence)
+                        length,axis = (len(lags),"Q") if p["analysis"]=="curve" else (None if centers is None else len(centers),"T")
+                    c = replace(c,axes=c.axes[1:],shape=c.shape[1:],length=length,sequence_axis=axis,semantic="g2",dtype="float64",statistics=False,meaning=f"regional_{c.spatial_operation}_signal_g2" if c.spatial_operation else "pixel_g2")
+                    if axis in {"Q","W"} and c.spatial:
+                        warning="当前扫描仍输出逐像素矩阵；需要单条曲线时，请在关联前取点 / 归约区域信号，或在关联后对像素 g² 添加空间归约。"
                 else:
                     if a in {"gaussian","box_blur","spatial_smooth"} or n.get("manifest"):
                         if not c.spatial:

@@ -6,7 +6,7 @@ ENTRIES = {
     "paired_trace": ("algorithm", "chart", "双幅时序比较", "s_p(t)=A_p(t,y,x)；或 stat_finite(A_p(t,ROI))", "仅接配准后的 TPYX 强度。左右使用同一对应点 / 矩形区域，逐帧独立统计并保留 T、P；不执行 g²，不压缩时间。可重复添加；默认旁路，主路透传。"),
     "gain_offset": ("modifier", "sliders", "增益 / 偏置", "B=gA+b", "算法默认保留输入类型；整数舍入限幅。选择 float32/64 时直接输出浮点，不先量化。"),
     "spatial_smooth": ("modifier", "blur", "空间平滑", "mean: B=ΣA/(2r+1)²; gaussian: B=(K*(A·valid))/(K*valid)", "类型在模块内选择。均值采用反射边界，高斯采用边界复制；算法默认保留输入类型，浮点精度不先量化。"),
-    "time_statistics": ("modifier", "statistics", "时序统计", "每个样本：mean / sum / min / max / variance / std / quantile / count", "逐样本归约空间 / 分量，保留 T 或 Q 及 P/C，不压缩时间。方差为总体方差（ddof=0）。"),
+    "time_statistics": ("modifier", "statistics", "时序统计", "每个样本：mean / sum / min / max / variance / std / quantile / count", "逐样本归约空间 / 分量，保留 T/Q/W 及 P/C，不压缩样本轴。方差为总体方差（ddof=0）。"),
     "global_statistics": ("modifier", "statistics", "全域统计", "全上游：mean / sum / min / max / variance / std / quantile / count", "默认压缩所有轴；也可只压缩样本轴，或压缩样本与空间轴并保留 P/C。输出 N=1，不伪造时间。方差为总体方差；精确分位值使用临时磁盘缓存。"),
     "intensity": ("intermediate", "sliders", "定类型增益 / 偏置", "B=cast_clip_round(gA+b)", "整数先舍入再限幅；输出保持原类型。"),
     "affine": ("intermediate", "sliders", "浮点增益 / 偏置", "B=gA+b", "float64 输出，不量化、不限幅；溢出为 NaN。"),
@@ -19,6 +19,7 @@ ENTRIES = {
     "correlation": ("algorithm", "correlation", "二阶互关联 g²（兼容）", "g²_q(c)=⟨L_iR_(i+q)⟩/(⟨L_i⟩⟨R_(i+q)⟩)", "同一有效配对集合；完整 W 窗口；正负延迟独立，不能假设对称。"),
     "correlation_map": ("algorithm", "heatmap", "固定延迟 g² 系数图", "g²_q(c)=⟨L_iR_(i+q)⟩/(⟨L_i⟩⟨R_(i+q)⟩)", "固定 q，沿中心样本 T 输出；W、q、步长按直接上游样本计数。"),
     "correlation_curve": ("algorithm", "chart", "延迟扫描 g²", "g²_q(c)=⟨L_iR_(i+q)⟩/(⟨L_i⟩⟨R_(i+q)⟩)", "固定中心 c，沿有符号 Q 输出；Q 不是时间。"),
+    "correlation_window": ("algorithm", "chart", "固定 τ · 平均窗长扫描 g²", "g²(W;c,q)=⟨L_iR_(i+q)⟩_W/(⟨L_i⟩_W⟨R_(i+q)⟩_W)", "固定中心 c 与有符号 q，逐步扩大 W；奇数窗对称，偶数窗在中心右侧多取 1 点。W 按直接上游样本计数，不隐式合帧；全部窗口须完整。"),
     "time_crop": ("intermediate", "range", "时间范围", "B=A[first-1:last] 或 start≤t<end", "只放流程起点；时间使用真实样本时间。"),
     "spatial_roi": ("intermediate", "crop", "空间 ROI / 归约（兼容）", "B=A[y:y+h,x:x+w]", "历史复合节点；新流程分别使用 ROI 裁剪与区域归约。"),
     "roi_crop": ("intermediate", "crop", "ROI 裁剪", "B=A[y:y+h,x:x+w]", "相对此模块直接输入坐标；保留空间轴和来源原点。"),
@@ -62,7 +63,7 @@ LATEX = {
     "axis_slice":r"B=\operatorname{take}(A,k,a)", "distribution":r"H_b=\sum_{j\in V}\mathbf{1}_{e_b\leq A_j<e_{b+1}}",
     "data_tap":r"B=A,\quad O_{\mathrm{captured}}=A", "parameter_binding":r"B=A,\quad O_{\mathrm{value}}=v",
 }
-LATEX["correlation_map"]=LATEX["correlation_curve"]=LATEX["correlation"]
+LATEX["correlation_map"]=LATEX["correlation_curve"]=LATEX["correlation_window"]=LATEX["correlation"]
 LATEX["spatial_roi"]=LATEX["roi_crop"]
 LATEX["statistics"]=LATEX["sequence_statistics"]+r",\quad B=I/s"
 LATEX["gain_offset"]=r"B=gA+b,\quad \mathrm{native}:\operatorname{cast}_{d}(B),\quad \mathrm{float}:\operatorname{cast}_{32/64}(B)"
@@ -92,7 +93,7 @@ VALIDITY = {
     "spatial_roi":"pixels模式只裁剪；归约模式仅有限值参与，全无效NaN；新流程拆为裁剪与归约。",
     "grayscale":"任一参与颜色分量非有限时结果非有限；忽略alpha。", "color_convert":"重排 / 复制，不改变原值有效性。",
 }
-VALIDITY["correlation_map"]=VALIDITY["correlation_curve"]=VALIDITY["correlation"]
+VALIDITY["correlation_map"]=VALIDITY["correlation_curve"]=VALIDITY["correlation_window"]=VALIDITY["correlation"]
 VALIDITY["gain_offset"]="浮点输出不舍入、不限幅；native 整数按 rint 舍入并限幅，native 浮点保留类型。计算溢出置 NaN；拒绝 64 位整数的隐式浮点运算。"
 VALIDITY["spatial_smooth"]="均值要求全部有限；高斯按有限权重归一，原无效位置保留 NaN。输出默认保留原类型；选择浮点精度时不先整数量化。"
 VALIDITY["time_statistics"]=VALIDITY["global_statistics"]="仅有限值参与；空集合的 count 为0，其余统计量为 NaN。方差分母为有效值数 n；min/max 为独立极值运算，分位值使用线性插值。双路共同有效支持或各路独立支持由参数明确指定。"
@@ -119,11 +120,12 @@ IO = {
 }
 for _key in ("correlation_map","correlation_curve"):
     IO[_key]=IO["correlation"]
+IO["correlation_window"]=("对齐双路时间强度 TPYX 或点 / 区域信号 TP；不接受标签、g² 或延迟轴", "WYX 逐像素 g² 或 W 标量曲线；W 为平均窗长，保留固定 τ、中心及真实配对时差")
 for _key in ("box_blur","gaussian"):
     IO[_key]=("含Y/X的空间矩阵；双路分别处理","同形状空间平滑输出；不能接标量或线信号")
 IO["spatial_smooth"]=IO["gaussian"]
 IO["gain_offset"]=("矩阵 / 双路 / 标量 / 向量数值","同轴同形状，dtype 由实例精度决定")
-IO["time_statistics"]=("T/Q/N×空间或分量；双路与颜色分量明确","T/Q/N(P)(C)，逐样本统计值；count 为 uint64，其余 float64；可旁路")
+IO["time_statistics"]=("T/Q/W/N×空间或分量；双路与颜色分量明确","T/Q/W/N(P)(C)，逐样本统计值；count 为 uint64，其余 float64；可旁路")
 IO["global_statistics"]=("任意 T/Q/N 数值序列的完整直接上游","N=1 静态统计记录；保留轴由统计范围决定；value/count 可用于后序参数绑定")
 for _key in ("time_crop","time_sample","time_smooth","time_bin"):
     IO[_key]=("当前时间T×…；不接受Q延迟轴或N静态记录","编辑后的T′×…，保留真实时间与贡献来源")
@@ -147,7 +149,7 @@ def enrich(spec):
         symbols = [
             {"symbol":"Lᵢ / Rᵢ", "meaning":"直接上游左 / 右路在第 i 个样本的强度；空间矩阵逐像素计算，归约后的区域信号按该信号计算", "unit":"上游强度"},
             {"symbol":"g²", "meaning":"标准二阶互关联；分子与分母使用同一有效配对集合", "unit":"无量纲"},
-            {"symbol":"W", "meaning":"以 c 为中心的完整平均窗口，奇数", "unit":"上游样本"},
+            {"symbol":"W", "meaning":"固定锚点 c 的完整平均窗口；奇数对称、偶数多取右侧 1 点" if spec["id"]=="correlation_window" else "以 c 为中心的完整平均窗口，奇数", "unit":"上游样本"},
             {"symbol":"q / τ", "meaning":"右路索引 = 左路索引 + q；可为负、零或正值", "unit":"上游样本"},
             {"symbol":"c", "meaning":"窗口中心，按编辑后的直接上游计数", "unit":"上游样本"},
             {"symbol":"V_c", "meaning":"窗口中 Lᵢ 与 Rᵢ₊q 同时有限的配对集合；每个像素可不同", "unit":"样本集合"},

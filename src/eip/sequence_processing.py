@@ -68,6 +68,8 @@ def process_sequence_job(payload,emit,cancelled):
                     signal = not c.spatial
                     columns = int(np.prod(c.shape)) if c.shape else 1
                     fields = ["output_index","source_frame","time_seconds","pts","source_frame_number","trigger_time_seconds","lag_samples","lag_seconds","lag_seconds_min","lag_seconds_max","known_pairs","dtype","min","max","mean","finite_count","invalid_count"]
+                    if c.sequence_axis=="W":
+                        fields.insert(6,"window_samples")
                     if signal:
                         fields += [f"value_{j+1}" for j in range(columns)]
                     with (part/"references.jsonl").open("wb") as refs,(part/"measurements.csv").open("w",encoding="utf-8-sig",newline="") as file:
@@ -82,6 +84,8 @@ def process_sequence_job(payload,emit,cancelled):
                             refs.write((json.dumps(ref,ensure_ascii=False,allow_nan=False)+"\n").encode())
                             corr = ref.get("correlation",{})
                             row = dict(output_index=out,source_frame=ref.get("index"),time_seconds=ref.get("time"),pts=ref.get("pts"),source_frame_number=ref.get("source_number"),trigger_time_seconds=ref.get("trigger_time"),dtype=str(arr.dtype),**{key:corr.get(key) for key in ("lag_samples","lag_seconds","lag_seconds_min","lag_seconds_max","known_pairs")},**statistics(arr))
+                            if c.sequence_axis=="W":
+                                row["window_samples"] = corr.get("window")
                             if signal:
                                 row.update({f"value_{k+1}":float(v) for k,v in enumerate(arr.reshape(-1))})
                             writer.writerow(row)

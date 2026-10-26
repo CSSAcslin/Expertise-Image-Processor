@@ -15,9 +15,13 @@ def coordinate(c,mapping,profile,axis,index,reference):
         if mapping.get("edges"):
             return (mapping["edges"][index]+mapping["edges"][index+1])/2
         return mapping["coordinates"][index] if "coordinates" in mapping else index+1
-    if c["sequence_axis"] not in {"T","Q"}:
+    if c["sequence_axis"] not in {"T","Q","W"}:
         raise ValueError("静态记录只能使用分量视图")
     correlation=reference.get("correlation",{})
+    if c["sequence_axis"]=="W":
+        if axis=="time":
+            raise ValueError("窗长扫描的横轴为平均样本数 W，不能改为采集时间或 τ")
+        return correlation.get("window")
     if axis=="time":
         return correlation.get("lag_seconds") if c["sequence_axis"]=="Q" else reference.get("time")
     return correlation.get("lag_samples") if c["sequence_axis"]=="Q" else index+1
@@ -139,12 +143,12 @@ def compare(workbench,value):
             warnings.append("按编辑后样本号对齐；各组真实时间不同，未作时间重采样")
         if not first["profile"] and first["contract"]["sequence_axis"]=="Q" and value.get("x","samples")=="samples" and len({r["time_signature"] for r in rows})>1:
             warnings.append("按有符号延迟样本对齐；各组实际配对时差不同")
-        if not first["profile"] and not all(r["known_time"] for r in rows) and value.get("x","samples")=="samples":
+        if not first["profile"] and first["contract"]["sequence_axis"] in {"T","Q"} and not all(r["known_time"] for r in rows) and value.get("x","samples")=="samples":
             warnings.append("部分真实时间未知；当前按样本 / τ 坐标比较")
         if len({r["contract"]["meaning"] for r in rows})>1:
             warnings.append("各曲线数值含义不同；共用纵轴，未作归一化")
         kind=first["signature"][1]
-        label={"T":"真实时间 / s" if value.get("x")=="time" else "编辑后样本号","Q":"真实配对时差 / s" if value.get("x")=="time" else "有符号 τ / 上游样本","R":"剖面距离 / px","B":"强度","component":"分量索引"}.get(kind,kind)
+        label={"T":"真实时间 / s" if value.get("x")=="time" else "编辑后样本号","Q":"真实配对时差 / s" if value.get("x")=="time" else "有符号 τ / 上游样本","W":"平均窗长 W / 上游样本数","R":"剖面距离 / px","B":"强度","component":"分量索引"}.get(kind,kind)
         return dict(xs=first["xs"],indices=first["indices"],total=first["count"],downsampled=len(first["indices"])<first["count"],
                     x_label=label,curves=curves,warnings=warnings,coordinate_digest=first["signature"][3],
                     kind=kind,edges=first["mapping"].get("edges") if kind=="B" else None)

@@ -63,7 +63,7 @@ WORKBENCH = {
         field("radius","空间半径 / px","int",1,minimum=1,maximum=32), field("sigma","高斯 σ / px","float",1.,minimum=1e-12,maximum=1e12)]),
     "gain_offset": dict(description="增益乘法与偏置加法；算法默认保留输入类型，浮点精度不先量化。", parameters=[
         field("gain","增益","float",1.,minimum=-1e12,maximum=1e12),field("offset","偏置","float",0.,minimum=-1e12,maximum=1e12)]),
-    "time_statistics": dict(description="逐样本统计空间 / 分量，保留 T 或 Q 及显式 P/C；可替换主路或输出旁路。", parameters=[
+    "time_statistics": dict(description="逐样本统计空间 / 分量，保留 T / Q / W 样本轴及显式 P/C；可替换主路或输出旁路。", parameters=[
         field("mode","统计量","str","mean",choices=["mean","sum","min","max","variance","std","quantile","count"]),
         field("quantile","分位 q","float",.5,minimum=0,maximum=1),
         field("validity","双路有效值","str","joint",choices=["joint","independent"]),field("output","数据流作用","str","main",choices=["main","side"])]),
@@ -81,9 +81,9 @@ WORKBENCH = {
     "parameter_binding": dict(description="主流透传，发布命名数值变量，可取常量或前序参数 / 统计端口。",parameters=[field("name","变量名","str","value"),field("value","变量值","float",1.),field("unit","单位","str","")]),
     "grayscale": dict(description="将明确 RGB 颜色分量转换为灰度。",parameters=[field("method","灰度定义","str","luma",choices=["luma","mean"])]),
     "color_convert": dict(description="灰度扩展为 RGB，或明确调整 RGB/BGR 排列。",parameters=[field("mode","输出排列","str","rgb",choices=["rgb","bgr"])]),
-    "point_extract": dict(description="获取直接输入指定像素随 T/Q 的信号。",parameters=[field("x","X","int",0,minimum=0),field("y","Y","int",0,minimum=0),field("output","数据流作用","str","main",choices=["main","side"])]),
+    "point_extract": dict(description="获取直接输入指定像素随 T/Q/W 的信号。",parameters=[field("x","X","int",0,minimum=0),field("y","Y","int",0,minimum=0),field("output","数据流作用","str","main",choices=["main","side"])]),
     "line_extract": dict(description="提取横纵便捷线，或按端点及插值采样任意直线，R 为距离位置轴。",parameters=[field("mode","直线定义","str","axis",choices=["axis","segment"]),field("axis","保留方向","str","X",choices=["X","Y"]),field("index","固定另一轴位置（从0起）","int",0,minimum=0),*[field(k,label,"float",0.,minimum=0) for k,label in (("x0","起点 X"),("y0","起点 Y"),("x1","终点 X"),("y1","终点 Y"))],field("samples","沿线样本数","int",64,minimum=2,maximum=100000),field("interpolation","沿线插值","str","nearest",choices=["nearest","bilinear"]),field("output","数据流作用","str","side",choices=["main","side"])]),
-    "axis_slice": dict(description="按明确轴选一个截面，不重新解释 T/Q。",parameters=[field("axis","截面轴","str","T",choices=["T","Q","P","C","X","Y","R","B","N"]),field("index","位置（从0起）","int",0,minimum=0),field("output","数据流作用","str","side",choices=["main","side"])]),
+    "axis_slice": dict(description="按明确轴选一个截面，不重新解释 T/Q。",parameters=[field("axis","截面轴","str","T",choices=["T","Q","W","P","C","X","Y","R","B","N"]),field("index","位置（从0起）","int",0,minimum=0),field("output","数据流作用","str","side",choices=["main","side"])]),
     "distribution": dict(description="对每个上游样本产生固定箱边界的频数；自动边界使用上游完整范围的有限值最小 / 最大值。",parameters=[field("bins","箱数","int",64,minimum=2,maximum=4096),field("minimum","下界","float",0.,nullable=True),field("maximum","上界","float",65535.,nullable=True),field("output","数据流作用","str","side",choices=["main","side"])]),
     "data_tap": dict(description="获取直接上游真实数据用于预览或文件导出，主流原样通过。",parameters=[field("name","输出名称","str","截流输出"),field("destination","交付方式","str","both",choices=["preview","file","both"]),field("export_format","导出格式","str","dataset",choices=["dataset","npy","csv","tiff"])])}
 for _key,_value in WORKBENCH.items():
@@ -94,7 +94,17 @@ for _key,_analysis in (("correlation_map","map"),("correlation_curve","curve")):
         if _p["key"]=="analysis":
             _p["default"]=_analysis
 
-CORRELATIONS = {"correlation","correlation_map","correlation_curve"}
+WORKBENCH["correlation_window"] = dict(name="固定 τ · 平均窗长扫描 g²",inputs=["pair","moments"],output="map",description="固定中心与有符号 τ，扫描参与时间平均的样本数 W；输出 W 轴上的 g²。奇数窗对称，偶数窗在中心右侧多取 1 点；不隐式合帧。",parameters=[
+    field("lag","固定 τ（输入样本）","int",0),
+    field("center","固定中心样本（从 1 起；留空居中）","int",None,minimum=1,nullable=True),
+    field("window_min","平均窗长下限（输入样本）","int",3,minimum=1),
+    field("window_max","平均窗长上限（输入样本）","int",101,minimum=1),
+    field("window_step","窗长步长","int",2,minimum=1),
+    field("window_list","窗长列表（逗号分隔，留空使用范围）","array",None,nullable=True),
+    field("min_samples","最少共同有效样本","int",2,minimum=1),
+    field("min_mean","最小强度均值","float",1e-9,minimum=1e-15)])
+
+CORRELATIONS = {"correlation","correlation_map","correlation_curve","correlation_window"}
 MODIFIERS = {"region_reduce","time_statistics","global_statistics","point_extract","line_extract","axis_slice","distribution","paired_trace"}
 
 
@@ -147,7 +157,9 @@ def new_node(algorithm, shape=None, frames=None, plugins=()):
         h, w = shape[:2]
         mid = max(1, w//2)
         p.update(left=dict(x=0, y=0, width=mid, height=h), right=dict(x=mid, y=0, width=max(1, w-mid), height=h), midline=[mid, mid])
-    if algorithm in CORRELATIONS and frames:
+    if algorithm=="correlation_window" and frames:
+        p.update(window_max=min(101,frames),window_min=min(3,frames),min_samples=min(2,frames))
+    elif algorithm in CORRELATIONS and frames:
         lag = min(10, max(0, (frames-3)//4))
         window = min(101, max(1, frames-2*lag))
         if window%2 == 0:
@@ -265,6 +277,13 @@ def normalize_nodes(nodes, *, check_types=True, input_type="sensor", input_kind=
             if set(p)-{"channel"} or p.get("channel", "left") not in {"left", "right"}:
                 raise ValueError("输出幅面必须为左路或右路")
             node["parameters"] = {"channel":p.get("channel", "left")}
+        elif algorithm=="correlation_window":
+            if set(p)-set(spec["defaults"]):
+                raise ValueError("窗长扫描模块包含未知参数")
+            merged = dict(spec["defaults"],**p)
+            from eip.correlation_windows import window_sizes
+            window_sizes(merged)
+            node["parameters"] = merged
         else:
             allowed = set(spec["defaults"])
             if set(p)-allowed:

@@ -5,7 +5,7 @@ from eip.module_ops import intensity_curve, gaussian
 
 GPU_MODULES = frozenset({"intensity","affine","gain_offset","box_blur","gaussian",
                          "spatial_smooth","curve","threshold","fixed_normalize","grayscale",
-                         "correlation","correlation_map","correlation_curve"})
+                         "correlation","correlation_map","correlation_curve","correlation_window"})
 GPU_MODULES = GPU_MODULES | frozenset({"time_crop","time_sample","time_smooth","time_bin",
     "time_statistics","global_statistics","region_reduce","distribution","alignment","calibration",
     "roi_crop","select_channel","point_extract","line_extract","axis_slice","color_convert",

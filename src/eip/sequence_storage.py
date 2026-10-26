@@ -146,7 +146,7 @@ def _plot_signals(values,directory,contract,mappings,node_id):
                 continue
             ref = json.loads(line)
             axis = contract["sequence_axis"]
-            x = ref.get("correlation",{}).get("lag_samples") if axis=="Q" else ref.get("time") if axis=="T" else i
+            x = ref.get("correlation",{}).get("window") if axis=="W" else ref.get("correlation",{}).get("lag_samples") if axis=="Q" else ref.get("time") if axis=="T" else i
             if x is None:
                 actual = False
             xs.append(x)
@@ -161,7 +161,7 @@ def _plot_signals(values,directory,contract,mappings,node_id):
     else:
         for i,component in enumerate(selected_columns):
             ax.plot(xs,columns[:,i],label=f"component {component}",linewidth=1.2)
-        ax.set_xlabel("Signed lag (upstream samples)" if contract["sequence_axis"]=="Q" else "Actual time (s)" if contract["sequence_axis"]=="T" and actual else "Edited sample" if contract["sequence_axis"]=="T" else f"Record ({contract['sequence_axis']})")
+        ax.set_xlabel("Average window W (upstream samples)" if contract["sequence_axis"]=="W" else "Signed lag (upstream samples)" if contract["sequence_axis"]=="Q" else "Actual time (s)" if contract["sequence_axis"]=="T" and actual else "Edited sample" if contract["sequence_axis"]=="T" else f"Record ({contract['sequence_axis']})")
     ax.set_ylabel(contract["semantic"])
     ax.grid(alpha=.2)
     if len(indices)<len(values) or len(selected_columns)<count:

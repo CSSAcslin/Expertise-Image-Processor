@@ -1,10 +1,10 @@
 # Expertise Image Processor
 
-**0.8.5 · 本机 Web 工作台 · Python 3.12–3.14**
+**0.8.6 · 本机 Web 工作台 · Python 3.12–3.14**
 
 面向科研数据的图像与视频工作台，将 **数据预览 → 模块处理 → 结果对比 → 导出与复用** 放在同一工作流中。浏览器负责交互，独立 Python 进程负责解码和计算。
 
-![0.8.5 双幅对应点与区域时序、四条曲线叠加比较](docs/assets/workbench-0.8.5.png)
+![0.8.6 固定 τ、固定中心的平均窗长扫描 g² 曲线](docs/assets/correlation-window-0.8.6.png)
 
 *截图使用验证用模拟序列，不代表实验结果。*
 
@@ -38,6 +38,7 @@ Qt 兼容入口为 [start_desktop.cmd](start_desktop.cmd)，需另装 [requireme
 - **编辑模块流程**：添加、复制、启停、排序及撤销；实例独立设置参数，按轴、尺寸和科学含义校验输入输出。
 - **处理科研数据**：空间与时间编辑、数值修饰、统计、固定 τ 系数图及 g²(τ) 扫描；试算与正式运行共用算法。
 - **比较一维结果**：最多 32 条曲线叠加，独立显隐、命名、颜色与取值焦点；双幅时序比较可直接采集配准后的对应点 / 区域，保留左右时序并导出完整比较包。
+- **扫描平均窗长**：固定 τ 和同一中心，计算 g² 随平均样本数 W 的曲线；支持正负 τ、窗长范围或自定义列表，保留真实配对时差并导出完整数值 / 图形。
 - **统一管理数据**：左侧「数据 / 模块」并列；数据页内「输入 / 处理」纵向排列，分界可拖动，独立计数、折叠及批选。可找回历史导出文件夹，所选输入可运行，结果可合并导出、移除记录或逐项确认清理文件。
 - **控制资源**：在运行设置中统一设置应用内存、缓存、显存和默认计算设备；大序列按需读取，结果使用磁盘映射。
 - **扩展算法**：统一模块契约与本机 Python 插件，保留完整参数、运行版本、样本映射和来源记录。
@@ -56,6 +57,7 @@ CPU 可完整运行。当前 26 个内置模块均可接入可选 CuPy / CUDA �
 
 | 内容 | 入口 |
 | --- | --- |
+| 0.8.6 固定 τ 的 g² 窗长曲线 | [窗长扫描](docs/CORRELATION_WINDOW_0_8_6.md) |
 | 完整操作、格式与兼容边界 | [使用指南](docs/USER_GUIDE.md) |
 | 0.8.5 双幅时序与多曲线验证 | [算法与结果比较](docs/PAIRED_COMPARISON_0_8_5.md) |
 | 0.8.4 大序列、滑窗复用与 GPU | [处理链与验证边界](docs/GPU_PIPELINE_0_8_4.md) |
@@ -77,6 +79,8 @@ CPU 可完整运行。当前 26 个内置模块均可接入可选 CuPy / CUDA �
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m pytest tests\test_gpu_pipeline_0_8_4.py -q
 .\.venv\Scripts\python.exe -m pytest tests\test_paired_comparison_0_8_5.py -q
+.\.venv\Scripts\python.exe -m pytest tests\test_correlation_window.py -q
+.\.venv\Scripts\python.exe tools\smoke_correlation_window.py
 .\.venv\Scripts\python.exe tools\smoke_paired_comparison_0_8_5.py
 .\.venv\Scripts\python.exe tools\smoke_gpu_pipeline_0_8_4.py
 .\.venv\Scripts\python.exe tools\smoke_sidebar_data_0_8_3.py

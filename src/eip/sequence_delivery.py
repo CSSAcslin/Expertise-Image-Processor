@@ -157,11 +157,11 @@ def _export_side(folder, side, context):
         names = ["_".join(f"{axis}{position}" for axis, position in zip(axes, index)) or "value" for index in np.ndindex(tuple(shape))]
         with (folder / "export.csv").open("x", encoding="utf-8-sig", newline="") as table, (folder / "references.jsonl").open(encoding="utf-8") as references:
             writer = csv.writer(table)
-            writer.writerow(["output_index", "time_seconds", "lag_samples", *names])
+            writer.writerow(["output_index", "time_seconds", *(["window_samples"] if contract["sequence_axis"]=="W" else []), "lag_samples", *names])
             for index, (value, line) in enumerate(zip(values, references)):
                 context.check_cancelled()
                 reference = json.loads(line)
-                writer.writerow([index, reference.get("time"), reference.get("correlation", {}).get("lag_samples"), *value.reshape(-1).tolist()])
+                writer.writerow([index, reference.get("time"), *([reference.get("correlation", {}).get("window")] if contract["sequence_axis"]=="W" else []), reference.get("correlation", {}).get("lag_samples"), *value.reshape(-1).tolist()])
         filename = "export.csv"
     else:
         # Each sample retains P and C dimensions. No selected-channel shortcut.

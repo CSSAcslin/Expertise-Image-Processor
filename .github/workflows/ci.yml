@@ -51,3 +51,6 @@ jobs:
       - name: Browser sidebar data workflow
         if: matrix.python == '3.14'
         run: python tools/smoke_sidebar_data_0_8_3.py
+      - name: Browser fixed-tau window scan
+        if: matrix.python == '3.14'
+        run: python tools/smoke_correlation_window.py

@@ -159,6 +159,7 @@ class SequenceEngine:
         from eip.gpu_pipeline import DevicePipeline
         self.device = DevicePipeline(self)
         self.last_correlation = {}
+        self.window_references = {}
         self.resolved_bindings = {}
         self._sides = []
         self.range_cache = range_cache
@@ -198,9 +199,17 @@ class SequenceEngine:
                     from eip.modes.split_correlation.photometry import Photometry
                     self.instances[i] = Photometry(PhotometryConfig.from_dict(dict(p,normalization="none")))
                 elif a in CORRELATIONS:
-                    lags,centers,_,_ = correlation_layout(c,p,center,single_here)
+                    if a=="correlation_window":
+                        from eip.correlation_windows import window_scan_layout
+                        windows,anchor = window_scan_layout(c.length,p)
+                        lags,centers = [p["lag"]],range(anchor,anchor+1)
+                        op["windows"] = windows
+                    else:
+                        lags,centers,_,_ = correlation_layout(c,p,center,single_here)
                     op.update(lags=lags,centers=centers)
                     self.mappings[n["id"]] = dict(lag_units="upstream_samples",window_units="upstream_samples",lags=lags,centers=dict(start=centers.start,stop=centers.stop,step=centers.step))
+                    if a=="correlation_window":
+                        self.mappings[n["id"]].update(axis="W",coordinates=windows,unit="upstream_samples",even_window="one_extra_sample_on_right")
                 elif a=="line_extract" and p["mode"]=="segment":
                     length=float(np.hypot(p["x1"]-p["x0"],p["y1"]-p["y0"]))
                     self.mappings[n["id"]]=dict(axis="R",unit="pixel",coordinates=np.linspace(0,length,p["samples"]).tolist(),endpoints=[[p["x0"],p["y0"]],[p["x1"],p["y1"]]],interpolation=p["interpolation"])
@@ -665,11 +674,22 @@ class SequenceEngine:
         self.statistics[i] = dict(mean=mean,variance=variance,count=count,scales=scales,frames=c.length)
         return self.statistics[i]
 
+    def correlation_position(self,i,index):
+        from eip.correlation_windows import window_bounds
+        op = self.operations[i];p = op["parameters"]
+        if op["algorithm"]=="correlation_window":
+            center,lag,window = op["centers"][0],op["lags"][0],op["windows"][index]
+        else:
+            center,lag = (op["centers"][0],op["lags"][index]) if p["analysis"]=="curve" else (op["centers"][index],op["lags"][0])
+            window = p["window"]
+        start,stop = window_bounds(center,window)
+        return center,lag,window,start,stop
+
     def correlate(self,i,index,*,device=False):
         from eip.modes.split_correlation.correlation import RollingMoments
         op = self.operations[i]
         p = op["parameters"]
-        center,lag = (op["centers"][0],op["lags"][index]) if p["analysis"]=="curve" else (op["centers"][index],op["lags"][0])
+        center,lag,window,start,stop = self.correlation_position(i,index)
         backend=self.backends[i]
         xp=backend.xp
         get=(lambda j:self.device.get(i,j,backend)) if backend.name=="gpu" else (lambda j:self.get(i,j))
@@ -677,20 +697,44 @@ class SequenceEngine:
         # no statistics node is present. It is a numerical identity, not a filter.
         baseline = xp.nan_to_num(get(center),nan=0.,posinf=0.,neginf=0.)
         previous = self.last_correlation.get(i)
-        can_roll = previous and previous["lag"]==lag and 0<center-previous["center"]<p["window"] and index%256!=0
+        can_roll = previous and previous["lag"]==lag and start<previous["stop"] and previous["start"]<stop and index%256!=0
         if can_roll:
             moments = previous["moments"]
-            old = previous["center"]
-            for j in range(old-p["window"]//2,center-p["window"]//2):
-                moments.add(get(j)[0],get(j+lag)[1],-1)
-            indices = range(old+p["window"]//2+1,center+p["window"]//2+1)
+            old_start,old_stop = previous["start"],previous["stop"]
+            for bounds in ((old_start,min(start,old_stop)),(max(stop,old_start),old_stop)):
+                for j in range(*bounds):
+                    moments.add(get(j)[0],get(j+lag)[1],-1)
+            additions = ((start,min(old_start,stop)),(max(old_stop,start),stop))
         else:
             moments = RollingMoments(baseline,SimpleNamespace(**p),self.backends[i])
-            indices = range(center-p["window"]//2,center+p["window"]//2+1)
-        for j in indices:
-            moments.add(get(j)[0],get(j+lag)[1])
-        self.last_correlation[i] = dict(lag=lag,center=center,moments=moments)
+            additions = ((start,stop),)
+        for bounds in additions:
+            for j in range(*bounds):
+                moments.add(get(j)[0],get(j+lag)[1])
+        self.last_correlation[i] = dict(lag=lag,center=center,start=start,stop=stop,moments=moments)
         return moments.result(device=device)
+
+    def correlation_reference(self,i,index):
+        op = self.operations[i]
+        center,lag,window,start,stop = self.correlation_position(i,index)
+        r = self.ref(i,center)
+        previous = self.window_references.get(i) if op["algorithm"]=="correlation_window" else None
+        if previous and previous["center"]==center and previous["lag"]==lag and start<=previous["start"] and stop>=previous["stop"]:
+            total,minimum,maximum,known = (previous[k] for k in ("total","minimum","maximum","known"))
+            additions = ((start,previous["start"]),(previous["stop"],stop))
+        else:
+            total,minimum,maximum,known = 0.,None,None,0
+            additions = ((start,stop),)
+        for bounds in additions:
+            for j in range(*bounds):
+                left,right = self.ref(i,j).get("time"),self.ref(i,j+lag).get("time")
+                if left is not None and right is not None:
+                    delta = right-left;total += delta;known += 1
+                    minimum = delta if minimum is None else min(minimum,delta)
+                    maximum = delta if maximum is None else max(maximum,delta)
+        if op["algorithm"]=="correlation_window":
+            self.window_references[i] = dict(center=center,lag=lag,start=start,stop=stop,total=total,minimum=minimum,maximum=maximum,known=known)
+        return dict(r,correlation=dict(module_id=op["node"]["id"],center_sample=center,lag_samples=lag,window=window,left_start=start,left_stop=stop,right_start=start+lag,right_stop=stop+lag,lag_seconds=total/window if known==window else None,lag_seconds_min=minimum,lag_seconds_max=maximum,known_pairs=known))
 
     def ref(self,stage,index):
         self.context.check_cancelled()
@@ -724,19 +768,7 @@ class SequenceEngine:
             spans = [v.get("source_span",[v.get("source_sample",0),v.get("source_sample",0)+1]) for v in (first,last)]
             r = dict(r,source_span=[min(v[0] for v in spans),max(v[1] for v in spans)],contribution=dict(module_id=n["id"],upstream_start=start,upstream_stop=start+size,operation=a,source_span_is_envelope=True))
         elif a in CORRELATIONS:
-            center,lag = (op["centers"][0],op["lags"][index]) if p["analysis"]=="curve" else (op["centers"][index],op["lags"][0])
-            r = self.ref(i,center)
-            half = p["window"]//2
-            total,minimum,maximum,known = 0.,None,None,0
-            for j in range(center-half,center+half+1):
-                left,right = self.ref(i,j).get("time"),self.ref(i,j+lag).get("time")
-                if left is not None and right is not None:
-                    delta = right-left
-                    total += delta
-                    known += 1
-                    minimum = delta if minimum is None else min(minimum,delta)
-                    maximum = delta if maximum is None else max(maximum,delta)
-            r = dict(r,correlation=dict(module_id=n["id"],center_sample=center,lag_samples=lag,window=p["window"],left_start=center-half,left_stop=center+half+1,right_start=center-half+lag,right_stop=center+half+1+lag,lag_seconds=total/p["window"] if known==p["window"] else None,lag_seconds_min=minimum,lag_seconds_max=maximum,known_pairs=known))
+            r = self.correlation_reference(i,index)
         elif a=="axis_slice" and op["parameters"]["output"]=="main" and op["parameters"]["axis"]==self.contracts[i].sequence_axis:
             r=dict(self.ref(i,op["parameters"]["index"]),selection=dict(axis=op["parameters"]["axis"],index=op["parameters"]["index"]))
         elif a=="global_statistics" and p["output"]=="main":
@@ -753,6 +785,7 @@ class SequenceEngine:
                 state.close()
         self.temporal_states.clear()
         self.last_correlation.clear()
+        self.window_references.clear()
         for instance in self.instances.values():
             if hasattr(instance,"close"):
                 instance.close()
