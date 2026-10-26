@@ -140,11 +140,12 @@ class SequenceEngine:
         self.source = Source(reader,self.context,workdir,input_kind)
         self.center,self.single = center,single
         self.dependencies = normalize_nodes(dependencies,check_types=False)[0]
-        self.plan = compile_flow(nodes,self.source.contract,center=center,single=single,following_nodes=self.dependencies)
+        self.resources = ResourceSettings.from_dict(resources) if resources is not None else None
+        allocation = (self.resources.inspection_mb if inspection else self.resources.job_mb) if self.resources else None
+        self.plan = compile_flow(nodes,self.source.contract,center=center,single=single,following_nodes=self.dependencies,memory_mb=allocation)
         self.nodes = [n for n in self.plan["nodes"] if n["enabled"]]
         self.contracts = [self.source.contract]
         self.operations,self.instances,self.statistics = [],{},{}
-        self.resources = ResourceSettings.from_dict(resources) if resources is not None else None
         legacy_mb = [n.get("execution",{}).get("memory_mb") or 256 for n in self.nodes] or [256]
         self.inspection = inspection
         self.budget = ((self.resources.inspection_mb if inspection else self.resources.job_mb) if self.resources else max(legacy_mb))*MIB
@@ -183,7 +184,7 @@ class SequenceEngine:
                         raise ValueError("时间裁剪后没有样本")
                     op["indices"] = indices
                 single_here = single and not needs_full_sequence(self.nodes[i+1:])
-                stage_plan = compile_flow([n],c,center=center,single=single_here,following_nodes=[*self.nodes[i+1:],*self.dependencies],validate_bindings=False)
+                stage_plan = compile_flow([n],c,center=center,single=single_here,following_nodes=[*self.nodes[i+1:],*self.dependencies],validate_bindings=False,memory_mb=allocation)
                 stage = stage_plan["output"]
                 after = type(c)(**{k:tuple(stage[k]) if k in {"shape","origin"} else stage[k] for k in type(c).__dataclass_fields__})
                 if "indices" in op:

@@ -185,7 +185,7 @@ def correlation_layout(c, p, center=None, single=False):
     return lags,centers,first,last
 
 
-def compile_flow(nodes, source, *, center=None, single=False, strict=True, following_nodes=(), validate_bindings=True):
+def compile_flow(nodes, source, *, center=None, single=False, strict=True, following_nodes=(), validate_bindings=True, memory_mb=None):
     canonical,_,_ = normalize_nodes(nodes,check_types=False)
     c = source if isinstance(source,Contract) else source_contract(source)
     stages,errors = [],[]
@@ -255,7 +255,14 @@ def compile_flow(nodes, source, *, center=None, single=False, strict=True, follo
                         raise ValueError("双幅配准需要单幅灰度强度矩阵 YX")
                     from eip.modes.split_correlation.config import GeometryConfig
                     from eip.modes.split_correlation.geometry import geometry_bounds
-                    if int(np.prod(c.shape))*64>(n.get("execution",{}).get("memory_mb") or 256)*1024**2*2/3:
+                    # A blank instance limit inherits the workbench allocation.
+                    # Legacy callers without a policy keep their 256 MiB default.
+                    limit = n.get("execution",{}).get("memory_mb")
+                    if limit is None:
+                        limit = 256 if memory_mb is None else memory_mb
+                    if memory_mb is not None:
+                        limit = min(limit,memory_mb)
+                    if int(np.prod(c.shape))*64>limit*1024**2*2/3:
                         raise ValueError("配准工作数组超过此模块内存预算；请先裁剪或增加执行内存")
                     x0,y0,x1,y1 = geometry_bounds(GeometryConfig.from_dict(p),c.shape)
                     c = replace(c,axes="PYX",shape=(2,y1-y0,x1-x0),dtype="float64",statistics=False,origin=(0,0))

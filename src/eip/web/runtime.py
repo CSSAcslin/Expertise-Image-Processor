@@ -493,7 +493,7 @@ class Workbench:
     def module_plan(self,value):
         entry = self.get_source(value["source_id"])
         contract = source_contract(entry["meta"],entry.get("result_kind","image"))
-        return compile_flow(value.get("steps",[]),contract,center=value.get("center"),single=value.get("single",False),strict=False)
+        return compile_flow(value.get("steps",[]),contract,center=value.get("center"),single=value.get("single",False),strict=False,memory_mb=self.resources.job_mb)
 
     def _module_nodes(self, steps, dependencies=()):
         nodes,_,_ = normalize_nodes(steps,check_types=False)
@@ -516,7 +516,7 @@ class Workbench:
         identifier = value.get("inspection_id")
         if identifier is not None and (not isinstance(identifier,str) or not 1<=len(identifier)<=80):
             raise ValueError("检查标识无效")
-        plan = compile_flow(nodes,source_contract(entry["meta"],entry.get("result_kind","image")),single=True,following_nodes=dependencies)
+        plan = compile_flow(nodes,source_contract(entry["meta"],entry.get("result_kind","image")),single=True,following_nodes=dependencies,memory_mb=self.resources.inspection_mb)
         side_output = value.get("side_output")
         if side_output is not None and (not isinstance(side_output,str) or side_output not in {
             f"{stage['id']}:{side['port']}" for stage in plan["stages"] for side in stage.get("side_outputs",[])
@@ -564,7 +564,7 @@ class Workbench:
         sample = value.get("sample_index",0)
         if center is not None and (type(center) is not int or center<0) or type(sample) is not int or sample<0:
             raise ValueError("试算样本与关联中心必须为非负整数位置")
-        plans = [compile_flow(nodes,source_contract(e["meta"],e.get("result_kind","image")),center=center,single=mode=="trial",following_nodes=dependencies) for e in entries]
+        plans = [compile_flow(nodes,source_contract(e["meta"],e.get("result_kind","image")),center=center,single=mode=="trial",following_nodes=dependencies,memory_mb=self.resources.job_mb) for e in entries]
         identifier = uuid.uuid4().hex[:12]
         name = display_name(value.get("name"),automatic_name(entries[0]["meta"]["name"],"模块试算" if mode=="trial" else "模块处理"))
         payload = dict(id=identifier,mode=mode,contract_version=3,steps=list(nodes),sources=[e["source"] for e in entries],revisions=[e["meta"]["revision"] for e in entries],center=center,sample_index=sample,output_dir=str(Path(value.get("output_dir") or self.workspace/"outputs").resolve()),display_name=name,seed=0,config_revision=value.get("config_revision"),provenance=[dict(source_id=e["id"],lineage=e.get("lineage",[])) for e in entries])
