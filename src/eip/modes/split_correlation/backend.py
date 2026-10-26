@@ -6,6 +6,8 @@ import numpy as np
 
 
 def devices():
+    # Optional packages may be installed after the workbench was started.
+    importlib.invalidate_caches()
     result = {"cpu": True,"gpu": False,"gpu_name": None,"reason": "未安装可选 CuPy / CUDA 运行环境"}
     if importlib.util.find_spec("cupy") is not None:
         try:

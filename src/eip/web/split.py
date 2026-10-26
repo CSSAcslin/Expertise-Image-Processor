@@ -28,6 +28,12 @@ class SplitService:
         self.workbench = workbench
         self.devices = devices()
 
+    def refresh_devices(self):
+        detected = devices()
+        with self.workbench.lock:
+            self.devices = detected
+        return detected
+
     def _source(self,value):
         entry = self.workbench.get_source(value["source_id"])
         if entry["role"] != "input":

@@ -94,6 +94,10 @@ def create_app(workspace: Path | None = None, restore_session: Path | None = Non
     def clear_resources():
         return workbench().clear_caches()
 
+    @app.post("/api/resources/refresh")
+    def refresh_resources():
+        return workbench().refresh_resources()
+
     @app.get("/api/results/{identifier}/delete-preview")
     def deletion_preview(identifier: str):
         return workbench().results.deletion_preview(identifier)

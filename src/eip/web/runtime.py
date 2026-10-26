@@ -12,6 +12,7 @@ import math
 import os
 import multiprocessing
 import queue
+import sys
 import threading
 import time
 import uuid
@@ -256,7 +257,12 @@ class Workbench:
             return dict(settings=self.resources.record(),processing_mb=self.resources.processing_mb,job_mb=self.resources.job_mb,inspection_mb=self.resources.inspection_mb,
                         system=system_memory(),processes=rows,frame_cache_bytes=self.frames.size,
                         frame_cache_count=len(self.frames.frames),devices=self.split.devices,
+                        runtime=dict(python_executable=sys.executable,python_version=sys.version.split()[0],code_directory=str(Path(__file__).resolve().parents[1])),
                         busy=bool(self.pending or self.active or self.inspection.active))
+
+    def refresh_resources(self):
+        self.split.refresh_devices()
+        return self.resource_status()
 
     def update_resources(self,value):
         settings = ResourceSettings.from_dict(value)

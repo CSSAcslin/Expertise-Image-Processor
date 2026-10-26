@@ -25,6 +25,9 @@ dialog{border:1px solid #465b70;border-radius:8px;background:#1b2532;color:#e3ec
 /* Resource settings. Result browsing stays in the shared workbench library. */
 #run-settings-dialog{width:min(650px,94vw);max-height:90vh;overflow:auto}
 .resource-readout{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;max-width:100%}
+.resource-runtime{min-width:0;color:var(--dim);font-size:11px}
+.resource-runtime summary{cursor:pointer;line-height:24px}
+.resource-runtime .resource-readout{margin:6px 0 0;font-size:11px;line-height:1.7;user-select:text}
 .alignment-settings{min-width:0;container-type:inline-size}
 .alignment-section{padding:0 0 14px;margin:0 0 14px;border-bottom:1px solid var(--line);min-width:0}
 .alignment-section:last-child{padding-bottom:0;margin-bottom:0;border-bottom:0}
