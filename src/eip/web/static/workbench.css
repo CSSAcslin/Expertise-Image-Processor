@@ -25,5 +25,28 @@ dialog{border:1px solid #465b70;border-radius:8px;background:#1b2532;color:#e3ec
 /* Resource settings. Result browsing stays in the shared workbench library. */
 #run-settings-dialog{width:min(650px,94vw);max-height:90vh;overflow:auto}
 .resource-readout{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;max-width:100%}
+.alignment-settings{min-width:0;container-type:inline-size}
+.alignment-section{padding:0 0 14px;margin:0 0 14px;border-bottom:1px solid var(--line);min-width:0}
+.alignment-section:last-child{padding-bottom:0;margin-bottom:0;border-bottom:0}
+.alignment-section h3{margin:0 0 10px;font-size:12px;font-weight:600;color:var(--text)}
+.alignment-button-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:10px}
+.alignment-section>h3+.alignment-button-grid{margin-top:0}
+.alignment-settings button[data-canvas-tool],.alignment-settings button[data-geometry]{display:flex;align-items:center;justify-content:center;gap:6px;min-width:0;width:100%;min-height:34px;padding:7px 8px;font-size:12px;line-height:18px;white-space:nowrap}
+.alignment-settings button .svg-icon{width:15px;height:15px;flex-shrink:0}
+.alignment-coordinates{margin-top:10px}
+.alignment-coordinates>summary{font-size:11px;color:var(--dim);cursor:pointer;line-height:24px}
+.alignment-coordinate-group{margin-top:12px}
+.alignment-coordinate-group h4{margin:0 0 6px;font-size:11px;font-weight:500;color:var(--dim)}
+.alignment-settings .flow-fields{margin-top:0;gap:9px}
+.alignment-settings .flow-fields label{font-size:11px;gap:4px}
+.alignment-settings .field-meta{display:none}
+.alignment-settings .alignment-orientation{margin-top:10px}
+.alignment-orientation .parameter-field>label{flex-direction:row;align-items:center;justify-content:space-between;gap:5px;padding:7px 8px;min-height:34px;border:1px solid var(--line);border-radius:4px}
+.alignment-settings .alignment-orientation input[type=checkbox]{width:14px;height:14px;align-self:auto;margin:0;flex-shrink:0}
+.alignment-settings .alignment-sampling{display:block;margin-top:10px}
+.alignment-sampling .parameter-field>label{display:grid;grid-template-columns:36px minmax(0,1fr);align-items:center;gap:8px}
+.alignment-proposal{display:block;margin-top:8px;color:var(--accent);font-size:11px;line-height:1.6;font-variant-numeric:tabular-nums}
+.alignment-proposal[hidden]{display:none}
+@container(max-width:245px){.alignment-settings button[data-canvas-tool],.alignment-settings button[data-geometry]{gap:4px;padding-inline:5px;font-size:11px}.alignment-orientation .parameter-field>label{padding-inline:6px;font-size:10px}}
 .danger{color:#f3a6a6;border-color:#7e4c55}
 #run-settings-dialog .dialog-body{max-height:calc(90dvh - 65px);gap:14px;padding:18px}
