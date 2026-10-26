@@ -98,6 +98,10 @@ def create_app(workspace: Path | None = None, restore_session: Path | None = Non
     def refresh_resources():
         return workbench().refresh_resources()
 
+    @app.get("/api/resources/gpu")
+    def gpu_memory():
+        return workbench().gpu_memory_status()
+
     @app.get("/api/results/{identifier}/delete-preview")
     def deletion_preview(identifier: str):
         return workbench().results.deletion_preview(identifier)

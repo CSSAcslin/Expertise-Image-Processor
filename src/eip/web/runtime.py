@@ -36,6 +36,7 @@ from eip.module_registry import catalog, normalize_nodes, temporal, output_shape
 from eip.module_contracts import compile_flow, source_contract
 from eip.sequence_processing import sequence_job_entry
 from eip.resources import load_resources, ResourceSettings, process_memory, system_memory, MIB
+from eip.gpu_memory import GpuMemoryMonitor
 
 
 def workspace_locked(method):
@@ -188,6 +189,7 @@ class Workbench:
         self.resources = load_resources(self.resource_path)
         self.frames = FrameStore(self.resources.preview_mb*MIB//2)
         self.lock = threading.RLock()
+        self.gpu_memory = GpuMemoryMonitor()
         self.sources = OrderedDict()
         self.algorithms = {spec.id: spec for spec in BUILTINS}
         self.jobs = OrderedDict()
@@ -263,6 +265,16 @@ class Workbench:
     def refresh_resources(self):
         self.split.refresh_devices()
         return self.resource_status()
+
+    def gpu_memory_status(self):
+        with self.lock:
+            pids = [os.getpid(), self.preview.process.pid]
+            if self.inspection.process:
+                pids.append(self.inspection.process.pid)
+            if self.active:
+                pids.append(self.active["process"].pid)
+            budget = self.resources.gpu_mb
+        return dict(self.gpu_memory.sample(pid for pid in pids if pid), budget_mb=budget)
 
     def update_resources(self,value):
         settings = ResourceSettings.from_dict(value)

@@ -28,6 +28,28 @@ dialog{border:1px solid #465b70;border-radius:8px;background:#1b2532;color:#e3ec
 .resource-runtime{min-width:0;color:var(--dim);font-size:11px}
 .resource-runtime summary{cursor:pointer;line-height:24px}
 .resource-runtime .resource-readout{margin:6px 0 0;font-size:11px;line-height:1.7;user-select:text}
+.gpu-memory-monitor{min-width:0;padding:10px 12px;border:1px solid var(--line);border-radius:5px;background:#15212c}
+.gpu-memory-heading{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.gpu-memory-heading h3{margin:0;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500}
+.gpu-memory-heading h3 svg{width:14px;height:14px;color:var(--accent)}
+.gpu-memory-heading [data-gpu-state]{margin-left:auto;color:var(--dim);font-size:10px}
+.gpu-memory-heading .icon-button{width:23px;min-width:23px;height:23px;min-height:23px;padding:4px}
+.gpu-memory-device+.gpu-memory-device{margin-top:10px;padding-top:8px;border-top:1px solid var(--line)}
+.gpu-memory-values{display:flex;justify-content:space-between;align-items:center;gap:10px;min-width:0;font-size:11px}
+.gpu-memory-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#b9cbd8}
+.gpu-memory-values strong{flex-shrink:0;font-size:11px;font-weight:500;font-variant-numeric:tabular-nums}
+.gpu-memory-chart{display:block;width:100%;height:36px;margin:5px 0;color:var(--accent)}
+.gpu-memory-grid{stroke:#304352;stroke-width:.5;fill:none;vector-effect:non-scaling-stroke}
+.gpu-memory-line{stroke:currentColor;stroke-width:1.5;fill:none;vector-effect:non-scaling-stroke}
+.gpu-memory-point{fill:currentColor}
+.gpu-memory-device.warning .gpu-memory-chart{color:#efb572}
+.gpu-memory-metrics,.gpu-memory-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:10px;color:var(--dim);font-variant-numeric:tabular-nums}
+.gpu-memory-metrics>span{display:flex;align-items:center;gap:4px}
+.gpu-memory-metrics svg{width:11px;height:11px}
+.gpu-memory-footer{margin-top:8px;color:#91a7bb}
+.gpu-memory-empty{font-size:11px;color:var(--dim);margin:3px 0 10px}
+.gpu-memory-monitor.stale .gpu-memory-device{opacity:.55}
+@media(max-width:650px){.gpu-memory-values{align-items:flex-start;flex-direction:column;gap:4px}.gpu-memory-name{max-width:100%}.gpu-memory-metrics{flex-wrap:wrap}}
 .alignment-settings{min-width:0;container-type:inline-size}
 .alignment-section{padding:0 0 14px;margin:0 0 14px;border-bottom:1px solid var(--line);min-width:0}
 .alignment-section:last-child{padding-bottom:0;margin-bottom:0;border-bottom:0}

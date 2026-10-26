@@ -1,10 +1,12 @@
 import { api } from "./api.js";
 import { setupResultLibrary } from "./result-library.js";
 import { setupSourceLibrary } from "./source-library.js";
+import { setupGpuMemory } from "./gpu-memory.js";
 const $=id=>document.getElementById(id);
 const mib=v=>v==null?"未知":(v/1048576).toFixed(1)+" MiB";
 export function setupManagement(bridge){
  const guard=fn=>async(...args)=>{try{return await fn(...args);}catch(e){bridge.report(e.message,true);}};
+ const gpuMonitor=setupGpuMemory($("run-settings-dialog"),$("resource-device"));
  const runtimeDetails=document.createElement("details"),runtimeInfo=document.createElement("pre");
  runtimeDetails.className="resource-runtime";runtimeDetails.innerHTML="<summary>运行环境</summary>";
  runtimeInfo.className="resource-readout";runtimeDetails.append(runtimeInfo);$("resource-readout").after(runtimeDetails);
@@ -19,6 +21,7 @@ export function setupManagement(bridge){
   if(data.runtime)runtimeInfo.textContent=`Python ${data.runtime.python_version}\n${data.runtime.python_executable}\n程序位置\n${data.runtime.code_directory}`;
   $("resource-save").disabled=data.busy;
   $("resource-save").title=data.busy?"等待或取消任务 / 阶段检查后保存":"保存至当前工作区";
+  if(refresh)gpuMonitor.refresh();
  }
  $("open-run-settings").addEventListener("click",guard(()=>resources(true)));
  $("resource-refresh").onclick=guard(async()=>{const button=$("resource-refresh");button.disabled=true;button.textContent="检测中…";try{await resources(false,true);}finally{button.disabled=false;button.textContent="重新检测";}});
