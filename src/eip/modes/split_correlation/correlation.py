@@ -10,6 +10,7 @@ class CorrelationEstimator(Protocol):
     """Extension contract: joint valid count, local means, positive/negative lags."""
 
     def add(self, left: np.ndarray,right: np.ndarray,sign: int=1): ...
+    def add_many(self, left: np.ndarray,right: np.ndarray,sign: int=1): ...
     def result(self): ...
 
 
@@ -21,10 +22,30 @@ class RollingMoments:
         self.baseline = self.xp.asarray(baseline,dtype=self.xp.float64)
         self.sums = self.xp.zeros((4,*baseline.shape[1:]),dtype=self.xp.float64)
         self.min_mean,self.min_samples = config.min_mean,config.min_samples
+        # HostDevice adapters intentionally keep the array path even if their
+        # advertised backend name is GPU: they cannot validate CUDA kernels.
+        self.fused_gpu = (getattr(self.xp,"__name__",None) == "cupy"
+                          and type(self.sums).__module__.split(".")[0] == "cupy")
+        self.implementation = "cupy_fused_float64" if self.fused_gpu else "array_float64"
+        self._kernels = None
+        # Reuse views as well as kernels: repeatedly indexing six CuPy arrays
+        # in Python is measurable overhead for point / small-ROI signals.
+        if self.fused_gpu:
+            self._sum_views = tuple(self.sums)
+            self._base_views = (self.baseline[0],self.baseline[1])
+
+    def _gpu_kernels(self):
+        if self._kernels is None:
+            from .gpu_moments import moment_kernels
+            self._kernels = moment_kernels(self.xp)
+        return self._kernels
 
     def add(self,left,right,sign=1):
         xp = self.xp
         left,right = xp.asarray(left,dtype=xp.float64),xp.asarray(right,dtype=xp.float64)
+        if self.fused_gpu:
+            self._gpu_kernels()[0](left,right,*self._base_views,sign,*self._sum_views)
+            return
         valid = xp.isfinite(left)&xp.isfinite(right)&xp.isfinite(self.baseline[0])&xp.isfinite(self.baseline[1])
         dl = xp.where(valid,left-self.baseline[0],0)
         dr = xp.where(valid,right-self.baseline[1],0)
@@ -33,8 +54,38 @@ class RollingMoments:
         self.sums[2] += sign*(dl*dr)
         self.sums[3] += sign*valid
 
-    def result(self, *, device=False):
+    def add_many(self,left,right,sign=1):
+        """Add a bounded ``(K, *pixel_shape)`` batch in original sample order.
+
+        This is not time averaging or a parallel reduction. The caller owns the
+        batch size and its budget. Existing float64 device arrays, including
+        strided views, need no extra K-sized kernel work arrays. Other input
+        types may require float64 conversion just as in :meth:`add`.
+        """
         xp = self.xp
+        left,right = xp.asarray(left,dtype=xp.float64),xp.asarray(right,dtype=xp.float64)
+        if (left.shape != right.shape or left.ndim != self.baseline.ndim
+                or left.shape[1:] != self.baseline.shape[1:]):
+            raise ValueError("批量配对必须具有相同的 (样本数, *像素形状)")
+        if not len(left):
+            return
+        if self.fused_gpu:
+            self._gpu_kernels()[1](left,right,*self._base_views,sign,len(left),*self._sum_views)
+        else:
+            for l,r in zip(left,right):
+                self.add(l,r,sign)
+
+    def result(self, *, device=False,count=True):
+        xp = self.xp
+        if self.fused_gpu:
+            args = (*self._sum_views,*self._base_views,self.min_mean,self.min_samples)
+            if count:
+                result,n = self._gpu_kernels()[2](*args)
+            else:
+                result,n = self._gpu_kernels()[3](*args),None
+            if device:
+                return result,n
+            return self.backend.host(result),self.backend.host(n) if count else None
         n = self.sums[3]
         safe = xp.maximum(n,1)
         ml,mr = self.sums[0]/safe,self.sums[1]/safe
@@ -45,8 +96,8 @@ class RollingMoments:
             result = xp.where(valid,1+covariance/(il*ir),xp.nan)
         result = xp.where(xp.isfinite(result),result,xp.nan)
         if device:
-            return result,n.round().astype(xp.uint32)
-        return self.backend.host(result),self.backend.host(n).round().astype(np.uint32)
+            return result,n.round().astype(xp.uint32) if count else None
+        return self.backend.host(result),self.backend.host(n).round().astype(np.uint32) if count else None
 
 
 class PairCache:

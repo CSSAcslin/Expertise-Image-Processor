@@ -14,6 +14,7 @@ import json
 import hashlib
 import shutil
 import struct
+from contextlib import nullcontext
 import numpy as np
 
 from eip.algorithms import BuiltinAlgorithm, Pipeline, RunContext, preserve_dtype
@@ -76,26 +77,37 @@ class IndexRanges:
 
 
 class Source:
-    def __init__(self,reader,context,workdir,input_kind="image"):
+    def __init__(self,reader,context,workdir,input_kind="image",profiler=None):
         self.reader,self.context = reader,context
+        self.profiler = profiler
         self.contract = source_contract(asdict(reader.meta),input_kind)
         self.spooled = None
+        self.ref_cache = OrderedDict()
         if not hasattr(reader,"read_frame"):
             # Decode ordinary video once in the compute worker. The exact count
             # and PTS come from decoding, never from average FPS. RAM stays bounded.
             folder = Path(workdir)/"decoded"
             folder.mkdir(parents=True,exist_ok=False)
             self.spooled = folder
-            self.ref_cache = OrderedDict()
             count = 0
             with (folder/"references.jsonl").open("wb") as refs,(folder/"offsets.bin").open("wb") as offsets:
-                for i,frame in enumerate(reader.iter_frames(Selection())):
+                iterator = iter(reader.iter_frames(Selection()))
+                while True:
                     context.check_cancelled()
+                    with profiler.measure("input_read") if profiler else nullcontext():
+                        try:
+                            frame = next(iterator)
+                        except StopIteration:
+                            break
+                    i = count
+                    if profiler:
+                        profiler.add_input(frame.pixels.nbytes)
                     if shutil.disk_usage(folder).free < frame.pixels.nbytes*2+16*1024**2:
                         raise ValueError("时间编辑需要临时视频索引，输出盘剩余空间不足")
-                    np.save(folder/f"{i}.npy",frame.pixels,allow_pickle=False)
-                    offsets.write(struct.pack("<Q",refs.tell()))
-                    refs.write((json.dumps(asdict(frame.ref),allow_nan=False)+"\n").encode())
+                    with profiler.measure("index_write") if profiler else nullcontext():
+                        np.save(folder/f"{i}.npy",frame.pixels,allow_pickle=False)
+                        offsets.write(struct.pack("<Q",refs.tell()))
+                        refs.write((json.dumps(asdict(frame.ref),allow_nan=False)+"\n").encode())
                     count += 1
                     if i%100==0:
                         context.log(f"正在建立真实视频样本索引：{i+1} 帧")
@@ -104,10 +116,25 @@ class Source:
             self.contract = replace(self.contract,length=count)
 
     def get(self,i):
+        if self.profiler is None:
+            return self._get(i)
+        with self.profiler.measure("input_read"):
+            value = self._get(i)
+        self.profiler.add_input(value.nbytes)
+        return value
+
+    def _get(self,i):
         self.context.check_cancelled()
         if self.spooled:
             return np.load(self.spooled/f"{i}.npy",allow_pickle=False)
-        return self.reader.read_sample(i) if hasattr(self.reader,"read_sample") else self.reader.read_frame(i).pixels
+        if hasattr(self.reader,"read_sample"):
+            return self.reader.read_sample(i)
+        frame = self.reader.read_frame(i)
+        self.ref_cache[i] = asdict(frame.ref)
+        self.ref_cache.move_to_end(i)
+        if len(self.ref_cache)>256:
+            self.ref_cache.popitem(last=False)
+        return frame.pixels
 
     def ref(self,i):
         r = self.reader
@@ -121,6 +148,9 @@ class Source:
                     self.ref_cache.popitem(last=False)
             self.ref_cache.move_to_end(i)
             return dict(self.ref_cache[i])
+        if i in self.ref_cache:
+            self.ref_cache.move_to_end(i)
+            return dict(self.ref_cache[i])
         if hasattr(r,"sample_ref"):
             return r.sample_ref(i)
         if hasattr(r,"times"):
@@ -129,15 +159,23 @@ class Source:
             return dict(index=i,time=float(r.times[i]) if r.times is not None else None,pts=ticks-int(r.ticks[0]) if ticks is not None else None,source_number=r.first_number+i,trigger_time=(ticks-r.trigger_ticks)/TICKS_PER_SECOND if ticks is not None else None)
         if hasattr(r,"timestamps"):
             return dict(index=i,time=r.timestamps[i] if r.timestamps is not None else i*r.source.interval if r.source.interval else None,pts=None,source_number=r.source_numbers[i] if r.source_numbers else None,trigger_time=r.trigger_times[i] if r.trigger_times else None)
-        return asdict(r.read_frame(i).ref)
+        with self.profiler.measure("input_read") if self.profiler else nullcontext():
+            frame = r.read_frame(i)
+        if self.profiler:
+            self.profiler.add_input(frame.pixels.nbytes)
+        self.ref_cache[i] = asdict(frame.ref)
+        if len(self.ref_cache)>256:
+            self.ref_cache.popitem(last=False)
+        return dict(self.ref_cache[i])
 
 
 class SequenceEngine:
-    def __init__(self,reader,nodes,context=None,*,workdir,center=None,single=False,input_kind="image",dependencies=(),range_cache=None,resources=None,inspection=False):
+    def __init__(self,reader,nodes,context=None,*,workdir,center=None,single=False,input_kind="image",dependencies=(),range_cache=None,resources=None,inspection=False,profiler=None):
         self.context = context or RunContext()
+        self.profiler = profiler
         self.workdir = Path(workdir)
         self.global_statistics = {}
-        self.source = Source(reader,self.context,workdir,input_kind)
+        self.source = Source(reader,self.context,workdir,input_kind,profiler=profiler)
         self.center,self.single = center,single
         self.dependencies = normalize_nodes(dependencies,check_types=False)[0]
         self.resources = ResourceSettings.from_dict(resources) if resources is not None else None
@@ -278,6 +316,7 @@ class SequenceEngine:
                     if working+gpu_retained+persistent+self.device.cache_budget>self.device.budget*.75:
                         raise ValueError(f"{n.get('name') or a} 工作数组、状态和缓存超过显存预算；请裁剪输入、提高显存上限或对此实例选择 CPU")
                     self.resource_plan[-1].update(device_retained_bytes=persistent,device_working_bytes=working)
+            self.device.configure_cache()
             self.plan = self._actual_plan()
         except Exception:
             self.close()
@@ -507,6 +546,13 @@ class SequenceEngine:
         return self.contracts[-1]
 
     def get(self,stage,index):
+        if self.profiler is None:
+            return self._get(stage,index)
+        category = "gpu_submit" if self.device.backend(stage) is not None else "cpu_compute"
+        with self.profiler.measure(category):
+            return self._get(stage,index)
+
+    def _get(self,stage,index):
         self.context.check_cancelled()
         c = self.contracts[stage]
         if not 0<=index<c.length:
@@ -694,26 +740,71 @@ class SequenceEngine:
         backend=self.backends[i]
         xp=backend.xp
         get=(lambda j:self.device.get(i,j,backend)) if backend.name=="gpu" else (lambda j:self.get(i,j))
-        # Use a nearby positive-intensity baseline for stable fluctuations when
-        # no statistics node is present. It is a numerical identity, not a filter.
-        baseline = xp.nan_to_num(get(center),nan=0.,posinf=0.,neginf=0.)
         previous = self.last_correlation.get(i)
-        can_roll = previous and previous["lag"]==lag and start<previous["stop"] and previous["start"]<stop and index%256!=0
+        # The fixed centre uses exactly the same baseline for every W / lag.
+        # Retain the accumulator's baseline rather than rereading or realigning
+        # the centre image for every output, even when the sample cache is off.
+        baseline = previous["moments"].baseline if previous and previous["baseline_center"]==center else None
+        expanding = (op["algorithm"]=="correlation_window" and previous
+                     and start<=previous["start"] and stop>=previous["stop"])
+        # Purely expanding W never subtracts old samples. Its accumulation order
+        # is retained rather than periodically rereading the growing window.
+        can_roll = previous and previous["lag"]==lag and start<previous["stop"] and previous["start"]<stop and (index%256!=0 or expanding)
         if can_roll:
             moments = previous["moments"]
+            baseline_center = previous["baseline_center"]
             old_start,old_stop = previous["start"],previous["stop"]
             for bounds in ((old_start,min(start,old_stop)),(max(stop,old_start),old_stop)):
-                for j in range(*bounds):
-                    moments.add(get(j)[0],get(j+lag)[1],-1)
+                self._add_correlation_pairs(moments,get,bounds,lag,-1,i,backend)
             additions = ((start,min(old_start,stop)),(max(old_stop,start),stop))
         else:
+            if baseline is None:
+                # This is a numerical identity, not a photometric filter.
+                baseline = xp.nan_to_num(get(center),nan=0.,posinf=0.,neginf=0.)
             moments = RollingMoments(baseline,SimpleNamespace(**p),self.backends[i])
+            baseline_center = center
             additions = ((start,stop),)
         for bounds in additions:
-            for j in range(*bounds):
-                moments.add(get(j)[0],get(j+lag)[1])
-        self.last_correlation[i] = dict(lag=lag,center=center,start=start,stop=stop,moments=moments)
-        return moments.result(device=device)
+            self._add_correlation_pairs(moments,get,bounds,lag,1,i,backend)
+        self.last_correlation[i] = dict(lag=lag,center=center,baseline_center=baseline_center,start=start,stop=stop,moments=moments)
+        self.mappings[op["node"]["id"]].update(correlation_implementation=moments.implementation)
+        return moments.result(device=device,count=False)
+
+    def _add_correlation_pairs(self,moments,get,bounds,lag,sign,i,backend):
+        first,stop = bounds
+        pixels = max(1,int(np.prod(moments.baseline.shape[1:])))
+        batch = 1
+        if backend.name=="gpu" and pixels<=4096:
+            # Lists, paired allocations retained by their views and the float64
+            # stacks coexist. Reserve eight arrays per pair and bound pressure;
+            # large maps use the
+            # single-pair fused path without a second image-sized stack.
+            limit = min(self.budget//32,self.device.budget//64,self.resource_plan[i]["limit_bytes"]//32)
+            batch = max(1,min(64,limit//(pixels*8*8)))
+        for begin in range(first,stop,batch):
+            self.context.check_cancelled()
+            end = min(stop,begin+batch)
+            if backend.name=="gpu":
+                metrics = self.device.metrics
+                metrics["correlation_update_calls"] += 1
+                metrics["correlation_pairs"] += end-begin
+                metrics["largest_correlation_batch"] = max(metrics["largest_correlation_batch"],end-begin)
+            if end-begin==1:
+                pair = get(begin)
+                moments.add(pair[0],pair[1] if lag==0 else get(begin+lag)[1],sign)
+            else:
+                left,right = [],[]
+                xp = backend.xp
+                def detached_pair(j):
+                    value = get(j)
+                    # An uncached point/ROI view may own an entire image or
+                    # upload block. Retain only this small pair in the batch.
+                    return value.astype(xp.float64,copy=True) if getattr(value,"base",None) is not None else value
+                for j in range(begin,end):
+                    pair = detached_pair(j)
+                    left.append(pair[0]);right.append(pair[1] if lag==0 else detached_pair(j+lag)[1])
+                moments.add_many(xp.stack(left).astype(xp.float64,copy=False),
+                                 xp.stack(right).astype(xp.float64,copy=False),sign)
 
     def correlation_reference(self,i,index):
         op = self.operations[i]
@@ -738,6 +829,12 @@ class SequenceEngine:
         return dict(r,correlation=dict(module_id=op["node"]["id"],center_sample=center,lag_samples=lag,window=window,left_start=start,left_stop=stop,right_start=start+lag,right_stop=stop+lag,lag_seconds=total/window if known==window else None,lag_seconds_min=minimum,lag_seconds_max=maximum,known_pairs=known))
 
     def ref(self,stage,index):
+        if self.profiler is None:
+            return self._ref(stage,index)
+        with self.profiler.measure("references"):
+            return self._ref(stage,index)
+
+    def _ref(self,stage,index):
         self.context.check_cancelled()
         if stage==0:
             original = self.source.ref(index)

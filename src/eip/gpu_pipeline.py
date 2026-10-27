@@ -1,5 +1,6 @@
 """Budgeted device execution between explicit host preview / storage boundaries."""
 from collections import OrderedDict
+from contextlib import nullcontext
 import numpy as np
 
 from eip.exact_quantile import finite_quantile
@@ -38,6 +39,11 @@ class DeviceCache:
         self.entries.clear()
         self.size = 0
 
+    def resize(self, budget):
+        self.budget = max(0,int(budget))
+        while self.entries and self.size>self.budget:
+            self.size -= self.entries.popitem(last=False)[1].nbytes
+
 
 class DevicePipeline:
     def __init__(self, engine):
@@ -48,7 +54,25 @@ class DevicePipeline:
         self.cache_budget = self.cache.budget+self.upload_cache.budget
         self.constants, self.windows, self.global_values = {}, {}, {}
         self.metrics = dict(upload_batches=0, uploaded_samples=0, downloads=0,
-                            device_cache_hits=0, largest_upload_batch=0)
+                            device_cache_hits=0, largest_upload_batch=0,
+                            correlation_update_calls=0,correlation_pairs=0,largest_correlation_batch=0)
+
+    def configure_cache(self):
+        """Use validated slack, leaving all persistent states and scratch room.
+
+        This changes capacity only; arrays are still allocated on demand. Using
+        the entire flow's retained state also protects nested downstream nodes.
+        """
+        plans = [r for r in self.engine.resource_plan if "device_working_bytes" in r]
+        if not plans:
+            return
+        retained = sum(r.get("device_retained_bytes",0) for r in plans)
+        working = max(r["device_working_bytes"] for r in plans)
+        available = max(0,int(self.budget*.75)-retained-working)
+        total = min(self.budget//4,available)
+        self.cache.resize(total//2)
+        self.upload_cache.resize(total-total//2)
+        self.cache_budget = total
 
     def backend(self, stage):
         backend = self.engine.backends.get(stage-1)
@@ -56,7 +80,9 @@ class DevicePipeline:
 
     def host(self, value, backend):
         self.metrics["downloads"] += 1
-        return backend.host(value)
+        profiler = self.engine.profiler
+        with profiler.measure("download") if profiler else nullcontext():
+            return backend.host(value)
 
     def scratch(self, i):
         limit = self.engine.resource_plan[i]["limit_bytes"] if i < len(self.engine.resource_plan) else self.engine.budget
@@ -67,8 +93,9 @@ class DevicePipeline:
             return 1
         c = self.engine.contracts[stage]
         item = 8 if c.dtype == "dynamic" else np.dtype(c.dtype).itemsize
-        size = max(1, int(np.prod(c.shape)))*max(8, item)
-        allowance = min(self.upload_cache.budget//2, self.engine.budget//32)
+        # Transfers use the actual source dtype; working reductions need float64.
+        size = max(1, int(np.prod(c.shape)))*(max(8,item) if working else item)
+        allowance = min(self.upload_cache.budget//2, self.engine.budget//16)
         if working:
             allowance = min(allowance, self.budget//64)
         if any(n["algorithm"] == "time_sample" and n["parameters"]["step"] > 1 for n in self.engine.nodes):
@@ -82,22 +109,36 @@ class DevicePipeline:
                 block = self.upload_cache.get(key)
                 return block[index-key[2]]
         e = self.engine
-        stop = min(e.contracts[stage].length, index+self.batch_size(stage))
+        batch = self.batch_size(stage)
+        # Fixed chunks are reusable when W grows towards decreasing indices.
+        # Anchoring every upload at the requested index used to reread nearly
+        # the same forward block for each newly added left-hand sample.
+        start = index//batch*batch
+        stop = min(e.contracts[stage].length,start+batch)
         # This is a real CPU boundary (source decode or an explicitly CPU node).
-        first = e.get(stage, index)
-        block = np.empty((stop-index, *first.shape), dtype=first.dtype)
+        first = e.get(stage,start)
+        block = np.empty((stop-start,*first.shape),dtype=first.dtype)
         block[0] = first
-        for j in range(index+1, stop):
+        for j in range(start+1,stop):
             e.context.check_cancelled()
-            block[j-index] = e.get(stage, j)
-        value = backend.xp.asarray(block)
+            block[j-start] = e.get(stage,j)
+        profiler = e.profiler
+        with profiler.measure("upload") if profiler else nullcontext():
+            value = backend.xp.asarray(block)
         self.metrics["upload_batches"] += 1
-        self.metrics["uploaded_samples"] += stop-index
-        self.metrics["largest_upload_batch"] = max(self.metrics["largest_upload_batch"], stop-index)
-        value = self.upload_cache.put(("upload", stage, index, stop), value)
-        return value[0]
+        self.metrics["uploaded_samples"] += stop-start
+        self.metrics["largest_upload_batch"] = max(self.metrics["largest_upload_batch"],stop-start)
+        value = self.upload_cache.put(("upload",stage,start,stop),value)
+        return value[index-start]
 
     def get(self, stage, index, backend):
+        profiler = self.engine.profiler
+        if profiler is None:
+            return self._get(stage,index,backend)
+        with profiler.measure("gpu_submit"):
+            return self._get(stage,index,backend)
+
+    def _get(self, stage, index, backend):
         e = self.engine
         e.context.check_cancelled()
         if not 0 <= index < e.contracts[stage].length:
@@ -272,6 +313,7 @@ class DevicePipeline:
         active=any(backend.name=="gpu" for backend in self.engine.backends.values())
         return dict(self.metrics, cache_budget_bytes=self.cache_budget, cache_peak_bytes=self.cache.peak+self.upload_cache.peak,
                     source_batch_limit=32, intermediate_residency=active,
+                    cache_policy="validated_flow_slack_v2",upload_dtype_policy="source_dtype",upload_alignment="sample_chunks",
                     transfer_scope="array boundaries; excludes scalar synchronization and library internals")
 
     def close(self):

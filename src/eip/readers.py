@@ -7,6 +7,7 @@ import math
 import re
 import csv
 import json
+from threading import RLock
 
 import numpy as np
 from PIL import Image
@@ -81,12 +82,36 @@ class ImageReader:
         if self.count > 1 and interval is None and self.timestamps is None and source.kind != "sequence":
             notes.append("TIFF 页序列没有确认的时间间隔；仅按页序号定位")
         self.meta = DataSpec(self.path.name, "sequence" if self.count > 1 or source.kind == "sequence" else "image", first.shape, str(first.dtype), "YX" if first.ndim == 2 else "YXS", self.count, duration, 1 / interval if interval else None, "run_record" if self.timestamps is not None else "user" if interval else "unavailable", "gray" if first.ndim == 2 else "RGB/RGBA", file_revision(fingerprint_files), tuple(notes))
+        # One TIFF handle belongs to this reader, never to another worker.
+        # Open lazily after metadata inspection so the data handle does not
+        # retain the series builder's page objects for a long TIFF sequence.
+        self._tiff = None
+        self._lock = RLock()
+        self._closed = False
 
     def read_frame(self, index: int) -> FrameData:
+        # TiffFile is not thread-safe. Serialize its seek/read and our pixel
+        # cache together, including close, if a future caller shares a reader.
+        with self._lock:
+            if self._closed:
+                raise ValueError("数据源已关闭，请重新打开")
+            return self._read_frame(index)
+
+    def _read_frame(self, index: int) -> FrameData:
         if index < 0 or index >= self.count:
             raise IndexError("帧序号超出数据范围")
         if index not in self._cache:
-            pixels = read_image(self.files[index] if self.source.kind == "sequence" else self.path, 0 if self.source.kind == "sequence" else index)
+            if self.source.kind != "sequence" and self.path.suffix.lower() in {".tif", ".tiff"}:
+                if self._tiff is None:
+                    self._tiff = tifffile.TiffFile(self.path)
+                    # Keep only the compact page-offset index. Do not retain a
+                    # TiffPage / tag dictionary for every previously read frame.
+                    self._tiff.pages.cache = False
+                pixels = self._tiff.pages[index].asarray()
+                validate_pixels(pixels)
+                pixels.setflags(write=False)
+            else:
+                pixels = read_image(self.files[index] if self.source.kind == "sequence" else self.path)
             if pixels.shape != self.meta.shape or str(pixels.dtype) != self.meta.dtype:
                 raise ValueError(f"第 {index + 1} 帧的尺寸或类型与第一帧不一致")
             while self._cache and self._cache_size + pixels.nbytes > self._budget:
@@ -115,7 +140,13 @@ class ImageReader:
             yield self.read_frame(index)
 
     def close(self):
-        self._cache.clear()
+        with self._lock:
+            self._closed = True
+            self._cache.clear()
+            self._cache_size = 0
+            if self._tiff is not None:
+                self._tiff.close()
+                self._tiff = None
 
 
 class VideoReader:

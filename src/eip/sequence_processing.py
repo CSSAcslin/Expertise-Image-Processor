@@ -8,6 +8,7 @@ import csv
 import json
 import shutil
 import tempfile
+import time
 import traceback
 import numpy as np
 import tifffile
@@ -21,6 +22,7 @@ from eip.processing import statistics
 from eip.sequence_engine import SequenceEngine
 from eip.sequence_storage import plot_signals
 from eip.sequence_delivery import persist_side_outputs
+from eip.performance import RunProfiler, PROGRESS_UNITS
 
 
 def process_sequence_job(payload,emit,cancelled):
@@ -32,18 +34,22 @@ def process_sequence_job(payload,emit,cancelled):
     try:
         for position,source_value in enumerate(payload["sources"]):
             reader,engine = None,None
+            profiler = RunProfiler()
             part = staging/f"source_{position:03d}"
             part.mkdir()
             item = dict(source=source_value,output_directory=part.name,status="running",completed_frames=0,artifacts=[],origin=[0,0])
             run["results"].append(item)
             try:
-                reader = open_source(source_from_dict(source_value))
+                with profiler.measure("setup"):
+                    reader = open_source(source_from_dict(source_value))
                 if reader.meta.revision!=payload["revisions"][position]:
                     raise ValueError("来源自导入后已变化，请重新打开")
                 item["data_spec"] = asdict(reader.meta)
                 with tempfile.TemporaryDirectory(prefix="index-",dir=staging) as workdir:
-                    engine = SequenceEngine(reader,payload["steps"],context,workdir=workdir,center=payload.get("center"),single=payload["mode"]=="trial",input_kind=payload.get("input_kinds",["image"]*len(payload["sources"]))[position],dependencies=payload.get("preview_dependencies",[]),resources=payload.get("resources"))
+                    with profiler.measure("setup"):
+                        engine = SequenceEngine(reader,payload["steps"],context,workdir=workdir,center=payload.get("center"),single=payload["mode"]=="trial",input_kind=payload.get("input_kinds",["image"]*len(payload["sources"]))[position],dependencies=payload.get("preview_dependencies",[]),resources=payload.get("resources"),profiler=profiler)
                     c = engine.output
+                    item.update(progress_axis=c.sequence_axis,progress_unit=PROGRESS_UNITS.get(c.sequence_axis,"输出"),completed_samples=0)
                     # A trial of a non-correlation chain evaluates one edited
                     # output sample. A τ scan remains a complete Q curve.
                     single = payload["mode"]=="trial" and c.sequence_axis=="T"
@@ -63,8 +69,9 @@ def process_sequence_job(payload,emit,cancelled):
                     size = len(indices)*max(1,int(np.prod(c.shape)))*np.dtype(c.dtype).itemsize
                     if size+32*1024**2>shutil.disk_usage(staging).free:
                         raise ValueError("输出盘剩余空间不足以保存当前形状")
-                    values = np.lib.format.open_memmap(part/"values.npy",mode="w+",dtype=c.dtype,shape=(len(indices),*c.shape))
-                    offsets = np.lib.format.open_memmap(part/"reference_offsets.npy",mode="w+",dtype="uint64",shape=(len(indices),))
+                    with profiler.measure("output_write"):
+                        values = np.lib.format.open_memmap(part/"values.npy",mode="w+",dtype=c.dtype,shape=(len(indices),*c.shape))
+                        offsets = np.lib.format.open_memmap(part/"reference_offsets.npy",mode="w+",dtype="uint64",shape=(len(indices),))
                     signal = not c.spatial
                     columns = int(np.prod(c.shape)) if c.shape else 1
                     fields = ["output_index","source_frame","time_seconds","pts","source_frame_number","trigger_time_seconds","lag_samples","lag_seconds","lag_seconds_min","lag_seconds_max","known_pairs","dtype","min","max","mean","finite_count","invalid_count"]
@@ -75,40 +82,54 @@ def process_sequence_job(payload,emit,cancelled):
                     with (part/"references.jsonl").open("wb") as refs,(part/"measurements.csv").open("w",encoding="utf-8-sig",newline="") as file:
                         writer = csv.DictWriter(file,fieldnames=fields)
                         writer.writeheader()
+                        last_progress = 0.0
                         for out,j in enumerate(indices):
                             context.check_cancelled()
                             arr = engine.get(len(engine.nodes),j)
-                            ref = engine.ref(len(engine.nodes),j)
-                            values[out] = arr
-                            offsets[out] = refs.tell()
-                            refs.write((json.dumps(ref,ensure_ascii=False,allow_nan=False)+"\n").encode())
+                            with profiler.measure("references"):
+                                ref = engine.ref(len(engine.nodes),j)
+                            with profiler.measure("output_write"):
+                                values[out] = arr
+                                offsets[out] = refs.tell()
+                                refs.write((json.dumps(ref,ensure_ascii=False,allow_nan=False)+"\n").encode())
                             corr = ref.get("correlation",{})
-                            row = dict(output_index=out,source_frame=ref.get("index"),time_seconds=ref.get("time"),pts=ref.get("pts"),source_frame_number=ref.get("source_number"),trigger_time_seconds=ref.get("trigger_time"),dtype=str(arr.dtype),**{key:corr.get(key) for key in ("lag_samples","lag_seconds","lag_seconds_min","lag_seconds_max","known_pairs")},**statistics(arr))
+                            with profiler.measure("output_statistics"):
+                                row = dict(output_index=out,source_frame=ref.get("index"),time_seconds=ref.get("time"),pts=ref.get("pts"),source_frame_number=ref.get("source_number"),trigger_time_seconds=ref.get("trigger_time"),dtype=str(arr.dtype),**{key:corr.get(key) for key in ("lag_samples","lag_seconds","lag_seconds_min","lag_seconds_max","known_pairs")},**statistics(arr))
                             if c.sequence_axis=="W":
                                 row["window_samples"] = corr.get("window")
                             if signal:
                                 row.update({f"value_{k+1}":float(v) for k,v in enumerate(arr.reshape(-1))})
-                            writer.writerow(row)
+                            with profiler.measure("output_write"):
+                                writer.writerow(row)
                             if out==0 and c.spatial:
                                 axes = c.axes.removeprefix("P")
                                 first = arr[0] if c.paired else arr
                                 bgr = axes=="YXC" and c.color_order=="BGR"
                                 shown = first[...,::-1] if bgr else first
                                 image_contract = replace(output_c,color_order="RGB").record() if bgr else output_c.record()
-                                tifffile.imwrite(part/"first.tif",shown,photometric="rgb" if axes=="YXC" else "minisblack",metadata=dict(axes="YXS" if axes=="YXC" else "YX",contract=image_contract,source_contract=output_c.record(),color_conversion="BGR to RGB" if bgr else None,reference=ref))
+                                with profiler.measure("output_write"):
+                                    tifffile.imwrite(part/"first.tif",shown,photometric="rgb" if axes=="YXC" else "minisblack",metadata=dict(axes="YXS" if axes=="YXC" else "YX",contract=image_contract,source_contract=output_c.record(),color_conversion="BGR to RGB" if bgr else None,reference=ref))
                                 item["artifacts"].append("first.tif")
                             item["completed_frames"] = out+1
-                            emit(dict(type="progress",source=position,completed=out+1,total=len(indices),name=reader.meta.name))
-                    values.flush()
-                    offsets.flush()
+                            item["completed_samples"] = out+1
+                            profiler.add_output(arr.nbytes)
+                            now = time.perf_counter()
+                            if out==0 or out+1==len(indices) or now-last_progress>=.2:
+                                emit(dict(type="progress",source=position,completed=out+1,total=len(indices),name=reader.meta.name,progress_axis=c.sequence_axis,progress_unit=item["progress_unit"],performance=profiler.snapshot()))
+                                last_progress = now
+                    with profiler.measure("output_write"):
+                        values.flush()
+                        offsets.flush()
                     del values,offsets
                     for i,stats in engine.statistics.items():
                         folder = part/f"statistics_{engine.nodes[i]['id']}"
                         folder.mkdir()
                         for key in ("mean","variance","count","scales"):
                             np.save(folder/f"{key}.npy",stats[key],allow_pickle=False)
-                    persist_side_outputs(engine,part,payload,item,context,emit)
-                    verify = open_source(source_from_dict(source_value))
+                    with profiler.measure("output_write"):
+                        persist_side_outputs(engine,part,payload,item,context,emit)
+                    with profiler.measure("setup"):
+                        verify = open_source(source_from_dict(source_value))
                     try:
                         if verify.meta.revision!=reader.meta.revision:
                             raise ValueError("运行期间来源发生变化，本次结果未发布")
@@ -128,7 +149,8 @@ def process_sequence_job(payload,emit,cancelled):
                     if signal:
                         histogram_node = next((n["id"] for n in reversed(engine.nodes)
                                                if n["algorithm"]=="distribution" and n["parameters"]["output"]=="main"),None)
-                        plot_signals(part,output_c.record(),engine.mappings,histogram_node)
+                        with profiler.measure("output_render"):
+                            plot_signals(part,output_c.record(),engine.mappings,histogram_node)
                         item["artifacts"].extend(["curve.png","curve.svg"])
             except Cancelled:
                 item["status"] = "cancelled"
@@ -137,6 +159,9 @@ def process_sequence_job(payload,emit,cancelled):
                 item.update(status="failed",error=str(error))
                 emit(dict(type="log",message=str(error)))
             finally:
+                # Keep an interim snapshot even if failed-output cleanup itself
+                # raises; the outer handler can still persist this source's work.
+                item["performance"] = profiler.snapshot()
                 if item["status"] != "succeeded":
                     for side in item.get("side_outputs",[]):
                         if side["status"] == "succeeded":
@@ -145,11 +170,16 @@ def process_sequence_job(payload,emit,cancelled):
                         (folder/"dataset.json").unlink(missing_ok=True)
                         (folder/"export.zip").unlink(missing_ok=True)
                         write_json(folder/"delivery.json",side)
-                if engine:
-                    engine.close()
-                if reader:
-                    reader.close()
-                write_json(staging/"run.json",run)
+                try:
+                    if engine:
+                        engine.close()
+                finally:
+                    try:
+                        if reader:
+                            reader.close()
+                    finally:
+                        item["performance"] = profiler.finish()
+                        write_json(staging/"run.json",run)
         successes = sum(item["status"]=="succeeded" for item in run["results"])
         run["status"] = "succeeded" if successes==len(run["results"]) else "completed_with_errors" if successes else "failed"
         run["completed_at"] = datetime.now(timezone.utc).isoformat()
@@ -159,10 +189,11 @@ def process_sequence_job(payload,emit,cancelled):
         emit(dict(type="sequence_completed",run=run,directory=str(destination if successes else staging)))
     except Cancelled:
         run["status"] = "cancelled"
+        run["completed_at"] = datetime.now(timezone.utc).isoformat()
         write_json(staging/"run.json",run)
-        emit(dict(type="cancelled",directory=str(staging)))
+        emit(dict(type="cancelled",directory=str(staging),run=run))
     except Exception as error:
-        run.update(status="failed",error=str(error))
+        run.update(status="failed",error=str(error),completed_at=datetime.now(timezone.utc).isoformat())
         write_json(staging/"run.json",run)
         raise
 

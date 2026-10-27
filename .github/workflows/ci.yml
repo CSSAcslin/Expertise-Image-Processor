@@ -54,3 +54,6 @@ jobs:
       - name: Browser fixed-tau window scan
         if: matrix.python == '3.14'
         run: python tools/smoke_correlation_window.py
+      - name: Browser acceleration timing and export
+        if: matrix.python == '3.14'
+        run: python tools/smoke_acceleration_0_9_0.py

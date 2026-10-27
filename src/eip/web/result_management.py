@@ -12,6 +12,7 @@ import threading
 import time
 import zipfile
 from eip.persistence import write_json
+from eip.performance import progress_metadata
 
 
 TERMINAL = {"succeeded","completed_with_errors","failed","cancelled"}
@@ -29,7 +30,7 @@ class ResultManager:
     def remember(self):
         """Only local references; numerical data and run manifests stay authoritative."""
         with self.workbench.lock:
-            rows = [{k:j[k] for k in ("id","mode","engine","contract_version","task","name","source_name","source_ids","source_count","status","completed","total","created","directory","summary","error") if k in j}
+            rows = [{k:j[k] for k in ("id","mode","engine","contract_version","task","name","source_name","source_ids","source_count","status","completed","total","created","directory","summary","error","progress_axis","progress_unit") if k in j}
                     for j in self.workbench.jobs.values() if j["status"] in TERMINAL and j.get("directory")]
             write_json(self.index_path,dict(schema_version=1,results=rows))
 
@@ -48,6 +49,8 @@ class ResultManager:
                     root = self._directory(row)
                     run = json.loads((root/"run.json").read_text(encoding="utf-8"))
                     job = dict(row,run=run,payload=run.get("spec",{}),logs=[],result_available=run.get("status") in {"succeeded","completed_with_errors"})
+                    if job.get("engine")=="sequence":
+                        job.update(progress_metadata(run.get("results",[])))
                     if run.get("status") not in TERMINAL:
                         job.update(status="failed",error="上次运行未完成，保留临时输出供检查")
                     self.workbench.enqueue(row["id"],job,queue_job=False)
@@ -104,6 +107,7 @@ class ResultManager:
         job = dict(id=identifier,mode="split" if split else payload.get("mode","run"),engine="sequence" if sequence else "legacy",name=run.get("display_name") or source_name,source_name=source_name,source_ids=[item.get("source_id") for item in provenance if isinstance(item,dict)],source_count=len(specs),status=status,completed=sum(item.get("completed_frames",0) for item in good),total=None,created=created,directory=str(path.parent),summary="历史分幅结果" if split else "历史模块结果" if sequence else "历史图像序列",run=run,payload=payload,logs=[],result_available=status in {"succeeded","completed_with_errors"})
         if sequence:
             job["contract_version"] = 3
+            job.update(progress_metadata(run.get("results",[])))
         if split:
             job["task"] = run.get("task","run")
         if incomplete:

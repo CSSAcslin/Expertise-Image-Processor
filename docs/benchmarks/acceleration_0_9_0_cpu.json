@@ -1,0 +1,79 @@
+{
+  "date": "2026-10-27",
+  "backend": "cpu",
+  "baseline_commit": "dd1781091e7721dd6e0199b8620c8ed03d5eac81",
+  "baseline_version": "0.8.6",
+  "updated_version": "0.9.0",
+  "cpu": "Intel Core i7-12700K",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "python": "3.14.3",
+  "numpy": "2.4.6",
+  "tifffile": "2026.6.1",
+  "input": {
+    "frames": 769,
+    "shape": [
+      128,
+      256
+    ],
+    "dtype": "uint16",
+    "seed": "179 + frame index"
+  },
+  "scan": {
+    "lag": 1,
+    "windows": "2..600 step 2",
+    "outputs": 300,
+    "center": "fixed, determined by valid bounds"
+  },
+  "resources": {
+    "memory_mb": 2048,
+    "preview_mb": 16,
+    "cache_mb": 128,
+    "gpu_mb": 512
+  },
+  "medians": [
+    {
+      "case": "image",
+      "repeats": 3,
+      "old_job_seconds": 1.4554308999940986,
+      "new_job_seconds": 0.9423094999947352,
+      "speedup": 1.544535951300746,
+      "old_process_seconds": 1.718456899994635,
+      "new_process_seconds": 1.2323582999961218,
+      "old_outputs_per_second": 206.12452298574698,
+      "new_outputs_per_second": 318.3667361962032
+    },
+    {
+      "case": "point",
+      "repeats": 3,
+      "old_job_seconds": 1.3136016999924323,
+      "new_job_seconds": 0.8847912000055658,
+      "speedup": 1.484645981994587,
+      "old_process_seconds": 1.6264420000079554,
+      "new_process_seconds": 1.226952800003346,
+      "old_outputs_per_second": 228.3797288034328,
+      "new_outputs_per_second": 339.06304673703
+    },
+    {
+      "case": "pixel-mean",
+      "repeats": 3,
+      "old_job_seconds": 1.4932171999971615,
+      "new_job_seconds": 0.9548043999966467,
+      "speedup": 1.5638985325187083,
+      "old_process_seconds": 1.8031286000041291,
+      "new_process_seconds": 1.2792466999962926,
+      "old_outputs_per_second": 200.90848136531662,
+      "new_outputs_per_second": 314.20047917778095
+    }
+  ],
+  "reader_single_pass": {
+    "frames": 769,
+    "per_frame_open_seconds": 0.4154292000021087,
+    "retained_handle_seconds": 0.06328650000796188,
+    "retained_frames_per_second": 12151.090673417782,
+    "speedup": 6.564262519650239,
+    "scope": "OS-warmed synthetic TIFF; pixel cache disabled; metadata open excluded"
+  },
+  "maximum_absolute_error": 2.220446049250313e-16,
+  "real_gpu_tested": false,
+  "scope": "Warm OS cache synthetic TIFF; three fresh-process formal jobs per case, per-version runs sequential while machine otherwise idle. Job time includes source setup, calculation and full export, excluding process startup. Device hardware speedup not inferred."
+}

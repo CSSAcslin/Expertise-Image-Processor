@@ -1,6 +1,6 @@
 # Expertise Image Processor
 
-**0.8.6 · 本机 Web 工作台 · Python 3.12–3.14**
+**0.9.0 · 本机 Web 工作台 · Python 3.12–3.14**
 
 面向科研数据的图像与视频工作台，将 **数据预览 → 模块处理 → 结果对比 → 导出与复用** 放在同一工作流中。浏览器负责交互，独立 Python 进程负责解码和计算。
 
@@ -41,9 +41,10 @@ Qt 兼容入口为 [start_desktop.cmd](start_desktop.cmd)，需另装 [requireme
 - **扫描平均窗长**：固定 τ 和同一中心，计算 g² 随平均样本数 W 的曲线；支持正负 τ、窗长范围或自定义列表，保留真实配对时差并导出完整数值 / 图形。
 - **统一管理数据**：左侧「数据 / 模块」并列；数据页内「输入 / 处理」纵向排列，分界可拖动，独立计数、折叠及批选。可找回历史导出文件夹，所选输入可运行，结果可合并导出、移除记录或逐项确认清理文件。
 - **控制资源**：在运行设置中统一设置应用内存、缓存、显存和默认计算设备；大序列按需读取，结果使用磁盘映射。
+- **定位运算瓶颈**：任务详情按需展开读取、计算、传输、来源映射与输出耗时，以及输入读取 / 输出吞吐；窗长扫描按 W 结果计数。
 - **扩展算法**：统一模块契约与本机 Python 插件，保留完整参数、运行版本、样本映射和来源记录。
 
-CPU 可完整运行。当前 26 个内置模块均可接入可选 CuPy / CUDA 后端，连续 GPU 节点复用设备数据，按预算批量传输；时间滑窗、统计、配准及标定具有设备实现。插件与旧序列统计仍使用 CPU，自动模式在 CUDA 不可用时回退。支持范围、预算与验证边界见 [0.8.4 大序列处理与 GPU](docs/GPU_PIPELINE_0_8_4.md)；实际 CUDA 硬件上的数值和速度仍需验证。
+CPU 可完整运行。当前 27 个内置模块均可接入可选 CuPy / CUDA 后端，连续 GPU 节点复用设备数据，按预算批量传输；0.9.0 为 g² 提供 float64 融合内核和小信号批量累加，复用固定中心基准、上传分块和多页 TIFF 读取句柄。插件与旧序列统计仍使用 CPU，自动模式在 CUDA 不可用时回退。实现、性能对照及验证边界见 [0.9.0 运算加速](docs/ACCELERATION_0_9_0.md)；实际 GPU 加速比须在相应硬件与流程上测量。
 
 ## 操作顺序
 
@@ -57,6 +58,7 @@ CPU 可完整运行。当前 26 个内置模块均可接入可选 CuPy / CUDA �
 
 | 内容 | 入口 |
 | --- | --- |
+| 0.9.0 运算加速与性能诊断 | [融合 g²、读取复用与基准](docs/ACCELERATION_0_9_0.md) |
 | 0.8.6 固定 τ 的 g² 窗长曲线 | [窗长扫描](docs/CORRELATION_WINDOW_0_8_6.md) |
 | 完整操作、格式与兼容边界 | [使用指南](docs/USER_GUIDE.md) |
 | 0.8.5 双幅时序与多曲线验证 | [算法与结果比较](docs/PAIRED_COMPARISON_0_8_5.md) |
@@ -77,6 +79,8 @@ CPU 可完整运行。当前 26 个内置模块均可接入可选 CuPy / CUDA �
 ~~~powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 .\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe tools\benchmark_acceleration.py --backend both --output-dir .test-output
+.\.venv\Scripts\python.exe tools\smoke_acceleration_0_9_0.py
 .\.venv\Scripts\python.exe -m pytest tests\test_gpu_pipeline_0_8_4.py -q
 .\.venv\Scripts\python.exe -m pytest tests\test_paired_comparison_0_8_5.py -q
 .\.venv\Scripts\python.exe -m pytest tests\test_correlation_window.py -q

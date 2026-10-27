@@ -37,6 +37,7 @@ from eip.module_contracts import compile_flow, source_contract
 from eip.sequence_processing import sequence_job_entry
 from eip.resources import load_resources, ResourceSettings, process_memory, system_memory, MIB
 from eip.gpu_memory import GpuMemoryMonitor
+from eip.performance import progress_metadata
 
 
 def workspace_locked(method):
@@ -593,6 +594,7 @@ class Workbench:
         if boundary:
             payload["execution_scope"] = boundary
         job = dict(id=identifier,mode=mode,engine="sequence",contract_version=3,name=name,source_name=entries[0]["meta"]["name"],source_ids=identifiers,source_count=len(entries),status="queued",completed=0,total=None,logs=[],payload=payload,created=time.time(),summary=f"{len(nodes)} 个模块 · {plans[0]['output']['label']}",base_shape=entries[0]["meta"]["shape"][:2])
+        job.update(progress_metadata([dict(contract=plan["output"]) for plan in plans]))
         self.enqueue(identifier,job)
         return dict(id=identifier,plan=plans[0])
 
@@ -713,6 +715,7 @@ class Workbench:
                 reader.close()
         ids = [p["source_id"] for p in payload.get("provenance",[])]
         job = dict(id=identifier,mode=payload["mode"],engine="sequence",contract_version=3,name=run.get("display_name",identifier),source_name=good[0]["data_spec"]["name"],source_ids=ids,source_count=len(payload["sources"]),status=run["status"],completed=sum(r["completed_frames"] for r in good),total=None,logs=[],payload=payload,run=run,directory=str(path.parent),result_available=True,created=datetime.fromisoformat(run["created_at"]).timestamp(),summary=f"{len(payload['steps'])} 个模块 · {good[0]['contract']['label']}")
+        job.update(progress_metadata(run["results"]))
         self.enqueue(identifier,job,queue_job=False)
         self.results.remember()
         if payload["mode"]=="run":
@@ -849,10 +852,15 @@ class Workbench:
             kind = event["type"]
             if kind == "progress":
                 job.update(completed=event["completed"], total=event["total"], source_position=event["source"], progress_name=event["name"])
+                for key in ("progress_axis","progress_unit","performance"):
+                    if key in event:
+                        job[key] = event[key]
             elif kind == "log":
                 job["logs"] = (job["logs"] + [event["message"]])[-100:]
             elif kind in {"cancelled", "failed"}:
                 job.update(status=kind, error=event.get("message"), directory=event.get("directory"))
+                if event.get("run"):
+                    job["run"] = event["run"]
                 active["terminal"] = True
             elif kind == "split_completed":
                 event["run"]["display_name"] = job["name"]
@@ -868,6 +876,7 @@ class Workbench:
                 event["run"]["display_name"] = job["name"]
                 write_json(Path(event["directory"])/"run.json",event["run"])
                 job.update(status=event["run"]["status"],run=event["run"],directory=event["directory"],result_available=any(i["status"]=="succeeded" for i in event["run"]["results"]))
+                job.update(progress_metadata(event["run"]["results"]))
                 active["terminal"] = True
                 if job["mode"]=="run":
                     for position,item in enumerate(event["run"]["results"]):

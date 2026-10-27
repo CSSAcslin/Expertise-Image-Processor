@@ -6,7 +6,7 @@ import { SplitController } from "./split.js";
 import { ModuleEditor, moduleNode, contractAxes } from "./flow.js";
 import { SequenceResults } from "./sequence.js";
 import { WorkbenchLayout } from "./layout.js";
-import { detailHTML, bindRename } from "./job-detail.js";
+import { detailHTML, bindRename, progressUnit } from "./job-detail.js";
 import { PreviewEngine } from "./preview.js";
 import { setupWorkbench } from "./workbench.js";
 import { svgIcon } from "./icons.js";
@@ -917,7 +917,7 @@ async function pollJobs(initial = false) {
     ? list
         .map(
           (j) =>
-            `<div class="job-row"><span class="job-kind">${j.mode==="split"?({statistics:"全源统计",trial:"窗口关联",curve:"τ 曲线",run:"时序关联"}[j.task]||"分幅关联"):j.mode === "trial" ? "帧试算" : "正式运行"}</span><span class="job-name" title="${escape(j.progress_name||j.name)}">${escape(j.name)}<small>${escape(j.summary||j.source_name||"")}</small>${j.source_count > 1 ? " · " + j.source_count + " 个来源" : ""}${j.mode==="split"&&j.status==="running"?" · "+escape(j.progress_name||"准备"):""}</span><span class="job-status ${j.status}">${statusText[j.status] || escape(j.status)}</span><span class="job-progress">${j.completed}${j.total ? " / " + j.total : " 帧"}</span>${["running", "queued", "cancelling"].includes(j.status) ? `<button data-cancel="${j.id}" class="quiet">取消</button>` : ""}<button data-detail="${j.id}" class="quiet">详情</button></div>`,
+            `<div class="job-row"><span class="job-kind">${j.mode==="split"?({statistics:"全源统计",trial:"窗口关联",curve:"τ 曲线",run:"时序关联"}[j.task]||"分幅关联"):j.mode === "trial" ? "帧试算" : "正式运行"}</span><span class="job-name" title="${escape(j.progress_name||j.name)}">${escape(j.name)}<small>${escape(j.summary||j.source_name||"")}</small>${j.source_count > 1 ? " · " + j.source_count + " 个来源" : ""}${j.mode==="split"&&j.status==="running"?" · "+escape(j.progress_name||"准备"):""}</span><span class="job-status ${j.status}">${statusText[j.status] || escape(j.status)}</span><span class="job-progress">${j.completed}${j.total ? " / " + j.total : ""} ${escape(progressUnit(j))}</span>${["running", "queued", "cancelling"].includes(j.status) ? `<button data-cancel="${j.id}" class="quiet">取消</button>` : ""}<button data-detail="${j.id}" class="quiet">详情</button></div>`,
         )
         .join("")
     : '<div class="task-empty">试算和正式运行的进度、结果及日志会显示在这里。</div>';
@@ -999,7 +999,7 @@ async function jobDetail(id) {
     parts.push(
       ...job.run.results.map(
         (r, i) =>
-          `<p>来源 ${i + 1}：${escape(r.data_spec?.name || r.source.path)}<br>${statusText[r.status] || r.status} · ${r.completed_frames} 帧${r.error ? " · " + escape(r.error) : ""}</p>`,
+          `<p>来源 ${i + 1}：${escape(r.data_spec?.name || r.source.path)}<br>${statusText[r.status] || r.status} · ${r.completed_samples??r.completed_frames} ${escape(progressUnit({engine:job.engine,run:{results:[r]}}))}${r.error ? " · " + escape(r.error) : ""}</p>`,
       ),
     );
   if (job.directory)

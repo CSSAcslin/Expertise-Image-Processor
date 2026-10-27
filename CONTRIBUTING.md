@@ -28,6 +28,8 @@ python -m venv .venv
 
 ~~~powershell
 .\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe tools\benchmark_acceleration.py --backend both --repeats 3 --output-dir .test-output
+.\.venv\Scripts\python.exe tools\smoke_acceleration_0_9_0.py
 .\.venv\Scripts\python.exe tools\smoke_sidebar_data_0_8_3.py
 .\.venv\Scripts\python.exe tools\smoke_result_interaction_0_8_1.py
 .\.venv\Scripts\python.exe tools\smoke_result_resources_gpu.py
@@ -35,6 +37,8 @@ python -m venv .venv
 ~~~
 
 选择与改动相关的回归；科学计算应以独立参考公式核对数值、无效值、精度、时间 / 坐标与来源，避免只检查界面文本。CPU 测试生成小型模拟数据；CUDA 测试在没有硬件时明确跳过。浏览器验收需要 Playwright，Windows 使用已安装的 Edge，服务和数据写入独立的 .test-output 子目录。
+
+性能对照使用同一解释器、同一合成数据及参数，保持测试机空闲，报告重复中位数与完整流程耗时。GPU 主机提交时间不能标作 CUDA 内核时间；无硬件时不得用 NumPy 设备适配器推断加速比。0.9.0 的指标范围及基准用法见 [运算加速](docs/ACCELERATION_0_9_0.md)。
 
 更新模块定义后，用 tools/export_module_inventory.py 同步清单，并在 CHANGELOG.md 记录可见变化。界面改动检查大 / 小窗口、键盘操作、图标提示及现有公共播放器。
 
