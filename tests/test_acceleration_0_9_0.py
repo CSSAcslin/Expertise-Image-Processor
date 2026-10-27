@@ -95,6 +95,17 @@ def test_adaptive_cache_can_shrink_below_initial_size(tmp_path,device):
         engine.close()
 
 
+def test_retained_downstream_statistics_must_fit_while_large_upstream_runs(tmp_path,device):
+    # Every node used to fit its own prefix check, but after all side statistics
+    # existed the next large upstream frame needed 50 MiB in a 48 MiB worker.
+    # Removing cache cannot make that execution fit.
+    values = np.ones((1,1024,1024),dtype=np.float64)
+    nodes = [node("curve"),node("roi_crop",width=256,height=256)]
+    nodes += [node("global_statistics",scope="samples",output="side") for _ in range(26)]
+    with pytest.raises(ValueError,match="全流程保留状态"):
+        make(tmp_path,values,nodes,True,resources=dict(memory_mb=256,preview_mb=16,cache_mb=0,gpu_mb=64,backend="cpu"))
+
+
 @pytest.mark.parametrize("lag",[-3,0,2])
 def test_small_gpu_signals_use_bounded_batches_with_unchanged_pair_order(tmp_path,device,monkeypatch,lag):
     from eip.modes.split_correlation.correlation import RollingMoments

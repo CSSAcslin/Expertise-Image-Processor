@@ -68,7 +68,9 @@ class DevicePipeline:
             return
         retained = sum(r.get("device_retained_bytes",0) for r in plans)
         working = max(r["device_working_bytes"] for r in plans)
-        available = max(0,int(self.budget*.75)-retained-working)
+        if retained+working>int(self.budget*.75):
+            raise ValueError("全流程保留状态与最大工作数组超过显存预算安全份额；请减少统计或滑窗节点、裁剪输入或提高显存上限")
+        available = int(self.budget*.75)-retained-working
         total = min(self.budget//4,available)
         self.cache.resize(total//2)
         self.upload_cache.resize(total-total//2)
