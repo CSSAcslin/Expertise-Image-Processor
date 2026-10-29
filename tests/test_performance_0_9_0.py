@@ -113,22 +113,22 @@ def test_window_scan_persists_source_performance_and_accurate_units(tmp_path):
 @pytest.mark.parametrize("cancel",[False,True])
 def test_failed_and_cancelled_sources_preserve_partial_metrics(tmp_path,monkeypatch,cancel):
     import eip.sequence_processing as processing
-    original=processing.SequenceEngine.get
+    original=processing.SequenceEngine.iter_outputs
     count=0
     stop=False
 
-    def interrupted(engine,stage,index):
+    def interrupted(engine,indices):
         nonlocal count,stop
-        if stage==len(engine.nodes):
+        for index,value in original(engine,indices):
             count+=1
             if count==2:
                 if cancel:
                     stop=True
                     engine.context.check_cancelled()
                 raise ValueError("intentional source failure")
-        return original(engine,stage,index)
+            yield index,value
 
-    monkeypatch.setattr(processing.SequenceEngine,"get",interrupted)
+    monkeypatch.setattr(processing.SequenceEngine,"iter_outputs",interrupted)
     events=[]
     processing.process_sequence_job(payload(tmp_path,[new_node("gain_offset")]),events.append,lambda:stop)
     run=json.loads((tmp_path/"outputs/run_performance.partial/run.json").read_text(encoding="utf-8"))

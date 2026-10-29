@@ -15,6 +15,10 @@ python -m venv .venv
 
 默认地址为 http://127.0.0.1:8765。前端位于 src/eip/web/static，直接加载，无需打包。Web 不依赖 Qt；需要验证 Qt 时安装 requirements-desktop.txt。可选 GPU 依赖通过项目 gpu 扩展安装，配置见 [资源与 GPU](docs/RESULT_RESOURCE_GPU_0_8_0.md)。
 
+CUDA 13 环境使用 `requirements-gpu13.txt` 或 `gpu13` 扩展，不与 CUDA 12 的 CuPy 包混装。用启动程序的同一解释器运行 `tools/check_gpu.py`、`pytest -q --require-cuda` 和 `tools/smoke_acceleration_0_9_0.py --backend gpu`；具体环境选择、实测记录和复现参数见 [GPU 落地说明](docs/GPU_DEPLOYMENT.md)。
+
+复测已保存的正式流程可用 `tools/benchmark_execution_time.py --baseline <run.json> --repeats 3 --output-dir .test-output`。默认保留来源修订、模块科学参数、预算与显式设备，使用独立目录和新进程，逐项核对完整数值及来源；`--all-gpu` 是显式设备配置对照，不能与原混合配置混为同一基线。详见 [0.9.1 后端说明](docs/BACKEND_EXECUTION_0_9_1.md)。
+
 ## 实现约束
 
 - 普通播放只读取原始数据；显示调整不改变算法输入。

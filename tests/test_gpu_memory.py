@@ -62,6 +62,35 @@ def test_missing_process_query_preserves_card_memory(monkeypatch):
     assert data["cards"][0]["free_bytes"] == 14000*MIB
 
 
+@pytest.mark.parametrize("utilization, expected", [("67", 67), ("0", 0), ("100", 100), ("N/A", None), ("101", None), ("nan", None)])
+def test_gpu_utilization_is_independent_of_vram_capacity(monkeypatch, utilization, expected):
+    calls = driver(monkeypatch, f"0, GPU-a, RTX, 16303, 200, 16103, WDDM, {utilization}\n", "GPU-a, 101, N/A\n")
+    card = gpu_memory.GpuMemoryMonitor().sample([101])["cards"][0]
+    assert "utilization.gpu" in calls[0][0][1]
+    assert card["utilization_percent"] == expected
+    assert card["used_bytes"] == 200*MIB
+    assert card["application_bytes"] is None
+    assert bool(card["utilization_reason"]) == (expected is None)
+
+
+def test_older_driver_rejection_falls_back_to_memory_without_false_utilization(monkeypatch):
+    monitor = gpu_memory.GpuMemoryMonitor()
+    calls = []
+    def query(executable, query):
+        calls.append(query)
+        if "utilization.gpu" in query:
+            raise subprocess.CalledProcessError(2, "nvidia-smi")
+        if query.startswith("--query-compute"):
+            return []
+        return [["0", "GPU-a", "RTX", "16303", "200", "16103", "TCC"]]
+    monkeypatch.setattr(gpu_memory.shutil, "which", lambda name: "nvidia-smi")
+    monkeypatch.setattr(monitor, "_query", query)
+    result = monitor.sample([101])
+    assert len(calls) == 3
+    assert result["available"] and result["cards"][0]["used_bytes"] == 200*MIB
+    assert result["cards"][0]["utilization_percent"] is None
+
+
 def test_unavailable_and_timeout_are_bounded_then_can_recover(monkeypatch):
     clock = [100.]
     monkeypatch.setattr(gpu_memory.time, "monotonic", lambda: clock[0])

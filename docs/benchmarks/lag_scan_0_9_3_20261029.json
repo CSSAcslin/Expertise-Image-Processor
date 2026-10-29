@@ -1,0 +1,414 @@
+{
+  "schema_version": 1,
+  "app_version": "0.9.3",
+  "run_id": "778f942a3723",
+  "name": "Atip53000fps.cine · 模块处理 · 10-29 15:20:42",
+  "status": "succeeded",
+  "submitted_local": "2026-10-29T15:20:42.626268+08:00",
+  "started_local": "2026-10-29T15:20:42.968808+08:00",
+  "completed_local": "2026-10-29T15:48:00.939891+08:00",
+  "elapsed_seconds": 1637.9681894999994,
+  "submission_to_completion_seconds": 1638.3136231899261,
+  "source": {
+    "name": "Atip53000fps.cine",
+    "shape": [
+      112,
+      832
+    ],
+    "samples": 50654,
+    "revision": "37eb1c6e0ab2a5d435e95b3e77b0b3afbdecf824e048cf1e902b13f8fbbb4ad6"
+  },
+  "configuration": {
+    "steps": [
+      {
+        "id": "f79eef8c-debe-487f-a080-e4c9100372ee",
+        "algorithm": "time_crop",
+        "parameters": {
+          "unit": "samples",
+          "first": 1,
+          "last": null,
+          "start": 0,
+          "end": null
+        },
+        "enabled": true,
+        "target": "both",
+        "version": "1.0",
+        "manifest": null,
+        "code_hash": null,
+        "execution": {
+          "backend": "inherit",
+          "memory_mb": null,
+          "precision": "native"
+        }
+      },
+      {
+        "id": "66fcbc54-73bc-4b65-853e-9b4300709158",
+        "algorithm": "calibration",
+        "parameters": {
+          "lut_path": null,
+          "black_left": 0,
+          "black_right": 0,
+          "saturation_code": null,
+          "input_semantics": "sensor_codes",
+          "curve": "linear",
+          "input_max": 4095,
+          "gamma": 1
+        },
+        "enabled": true,
+        "target": "both",
+        "version": "1.0",
+        "manifest": null,
+        "code_hash": null,
+        "execution": {
+          "backend": "inherit",
+          "memory_mb": null,
+          "precision": "native"
+        }
+      },
+      {
+        "id": "1e7df9c3-d47e-4263-82b1-12884e567ff5",
+        "algorithm": "alignment",
+        "parameters": {
+          "left": {
+            "x": 71,
+            "y": 0,
+            "width": 352,
+            "height": 112
+          },
+          "right": {
+            "x": 519,
+            "y": 0,
+            "width": 292,
+            "height": 112
+          },
+          "midline": [
+            439.4687482612119,
+            435.83967935871743
+          ],
+          "dx": -4,
+          "dy": 4,
+          "mirror_x": false,
+          "mirror_y": false,
+          "interpolation": "nearest"
+        },
+        "enabled": true,
+        "target": "both",
+        "version": "1.0",
+        "manifest": null,
+        "code_hash": null,
+        "execution": {
+          "backend": "cpu",
+          "memory_mb": null,
+          "precision": "native"
+        }
+      },
+      {
+        "id": "2374b97f-b1da-4892-b94e-2a3ac87d8ed4",
+        "algorithm": "point_extract",
+        "parameters": {
+          "x": 46,
+          "y": 44,
+          "output": "main"
+        },
+        "enabled": true,
+        "target": "both",
+        "version": "1.0",
+        "manifest": null,
+        "code_hash": null,
+        "execution": {
+          "backend": "inherit",
+          "memory_mb": null,
+          "precision": "native"
+        }
+      },
+      {
+        "id": "6e2e2434-a8c4-4370-9d97-36518a24fb9f",
+        "algorithm": "correlation_curve",
+        "parameters": {
+          "window": 10001,
+          "min_mean": 1e-09,
+          "min_samples": 10000,
+          "stride": 100,
+          "analysis": "curve",
+          "map_lag": 0,
+          "lag_min": 0,
+          "lag_max": 30000,
+          "lag_step": 10,
+          "lag_list": null,
+          "roi_estimator": "pixel_mean",
+          "center": null
+        },
+        "enabled": true,
+        "target": "both",
+        "version": "1.0",
+        "manifest": null,
+        "code_hash": null,
+        "execution": {
+          "backend": "inherit",
+          "memory_mb": null,
+          "precision": "native"
+        }
+      }
+    ],
+    "window": 10001,
+    "min_samples": 10000,
+    "lag_min": 0,
+    "lag_max": 30000,
+    "lag_step": 10,
+    "lag_count": 3001,
+    "centers": {
+      "start": 10326,
+      "stop": 10327,
+      "step": 1
+    },
+    "output_contract": {
+      "axes": "",
+      "shape": [],
+      "length": 3001,
+      "sequence_axis": "Q",
+      "dtype": "float64",
+      "semantic": "g2",
+      "statistics": false,
+      "origin": [
+        0,
+        0
+      ],
+      "spatial_operation": null,
+      "meaning": "pixel_g2",
+      "color_order": "RGB",
+      "full_axes": "Q",
+      "full_shape": [
+        3001
+      ],
+      "label": "Q:3001",
+      "axis_meanings": {
+        "Q": "有符号延迟"
+      }
+    },
+    "resources": {
+      "memory_mb": 18320,
+      "preview_mb": 1280,
+      "cache_mb": 5000,
+      "gpu_mb": 10240,
+      "backend": "gpu"
+    }
+  },
+  "host_seconds": {
+    "setup": 0.3452659999966272,
+    "input_read": 2.0037089998368174,
+    "index_write": 0.0,
+    "cpu_compute": 0.08565679984167218,
+    "gpu_submit": 1152.272010800123,
+    "upload": 0.13208850004593842,
+    "download": 0.32172540019018925,
+    "references": 482.0444563000565,
+    "output_statistics": 0.12935429991193814,
+    "output_render": 0.32741600000008475,
+    "output_write": 0.1328086997527862,
+    "other": 0.1736977002437925
+  },
+  "host_percent": {
+    "setup": 0.02107891973787488,
+    "input_read": 0.12232893243479062,
+    "index_write": 0.0,
+    "cpu_compute": 0.00522945441741573,
+    "gpu_submit": 70.34764278003847,
+    "upload": 0.008064167600608855,
+    "download": 0.019641736771969794,
+    "references": 29.429415014903537,
+    "output_statistics": 0.007897241273740755,
+    "output_render": 0.019989154984751605,
+    "output_write": 0.00810813669057437,
+    "other": 0.010604461146270176
+  },
+  "actual_devices": {
+    "f79eef8c-debe-487f-a080-e4c9100372ee": {
+      "requested": "gpu",
+      "actual": "gpu",
+      "reason": null
+    },
+    "66fcbc54-73bc-4b65-853e-9b4300709158": {
+      "requested": "gpu",
+      "actual": "gpu",
+      "reason": null
+    },
+    "1e7df9c3-d47e-4263-82b1-12884e567ff5": {
+      "requested": "cpu",
+      "actual": "cpu",
+      "reason": null
+    },
+    "2374b97f-b1da-4892-b94e-2a3ac87d8ed4": {
+      "requested": "gpu",
+      "actual": "gpu",
+      "reason": null
+    },
+    "6e2e2434-a8c4-4370-9d97-36518a24fb9f": {
+      "requested": "gpu",
+      "actual": "gpu",
+      "reason": null
+    }
+  },
+  "source_reads": 40032,
+  "main_storage": {
+    "stage": 4,
+    "storage": "device",
+    "full_axes": "TP",
+    "shape": [
+      50654,
+      2
+    ],
+    "dtype": "float64",
+    "capacity_bytes": 810464,
+    "metadata_bytes": 50654,
+    "block_size": 32,
+    "built_samples": 40032,
+    "hits": 60014751,
+    "input_cache_released_bytes": 0,
+    "disk_read_bytes": 0,
+    "disk_write_bytes": 0,
+    "ownership": "exclusive_compact_main_output",
+    "state": "filling",
+    "block_commits": 1251
+  },
+  "reference_execution": {
+    "queries": 60022003,
+    "source_queries": 60019002,
+    "passthrough_hops_skipped": 180057006,
+    "index_transforms": 60019002,
+    "budget_bytes": 8388608,
+    "pair_time_queries": 30013001,
+    "tree_rebuilds": 3001,
+    "tree_pair_updates": 30013001,
+    "bounded_fallback_windows": 0,
+    "array_bytes": 1048576,
+    "peak_array_bytes": 1048576
+  },
+  "device_execution": {
+    "upload_batches": 3753,
+    "uploaded_samples": 120096,
+    "downloads": 5503,
+    "device_cache_hits": 0,
+    "largest_upload_batch": 32,
+    "correlation_update_calls": 471157,
+    "correlation_pairs": 30013001,
+    "largest_correlation_batch": 64,
+    "cache_budget_bytes": 2013265920,
+    "cache_peak_bytes": 24008,
+    "source_batch_limit": 32,
+    "intermediate_residency": true,
+    "cache_policy": "validated_flow_slack_v2",
+    "upload_dtype_policy": "source_dtype",
+    "upload_alignment": "sample_chunks",
+    "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+  },
+  "gpu_output_blocks": {
+    "5": {
+      "state": "ineligible",
+      "output_stage": 5,
+      "reason": "requires_fixed_lag_sequential_T_outputs"
+    }
+  },
+  "gpu_timing": {
+    "method": "cuda_events",
+    "scope": "g2_fused_kernel_regions",
+    "status": "finalized",
+    "device_seconds": 0.2372714877435882,
+    "calls": 474158,
+    "timed_calls": 14829,
+    "warmup_excluded_calls": 3,
+    "capacity_excluded_calls": 0,
+    "signature_excluded_calls": 0,
+    "nested_excluded_calls": 0,
+    "monitoring_excluded_calls": 0,
+    "sampling_excluded_calls": 459326,
+    "failed_calls": 0,
+    "pending_calls": 0,
+    "event_pair_limit": 128,
+    "peak_pending_pairs": 2,
+    "allocated_event_pairs": 2,
+    "signature_limit": 256,
+    "warmed_signatures": 3,
+    "initial_calls_per_kernel": 8,
+    "sample_every": 32,
+    "kernels": {
+      "eip_moments_add_float64": {
+        "calls": 0,
+        "timed_calls": 0,
+        "seconds": 0.0,
+        "warmup_excluded_calls": 0,
+        "capacity_excluded_calls": 0,
+        "signature_excluded_calls": 0,
+        "nested_excluded_calls": 0,
+        "monitoring_excluded_calls": 0,
+        "sampling_excluded_calls": 0,
+        "failed_calls": 0
+      },
+      "eip_moments_add_many_float64": {
+        "calls": 471157,
+        "timed_calls": 14729,
+        "seconds": 0.23511311974841545,
+        "warmup_excluded_calls": 2,
+        "capacity_excluded_calls": 0,
+        "signature_excluded_calls": 0,
+        "nested_excluded_calls": 0,
+        "monitoring_excluded_calls": 0,
+        "sampling_excluded_calls": 456426,
+        "failed_calls": 0
+      },
+      "eip_moments_result_float64": {
+        "calls": 0,
+        "timed_calls": 0,
+        "seconds": 0.0,
+        "warmup_excluded_calls": 0,
+        "capacity_excluded_calls": 0,
+        "signature_excluded_calls": 0,
+        "nested_excluded_calls": 0,
+        "monitoring_excluded_calls": 0,
+        "sampling_excluded_calls": 0,
+        "failed_calls": 0
+      },
+      "eip_moments_result_only_float64": {
+        "calls": 3001,
+        "timed_calls": 100,
+        "seconds": 0.0021583679951727394,
+        "warmup_excluded_calls": 1,
+        "capacity_excluded_calls": 0,
+        "signature_excluded_calls": 0,
+        "nested_excluded_calls": 0,
+        "monitoring_excluded_calls": 0,
+        "sampling_excluded_calls": 2900,
+        "failed_calls": 0
+      },
+      "eip_g2_sequence_block_float64": {
+        "calls": 0,
+        "timed_calls": 0,
+        "seconds": 0.0,
+        "warmup_excluded_calls": 0,
+        "capacity_excluded_calls": 0,
+        "signature_excluded_calls": 0,
+        "nested_excluded_calls": 0,
+        "monitoring_excluded_calls": 0,
+        "sampling_excluded_calls": 0,
+        "failed_calls": 0
+      }
+    },
+    "error": null,
+    "semantics": "Sum of sampled CUDA-event stream intervals around the registered fused g2 kernel calls, including bounded sequential output blocks. Includes event/launch gaps; not pure kernel activity time or full-pipeline GPU time. First call of each dtype/shape/stride layout is excluded to avoid JIT compilation gaps. Each kernel's first 8 calls are candidates; thereafter every 32 calls has one candidate, reducing measurement overhead. Transfers, conversions, other CuPy kernels and excluded calls are not measured. No extrapolation. Multiple stream intervals may overlap; do not add to exclusive host seconds."
+  },
+  "output_values": {
+    "shape": [
+      3001
+    ],
+    "dtype": "float64",
+    "finite_count": 3001,
+    "nan_count": 0,
+    "infinite_count": 0
+  },
+  "notes": [
+    "Host submission includes dispatch and synchronization waits; it is not pure GPU kernel time.",
+    "Sampled CUDA event time is not a full GPU total and is never extrapolated.",
+    "Main-store hits are resident paired-signal lookups, not original-frame rereads.",
+    "Changing lag invalidates the Q scan accumulator/time-index state; fixed-lag T output blocks are ineligible."
+  ],
+  "canonical_run": "D:\\coding\\E\\Expertise-Image-Processor\\outputs\\run_778f942a3723\\run.json"
+}

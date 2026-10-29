@@ -1,8 +1,20 @@
 @echo off
+setlocal
 cd /d "%~dp0"
-if exist ".venv\Scripts\python.exe" (
-  ".venv\Scripts\python.exe" run_web.py
+if defined EIP_PYTHON (
+  if not exist "%EIP_PYTHON%" (
+    echo Configured Python does not exist: "%EIP_PYTHON%"
+    exit /b 1
+  )
 ) else (
-  python run_web.py
+  if exist ".venv\Scripts\python.exe" (
+    set "EIP_PYTHON=%~dp0.venv\Scripts\python.exe"
+  ) else (
+    set "EIP_PYTHON=python"
+  )
 )
-if errorlevel 1 pause
+echo Python: "%EIP_PYTHON%"
+"%EIP_PYTHON%" run_web.py %*
+set "EIP_EXIT_CODE=%ERRORLEVEL%"
+if not "%EIP_EXIT_CODE%"=="0" pause
+exit /b %EIP_EXIT_CODE%

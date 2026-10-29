@@ -30,7 +30,7 @@ from eip.gpu_ops import GPU_MODULES, element_operation
 
 class Cache:
     def __init__(self,budget):
-        self.budget,self.size = budget,0
+        self.budget,self.size,self.peak = max(0,int(budget)),0,0
         self.entries = OrderedDict()
 
     def get(self,key):
@@ -40,15 +40,53 @@ class Cache:
 
     def put(self,key,value):
         value = np.asarray(value)
-        value.setflags(write=False)
         size = value.nbytes
-        while self.entries and self.size+size>self.budget:
-            _,old = self.entries.popitem(last=False)
+        old = self.entries.pop(key,None)
+        if old is not None:
             self.size -= old.nbytes
-        if size<=self.budget:
+        if size and size<=self.budget:
+            # A small ROI/point may own an entire frame or upload-sized block.
+            # Account the actual cache allocation by detaching that small view.
+            owner = value
+            while isinstance(getattr(owner,"base",None),np.ndarray):
+                owner = owner.base
+            retained = owner.nbytes
+            backing = getattr(owner,"base",None)
+            while isinstance(backing,memoryview):
+                backing = backing.obj
+            if backing is not None:
+                try:
+                    retained = max(retained,memoryview(backing).nbytes)
+                except TypeError:
+                    pass
+            if retained>size:
+                value = value.copy()
+            while self.entries and self.size+size>self.budget:
+                self.size -= self.entries.popitem(last=False)[1].nbytes
             self.entries[key] = value
             self.size += size
+            self.peak = max(self.peak,self.size)
+        value.setflags(write=False)
         return value
+
+    def clear(self):
+        self.entries.clear()
+        self.size = 0
+
+    def resize(self,budget):
+        self.budget = max(0,int(budget))
+        while self.entries and self.size>self.budget:
+            self.size -= self.entries.popitem(last=False)[1].nbytes
+
+    def discard_stages(self,stages):
+        """Release cache references after their last numeric consumer finished."""
+        stages = set(stages)
+        removed = 0
+        for key in list(self.entries):
+            if isinstance(key,tuple) and key and key[0] in stages:
+                removed += self.entries.pop(key).nbytes
+        self.size -= removed
+        return removed
 
 
 class IndexRanges:
@@ -170,9 +208,12 @@ class Source:
 
 
 class SequenceEngine:
-    def __init__(self,reader,nodes,context=None,*,workdir,center=None,single=False,input_kind="image",dependencies=(),range_cache=None,resources=None,inspection=False,profiler=None):
+    def __init__(self,reader,nodes,context=None,*,workdir,center=None,single=False,input_kind="image",dependencies=(),range_cache=None,resources=None,inspection=False,profiler=None,optimize=True):
         self.context = context or RunContext()
         self.profiler = profiler
+        self.optimize = bool(optimize)
+        self.spatial = None
+        self._output_runners = []
         self.workdir = Path(workdir)
         self.global_statistics = {}
         self.source = Source(reader,self.context,workdir,input_kind,profiler=profiler)
@@ -184,6 +225,11 @@ class SequenceEngine:
         self.nodes = [n for n in self.plan["nodes"] if n["enabled"]]
         self.contracts = [self.source.contract]
         self.operations,self.instances,self.statistics = [],{},{}
+        self.main_store = None
+        self._store_building = False
+        self._transient_target = None
+        self._single = single
+        self.execution_metrics = dict(stage_evaluations={},main_storage=None)
         legacy_mb = [n.get("execution",{}).get("memory_mb") or 256 for n in self.nodes] or [256]
         self.inspection = inspection
         self.budget = ((self.resources.inspection_mb if inspection else self.resources.job_mb) if self.resources else max(legacy_mb))*MIB
@@ -191,6 +237,13 @@ class SequenceEngine:
         self.reader_cache_budget = cache_budget//4
         configure_reader(reader,self.reader_cache_budget)
         self.cache = Cache(cache_budget-self.reader_cache_budget)
+        # Small reference state replaces part of the ordinary cache when it is
+        # present; with cache disabled it is still bounded task working state.
+        self.reference_budget = min(8*MIB, self.budget//64)
+        self.cache.budget = max(0, self.cache.budget-self.reference_budget)
+        self.reference_metrics = dict(queries=0, source_queries=0, passthrough_hops_skipped=0,
+                                      index_transforms=0, budget_bytes=self.reference_budget)
+        self.reference_states = {}
         self.mappings,self.backends = {},{}
         self.device_backends,self.device_records = {},{}
         self.resource_plan = []
@@ -300,7 +353,7 @@ class SequenceEngine:
                     retained += elements*24
                 # Outer temporal accumulators survive while upstream is computed.
                 nested = sum(int(np.prod(self.contracts[j].shape))*24 for j,old in enumerate(self.nodes[:i]) if old["algorithm"] in {"time_smooth","time_bin"})
-                if retained+working+nested+cache_budget>self.budget:
+                if retained+working+nested+self.cache.budget+self.reader_cache_budget+self.reference_budget>self.budget:
                     raise ValueError("重复统计保留数组与工作数组合计超过流程预算；请减少统计节点、先裁剪或提高内存预算")
                 self.resource_plan.append(dict(node_id=n["id"],working_bytes=working,retained_bytes=retained,nested_bytes=nested,limit_bytes=int(limit),window_storage="disk" if a=="time_smooth" and p["mode"]=="quantile" else None))
                 if a in {"time_smooth","time_bin"}:
@@ -317,6 +370,14 @@ class SequenceEngine:
                         raise ValueError(f"{n.get('name') or a} 工作数组、状态和缓存超过显存预算；请裁剪输入、提高显存上限或对此实例选择 CPU")
                     self.resource_plan[-1].update(device_retained_bytes=persistent,device_working_bytes=working)
             self.device.configure_cache()
+            if self.optimize:
+                from eip.spatial_execution import SpatialExecution
+                self.spatial = SpatialExecution(self)
+                # Reserve physical raw-block and regional window state from
+                # the existing cache allocation, rather than adding a cache.
+                reserve = self.spatial.raw_limit+self.spatial.temporal_limit
+                self.cache.resize(max(0, self.cache.budget-reserve))
+            self._configure_main_store()
             self.plan = self._actual_plan()
         except Exception:
             self.close()
@@ -334,10 +395,130 @@ class SequenceEngine:
             budget = self.resources.gpu_mb*MIB*(.25 if self.inspection else .75) if self.resources else self.budget
             self.device_backends[requested] = Backend(requested,budget)
         backend = self.device_backends[requested]
+        if self.profiler and backend.name == "gpu":
+            backend.gpu_timer = self.profiler.gpu_timer(backend.xp)
         self.backends[i] = backend
         self.device_records[node["id"]] = dict(requested=requested,actual=backend.name,reason=backend.reason)
         if backend.reason and not any(r.get("reason")==backend.reason for k,r in self.device_records.items() if k!=node["id"]):
             self.context.log(f"自动设备选择：使用 CPU；{backend.reason}")
+
+    def _configure_main_store(self):
+        from eip.stage_storage import compact_checkpoint, StageStore
+        stage = compact_checkpoint(self)
+        if stage is None:
+            return
+        contract = self.contracts[stage]
+        size = contract.length*max(1,int(np.prod(contract.shape)))*np.dtype(contract.dtype).itemsize
+        metadata = contract.length
+        working = (max((r["working_bytes"] for r in self.resource_plan),default=0)
+                   +max((r["retained_bytes"] for r in self.resource_plan),default=0)
+                   +max((r["nested_bytes"] for r in self.resource_plan),default=0))
+        transfers = self.budget//8 if any(b.name=="gpu" for b in self.backends.values()) else 0
+        free = max(0,self.budget-working-transfers-self.cache.budget-self.reader_cache_budget-self.reference_budget-4*MIB)
+        # A readiness byte is resident even when the numerical carrier is on
+        # disk. Do not replace a bounded cache with an unbounded Python index.
+        if metadata>min(self.budget//64,8*MIB) or metadata>free:
+            return
+        backend = self.device.backend(stage)
+        plans = [r for r in self.resource_plan if "device_working_bytes" in r]
+        retained = sum(r.get("device_retained_bytes",0) for r in plans)
+        device_working = max((r["device_working_bytes"] for r in plans),default=0)
+        device_free = max(0,int(self.device.budget*.75)-retained-device_working)
+        limit = self.nodes[stage-1].get("execution",{}).get("memory_mb")
+        if limit:
+            free = min(free,max(0,int(limit*MIB)-self.resource_plan[stage-1]["working_bytes"]))
+            own = self.resource_plan[stage-1]
+            device_free = min(device_free,max(0,int(limit*MIB)-own.get("device_working_bytes",0)-own.get("device_retained_bytes",0)))
+        if metadata>free:
+            return
+        if backend is not None and size<=device_free:
+            mode = "device"
+            self.device.configure_cache(extra_retained=size)
+        elif size+metadata<=free:
+            mode = "ram"
+        else:
+            mode = "disk"
+        if mode=="disk" and (self.inspection or self._single):
+            # A local check must not reserve a whole multi-GiB scratch carrier
+            # just to inspect one frame/window. The lazy path is already bounded.
+            return
+        if mode=="disk":
+            probe = self.workdir
+            while not probe.exists():
+                probe = probe.parent
+            if shutil.disk_usage(probe).free<size+32*MIB:
+                # This store is an execution optimization, not a new scientific
+                # dependency. Keep the valid bounded reader path when it cannot
+                # be spooled, rather than making a small final output fail.
+                self.execution_metrics["main_storage_fallback"] = "insufficient_temporary_disk"
+                return
+        local_sample = self.inspection or self._single and self.output.sequence_axis=="T"
+        block_size = 1 if local_sample else self.spatial.batch_size(stage) if self.spatial is not None else 32
+        self.main_store = StageStore(stage,contract,mode=mode,workdir=self.workdir,
+                                    backend=backend,block_size=block_size)
+        self.execution_metrics["main_storage"] = self.main_store.record()
+
+    def _store_callbacks(self):
+        store = self.main_store
+        def compute(sample):
+            old_building,old_target = self._store_building,self._transient_target
+            self._store_building,self._transient_target = True,store.stage
+            try:
+                backend = self.device.backend(store.stage)
+                if backend is not None:
+                    value = self.device.get(store.stage,sample,backend)
+                    return value if store.mode=="device" else self.device.host(value,backend)
+                return self.get(store.stage,sample)
+            finally:
+                self._store_building,self._transient_target = old_building,old_target
+        def release(stop):
+            removed = self.cache.discard_stages(range(store.stage+1))
+            # Source data remain independently readable. Only completed prefix
+            # cache entries are released, not files, transforms or side records.
+            if hasattr(self.source.reader,"_cache"):
+                self.source.reader._cache.clear()
+                self.source.reader._cache_size = 0
+            removed += self.device.release_consumed_prefix(store.stage,stop)
+            return removed
+        def compute_block(start, stop):
+            old_building,old_target = self._store_building,self._transient_target
+            self._store_building,self._transient_target = True,store.stage
+            try:
+                backend = store.backend if store.mode=="device" else None
+                return self.spatial.compute(store.stage,range(start,stop),destination=backend)
+            finally:
+                self._store_building,self._transient_target = old_building,old_target
+        return compute,release,compute_block if self.spatial is not None else None
+
+    def _stored_main(self,index,device_backend=None):
+        store = self.main_store
+        compute,release,compute_block = self._store_callbacks()
+        value = store.get(index,compute,self.context.check_cancelled,release,
+                          compute_block=compute_block)
+        if store.mode=="device":
+            return value if device_backend is not None else self.device.host(value,store.backend)
+        if device_backend is not None:
+            # Respect a real CPU/GPU boundary using the existing aligned,
+            # budgeted upload cache rather than a per-access hidden conversion.
+            return self.device.upload(store.stage,index,device_backend)
+        return value
+
+    def _stored_range(self,start,stop,device_backend=None,*,max_bytes=None):
+        """Read an owned checkpoint interval without per-sample array objects.
+
+        Device changes remain explicit: the numerical adapter must request the
+        checkpoint's actual carrier. Cross-device module boundaries were already
+        applied while filling the checkpoint through the ordinary executor.
+        """
+        store = self.main_store
+        if store is None:
+            raise ValueError("连续信号读取需要已规划的阶段存储")
+        if ((store.mode=="device") != (device_backend is not None)
+                or store.mode=="device" and device_backend is not store.backend):
+            raise ValueError("连续信号读取不能隐式改变阶段存储设备")
+        compute,release,compute_block = self._store_callbacks()
+        return store.get_range(start,stop,compute,self.context.check_cancelled,release,
+                               compute_block=compute_block,max_bytes=max_bytes)
 
     def _gpu_apply(self,i,value):
         op,backend,c = self.operations[i],self.backends[i],self.contracts[i]
@@ -367,7 +548,12 @@ class SequenceEngine:
                 upstream.append({key:value for key,value in n.items() if key!="name"})
             fingerprint = hashlib.sha256(json.dumps(dict(source_revision=self.source.reader.meta.revision,contract_version=3,upstream=upstream,preview_dependencies=self.dependencies),sort_keys=True,ensure_ascii=False,separators=(",",":")).encode()).hexdigest()
             stages.append(dict(id=n["id"],algorithm=n["algorithm"],enabled=n["enabled"],input=before.record(),output=self.contracts[active].record(),upstream_fingerprint=fingerprint,side_outputs=[dict(port=s["port"],contract=s["contract"].record()) for s in self._sides if s["node_id"]==n["id"]]))
-        return dict(self.plan,stages=stages,output=self.contracts[-1].record(),preview_dependencies=list(self.dependencies),resolved_bindings=self.resolved_bindings,devices=self.device_records,resources=self.resources.record() if self.resources else None,resource_role="inspection" if self.inspection else "job",worker_budget_bytes=self.budget,resource_plan=self.resource_plan,device_execution=self.device.record())
+        from eip.execution_plan import compile_execution_plan
+        physical = compile_execution_plan(self.plan["nodes"],self.contracts,consumers=self._sides,devices=self.device_records)
+        execution = dict(self.execution_metrics,main_storage=self.main_store.record() if self.main_store else None,
+                         optimization_enabled=self.optimize,physical_plan=physical,
+                         spatial_execution=self.spatial.record() if self.spatial is not None else None)
+        return dict(self.plan,stages=stages,output=self.contracts[-1].record(),preview_dependencies=list(self.dependencies),resolved_bindings=self.resolved_bindings,devices=self.device_records,resources=self.resources.record() if self.resources else None,resource_role="inspection" if self.inspection else "job",worker_budget_bytes=self.budget,resource_plan=self.resource_plan,device_execution=self.device.record(),execution=execution,reference_execution=dict(self.reference_metrics))
 
     def _resolve_parameters(self,node,position):
         from copy import deepcopy
@@ -491,6 +677,8 @@ class SequenceEngine:
         return mapping["edges"]
 
     def _modifier_value(self,i,index,*,xp=np,get_sample=None):
+        if get_sample is None and self.spatial is not None and self.spatial.can_select(i,side=True):
+            return self.spatial.modifier(i,index)
         op=self.operations[i]; a,p=op["algorithm"],op["parameters"]; c=self.contracts[i]
         get=get_sample or (lambda j:self.get(i,j))
         if a=="axis_slice" and p["axis"]==c.sequence_axis:
@@ -545,6 +733,70 @@ class SequenceEngine:
     def output(self):
         return self.contracts[-1]
 
+    def iter_outputs(self, indices):
+        """Yield logical host samples from bounded physical output batches.
+
+        Random inspection continues through get(). Full delivery can group work
+        without changing output order, time axes or per-node provenance.
+        """
+        stage = len(self.nodes)
+        if self.spatial is not None and self.spatial.prefer_sample_streaming():
+            self.execution_metrics["full_frame_cpu_policy"] = "sample_streaming_avoids_redundant_block_copy"
+            for j in indices:
+                yield j,self.get(stage,j)
+            return
+        if self.spatial is None or not isinstance(indices, range) or indices.step != 1:
+            for j in indices:
+                yield j, self.get(stage, j)
+            return
+        runner = None
+        correlation_stage = stage
+        while correlation_stage and self.spatial.can_forward(correlation_stage-1):
+            correlation_stage -= 1
+        if stage and indices.start == 0 and len(indices) == self.output.length:
+            if correlation_stage:
+                from eip.lag_scan_blocks import lag_engine_blocks
+                runner = lag_engine_blocks(self,correlation_stage)
+            if runner is None and correlation_stage:
+                from eip.gpu_sequence_blocks import engine_blocks
+                runner = engine_blocks(self,correlation_stage)
+                if runner is None:
+                    from eip.cpu_sequence_blocks import cpu_engine_blocks
+                    runner = cpu_engine_blocks(self,correlation_stage)
+        if runner is not None:
+            self._output_runners.append(runner)
+            backend = self.device.backend(correlation_stage)
+            precision = self.nodes[correlation_stage-1].get("execution", {}).get("precision", "native")
+            try:
+                for start in range(0, len(indices), runner.max_output_block):
+                    self.context.check_cancelled()
+                    stop = min(len(indices), start+runner.max_output_block)
+                    with self.profiler.measure("cpu_compute" if backend is None else "gpu_submit") if self.profiler else nullcontext():
+                        values, _ = runner.compute(start, stop)
+                        if precision != "native":
+                            values = values.astype(precision)
+                    counts = self.execution_metrics["stage_evaluations"]
+                    counts[str(correlation_stage)] = counts.get(str(correlation_stage),0)+stop-start
+                    values = self.spatial.forward(correlation_stage,stage,values,backend)
+                    for j, value in zip(range(start, stop), values):
+                        yield j, value
+            finally:
+                runner.close()
+                self._output_runners.remove(runner)
+            return
+        # Ineligible Q/W schedules retain their validated demand states.
+        # Do not stack multiple device results merely to download a host block.
+        if any(n["algorithm"] in CORRELATIONS for n in self.nodes):
+            for j in indices:
+                yield j, self.get(stage, j)
+            return
+        size = self.spatial.batch_size(stage)
+        for first in range(indices.start, indices.stop, size):
+            stop = min(indices.stop, first+size)
+            values = self.spatial.compute(stage, range(first, stop))
+            for j, value in zip(range(first, stop), values):
+                yield j, value
+
     def get(self,stage,index):
         if self.profiler is None:
             return self._get(stage,index)
@@ -557,13 +809,22 @@ class SequenceEngine:
         c = self.contracts[stage]
         if not 0<=index<c.length:
             raise IndexError("编辑后的样本号超出范围")
+        if self.main_store is not None and stage==self.main_store.stage and not self._store_building:
+            return self._stored_main(index)
+        transient = self._transient_target is not None and stage<=self._transient_target
         key = stage,index
-        hit = self.cache.get(key)
+        hit = None if transient else self.cache.get(key)
         if hit is not None:
             return hit
+        if stage and self.spatial is not None and self.device.backend(stage) is None and self.spatial.can_select(stage-1):
+            value = self.spatial.evaluate(stage-1,index)
+            return value if transient else self.cache.put(key,value)
         backend=self.device.backend(stage)
         if backend is not None:
-            return self.cache.put(key,np.asarray(self.device.host(self.device.get(stage,index,backend),backend)))
+            value=np.asarray(self.device.host(self.device.get(stage,index,backend),backend))
+            return value if transient else self.cache.put(key,value)
+        evaluations = self.execution_metrics["stage_evaluations"]
+        evaluations[str(stage)] = evaluations.get(str(stage),0)+1
         if stage==0:
             value = self.source.get(index)
         else:
@@ -673,7 +934,7 @@ class SequenceEngine:
                 self.contracts[stage] = replace(c,dtype=str(value.dtype))
             elif value.dtype!=np.dtype(c.dtype):
                 raise ValueError(f"插件输出 dtype 从 {c.dtype} 变为 {value.dtype}；请保持一致或显式设置数值精度")
-        return self.cache.put(key,value)
+        return value if transient else self.cache.put(key,value)
 
     def global_fit(self,i):
         if i not in self.global_statistics:
@@ -807,28 +1068,68 @@ class SequenceEngine:
                                  xp.stack(right).astype(xp.float64,copy=False),sign)
 
     def correlation_reference(self,i,index):
+        from eip.reference_index import WindowTimeIndex, LagTimeIndex
         op = self.operations[i]
         center,lag,window,start,stop = self.correlation_position(i,index)
         r = self.ref(i,center)
-        previous = self.window_references.get(i) if op["algorithm"]=="correlation_window" else None
-        if previous and previous["center"]==center and previous["lag"]==lag and start<=previous["start"] and stop>=previous["stop"]:
-            total,minimum,maximum,known = (previous[k] for k in ("total","minimum","maximum","known"))
-            additions = ((start,previous["start"]),(previous["stop"],stop))
-        else:
-            total,minimum,maximum,known = 0.,None,None,0
-            additions = ((start,stop),)
-        for bounds in additions:
-            for j in range(*bounds):
-                left,right = self.ref(i,j).get("time"),self.ref(i,j+lag).get("time")
-                if left is not None and right is not None:
-                    delta = right-left;total += delta;known += 1
-                    minimum = delta if minimum is None else min(minimum,delta)
-                    maximum = delta if maximum is None else max(maximum,delta)
-        if op["algorithm"]=="correlation_window":
-            self.window_references[i] = dict(center=center,lag=lag,start=start,stop=stop,total=total,minimum=minimum,maximum=maximum,known=known)
+        if i not in self.reference_states:
+            maximum = max(op["windows"]) if op["algorithm"]=="correlation_window" else window
+            count = sum(n["algorithm"] in CORRELATIONS for n in self.nodes)
+            budget = self.reference_budget//max(1,count)
+            if self.optimize and op["algorithm"]!="correlation_window" and op["parameters"].get("analysis")=="curve":
+                self.reference_states[i] = LagTimeIndex(maximum,self.contracts[i].length,budget,
+                    self.reference_metrics,get_times=lambda first,last:self._reference_times(i,first,last))
+            else:
+                self.reference_states[i] = WindowTimeIndex(maximum,budget,self.reference_metrics)
+        total,minimum,maximum,known = self.reference_states[i].summary(
+            start,stop,lag,lambda j:self.ref(i,j).get("time"),self.context.check_cancelled)
         return dict(r,correlation=dict(module_id=op["node"]["id"],center_sample=center,lag_samples=lag,window=window,left_start=start,left_stop=stop,right_start=start+lag,right_stop=stop+lag,lag_seconds=total/window if known==window else None,lag_seconds_min=minimum,lag_seconds_max=maximum,known_pairs=known))
 
+    def _reference_times(self,stage,first,stop):
+        """Exact indexed times for simple upstream index maps, or no shortcut.
+
+        Compound temporal provenance and custom sample metadata still use ref().
+        Only the requested bounded interval is allocated, never an unbudgeted
+        full-source time table. Presence is independent of numerical finiteness.
+        """
+        reader = self.source.reader
+        if self.source.spooled or hasattr(reader,"sample_ref"):
+            return None
+        if hasattr(reader,"times"):
+            source_times = reader.times
+            if source_times is None:
+                return np.zeros(stop-first,dtype=np.float64),np.zeros(stop-first,dtype=bool)
+        elif hasattr(reader,"timestamps") and reader.timestamps is not None:
+            source_times = reader.timestamps
+        else:
+            return None
+        positions = np.arange(first,stop,dtype=np.int64)
+        for i in range(stage-1,-1,-1):
+            op = self.operations[i]
+            a,p = op["algorithm"],op["parameters"]
+            if a=="time_crop":
+                if "indices" in op:
+                    selected = op["indices"]
+                    if not isinstance(selected,range):
+                        return None
+                    positions = selected.start+positions*selected.step
+                else:
+                    positions += p["first"]-1
+            elif a=="time_sample":
+                positions = p["offset"]+positions*p["step"]
+            elif (a in {"time_smooth","time_bin",*CORRELATIONS}
+                  or a=="axis_slice" and p["output"]=="main" and p["axis"]==self.contracts[i].sequence_axis
+                  or a=="global_statistics" and p["output"]=="main"):
+                return None
+        if isinstance(source_times,np.ndarray) and source_times.dtype.kind in "fiu":
+            return np.asarray(source_times[positions],dtype=np.float64),np.ones(len(positions),dtype=bool)
+        values = [source_times[int(j)] for j in positions]
+        present = np.fromiter((v is not None for v in values),dtype=bool,count=len(values))
+        numbers = np.fromiter((0. if v is None else float(v) for v in values),dtype=np.float64,count=len(values))
+        return numbers,present
+
     def ref(self,stage,index):
+        self.reference_metrics["queries"] += 1
         if self.profiler is None:
             return self._ref(stage,index)
         with self.profiler.measure("references"):
@@ -836,9 +1137,31 @@ class SequenceEngine:
 
     def _ref(self,stage,index):
         self.context.check_cancelled()
+        requested_index = index
+        # Collapse identity time paths and simple index transforms once per
+        # query. Spatial/numerical modules retain their separate provenance in
+        # the plan but need no recursive dictionaries for the same frame time.
+        while stage:
+            i = stage-1
+            op = self.operations[i]
+            a,p = op["algorithm"],op["parameters"]
+            if a=="time_crop":
+                index = op["indices"][index] if "indices" in op else index+p["first"]-1
+                self.reference_metrics["index_transforms"] += 1
+            elif a=="time_sample":
+                index = p["offset"]+index*p["step"]
+                self.reference_metrics["index_transforms"] += 1
+            elif (a in {"time_smooth","time_bin",*CORRELATIONS}
+                  or a=="axis_slice" and p["output"]=="main" and p["axis"]==self.contracts[i].sequence_axis
+                  or a=="global_statistics" and p["output"]=="main"):
+                break
+            else:
+                self.reference_metrics["passthrough_hops_skipped"] += 1
+            stage -= 1
         if stage==0:
+            self.reference_metrics["source_queries"] += 1
             original = self.source.ref(index)
-            return dict(original,sample_index=index,source_sample=index,source_span=original.get("source_span",[index,index+1]))
+            return dict(original,sample_index=requested_index,source_sample=index,source_span=original.get("source_span",[index,index+1]))
         i = stage-1
         op = self.operations[i]
         a,p,n = op["algorithm"],op["parameters"],op["node"]
@@ -873,9 +1196,20 @@ class SequenceEngine:
             r=self.global_ref(i)
         else:
             r = self.ref(i,index)
-        return dict(r,sample_index=index)
+        return dict(r,sample_index=requested_index)
 
     def close(self):
+        if self.profiler:
+            # Finalize before releasing backend state. On a failed/cancelled
+            # path the original computation exception remains authoritative.
+            self.profiler.finish_gpu(raise_errors=False)
+        if getattr(self,"spatial",None) is not None:
+            self.spatial.close()
+        for runner in getattr(self,"_output_runners",()):
+            runner.close()
+        if getattr(self,"main_store",None) is not None:
+            self.main_store.close()
+            self.main_store = None
         if hasattr(self,"device"):
             self.device.close()
         for state in self.temporal_states.values():
@@ -884,6 +1218,9 @@ class SequenceEngine:
         self.temporal_states.clear()
         self.last_correlation.clear()
         self.window_references.clear()
+        for state in self.reference_states.values():
+            state.close()
+        self.reference_states.clear()
         for instance in self.instances.values():
             if hasattr(instance,"close"):
                 instance.close()

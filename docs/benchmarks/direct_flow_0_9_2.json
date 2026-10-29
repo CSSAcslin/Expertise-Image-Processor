@@ -1,0 +1,1812 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-28",
+  "app_version": "0.9.2",
+  "cpu": "AMD Ryzen 9 9950X 16-Core Processor",
+  "logical_processors": 32,
+  "gpu": "NVIDIA GeForce RTX 5070 Ti",
+  "python": "3.12.10",
+  "versions": {
+    "numpy": "2.4.6",
+    "av": "19.0.1",
+    "cupy-cuda13x": "14.2.0",
+    "tifffile": "2026.6.1"
+  },
+  "dataset": {
+    "name": "Atip10000fps.cine",
+    "samples": 10284,
+    "input_shape": [
+      600,
+      832
+    ],
+    "dtype": "uint16",
+    "file_bytes": 10267926620,
+    "revision": "e7b1451d94380189e5824abc1aa25963f4d897b4501069cdef1ef82fe09c1b7c",
+    "roi": [
+      140,
+      207,
+      132,
+      142
+    ],
+    "window": 1001,
+    "lag": 0,
+    "stride": 1,
+    "output_shape": [
+      9284
+    ],
+    "output_dtype": "float64",
+    "semantics": "g2_of_two_independent_finite_spatial_means"
+  },
+  "methodology": {
+    "repeats": 3,
+    "fresh_workers": true,
+    "serial": true,
+    "rotating_order": true,
+    "batch_size": 32,
+    "input_cache": "OS file cache not forcibly cleared; real-data correctness preflight before timed trials",
+    "full_exports": true,
+    "validation_outside_timing": true,
+    "profile_diagnostics_excluded": true,
+    "equality": {
+      "rtol": 2e-13,
+      "atol": 2e-13,
+      "lag_seconds_atol": 1e-12
+    },
+    "caveat": "literal and workbench transfer/output schedules differ; timing difference is not pure module-dispatch cost",
+    "profile_note": "Initial builtins=True cProfile runs contain a root/plot cumulative-call-stack anomaly. Do not interpret those cumulative rows as plot or algorithm time. Independent builtins=False reruns retain Python call hierarchy; all diagnostics are excluded from formal medians."
+  },
+  "code_unchanged": true,
+  "code_sha256": {
+    "src/eip/cine_reader.py": "8b6fd349415abc36d8dcf0aaab92f33dcc05325d3a5bde1b2c99e507e3f949d4",
+    "src/eip/gpu_pipeline.py": "599be56bdd3b71376405896e30781f971e6dcfe783d5d66ab5f561c068a8138e",
+    "src/eip/modes/split_correlation/correlation.py": "bac326c6e7badadd04f3073ade62a1b105c637dd3819f772aab1d5472d9e0da5",
+    "src/eip/modes/split_correlation/geometry.py": "9441c8e0a9309077b50cb5f2aa2ccf840d168d108ae6997c8c9993a9869af134",
+    "src/eip/module_ops.py": "7c1eec1a4e0940635b5ee31faab4a3860f3c1984b6ff39fca896ab61d9c6a33a",
+    "src/eip/sequence_engine.py": "e0c34232a7d0e7418d9f38bd04e7283ad1033043d5d285977b323e2f2ec65890",
+    "tools/benchmark_direct_flow.py": "053065a62a9bea401ae8a72d2c22568b91206edebd80d026be2468a322963c3e",
+    "tools/benchmark_execution_time.py": "65e4b60aa29a001e50030e0e5e72d5ba8fed26f4ab9a097407d0c58b41e87dc2",
+    "tools/direct_cine_exports.py": "ecb0ded5cdfa59f87d16043ef01bbbdfe1a53e9406e4387d84b84905cdc1c7ba",
+    "tools/direct_cine_flow.py": "b6afbbdd8629c440b01b2f36cbfed6dc7aca7737bf0c5d464cb6542e330c88b0"
+  },
+  "medians": {
+    "app_cpu": {
+      "repeats": 3,
+      "process_wall_seconds": 47.07839000003878,
+      "job_call_seconds": 46.80452399991918,
+      "read_compute_seconds": 45.85460078774486,
+      "output_and_provenance_seconds": 0.8202951063867658,
+      "setup_seconds": 0.046542300027795136
+    },
+    "literal_cpu": {
+      "repeats": 3,
+      "process_wall_seconds": 46.269421999924816,
+      "job_call_seconds": 46.08012170006987,
+      "read_compute_seconds": 45.48147670098115,
+      "output_and_provenance_seconds": 0.48751470004208386,
+      "setup_seconds": 0.051553299999795854
+    },
+    "specialized_cpu": {
+      "repeats": 3,
+      "process_wall_seconds": 4.794521900010295,
+      "job_call_seconds": 4.607230799971148,
+      "read_compute_seconds": 4.045022903825156,
+      "output_and_provenance_seconds": 0.4800297999754548,
+      "setup_seconds": 0.0503506000386551
+    },
+    "app_gpu_mixed": {
+      "repeats": 3,
+      "process_wall_seconds": 63.324678700068034,
+      "job_call_seconds": 63.00185949995648,
+      "read_compute_seconds": 61.649287794250995,
+      "output_and_provenance_seconds": 0.9122349146055058,
+      "setup_seconds": 0.3258956999052316
+    },
+    "literal_gpu_mixed": {
+      "repeats": 3,
+      "process_wall_seconds": 38.24862960004248,
+      "job_call_seconds": 38.02069819997996,
+      "read_compute_seconds": 37.20281959709246,
+      "output_and_provenance_seconds": 0.46538420009892434,
+      "setup_seconds": 0.3505613000597805
+    },
+    "app_gpu": {
+      "repeats": 3,
+      "process_wall_seconds": 9.598206899943762,
+      "job_call_seconds": 9.2849093999248,
+      "read_compute_seconds": 7.98483059857972,
+      "output_and_provenance_seconds": 0.8917015946935862,
+      "setup_seconds": 0.31086619989946485
+    },
+    "literal_gpu": {
+      "repeats": 3,
+      "process_wall_seconds": 9.006440000026487,
+      "job_call_seconds": 8.773182400036603,
+      "read_compute_seconds": 7.965343199670315,
+      "output_and_provenance_seconds": 0.46559300005901605,
+      "setup_seconds": 0.33489579998422414
+    },
+    "specialized_gpu": {
+      "repeats": 3,
+      "process_wall_seconds": 2.9405446000164375,
+      "job_call_seconds": 2.7099561999784783,
+      "read_compute_seconds": 1.8911892058094963,
+      "output_and_provenance_seconds": 0.4637123999418691,
+      "setup_seconds": 0.335782999987714
+    }
+  },
+  "variants": {
+    "app_cpu": {
+      "policy": {
+        "kind": "app",
+        "policy": "cpu"
+      },
+      "trials": [
+        {
+          "repeat": 1,
+          "process_wall_seconds": 47.07839000003878,
+          "job_call_seconds": 46.80452399991918,
+          "read_compute_seconds": 45.85460078774486,
+          "output_and_provenance_seconds": 0.8203611925709993,
+          "setup_seconds": 0.046542300027795136
+        },
+        {
+          "repeat": 2,
+          "process_wall_seconds": 47.149802100029774,
+          "job_call_seconds": 46.87347840005532,
+          "read_compute_seconds": 45.92418859351892,
+          "output_and_provenance_seconds": 0.8202951063867658,
+          "setup_seconds": 0.046727900044061244
+        },
+        {
+          "repeat": 3,
+          "process_wall_seconds": 46.03494649997447,
+          "job_call_seconds": 45.7662713000318,
+          "read_compute_seconds": 44.82485550129786,
+          "output_and_provenance_seconds": 0.814232905744575,
+          "setup_seconds": 0.045524499961175025
+        }
+      ],
+      "validation": {
+        "all_passed": true,
+        "values_per_trial": 9284,
+        "checked_values": 27852,
+        "finite_masks_equal": true,
+        "exact_values_equal": true,
+        "max_absolute_error": 0.0,
+        "max_relative_error": 0.0,
+        "references_byte_equal": true,
+        "csv_rows_per_trial": 9284,
+        "device_policy_satisfied": true
+      },
+      "host_seconds_medians": {
+        "setup": 0.046542300027795136,
+        "input_read": 2.000143196899444,
+        "index_write": 0.0,
+        "cpu_compute": 43.48687230690848,
+        "gpu_submit": 0.0,
+        "upload": 0.0,
+        "download": 0.0,
+        "references": 0.2448433954268694,
+        "output_statistics": 0.09548260539304465,
+        "output_render": 0.343249199911952,
+        "output_write": 0.13441339565906674,
+        "other": 0.07885221962351352
+      },
+      "execution_example": {
+        "stage_evaluations": {
+          "6": 9284,
+          "5": 10284,
+          "4": 10284,
+          "3": 10284,
+          "2": 10284,
+          "1": 10284,
+          "0": 10284
+        },
+        "main_storage": {
+          "stage": 5,
+          "storage": "ram",
+          "full_axes": "TP",
+          "shape": [
+            10284,
+            2
+          ],
+          "dtype": "float64",
+          "capacity_bytes": 164544,
+          "metadata_bytes": 10284,
+          "block_size": 32,
+          "built_samples": 10284,
+          "hits": 55246,
+          "input_cache_released_bytes": 0,
+          "disk_read_bytes": 0,
+          "disk_write_bytes": 0,
+          "ownership": "exclusive_compact_main_output",
+          "state": "complete"
+        }
+      },
+      "device_execution_example": {
+        "upload_batches": 0,
+        "uploaded_samples": 0,
+        "downloads": 0,
+        "device_cache_hits": 0,
+        "largest_upload_batch": 0,
+        "correlation_update_calls": 0,
+        "correlation_pairs": 0,
+        "largest_correlation_batch": 0,
+        "cache_budget_bytes": 1006632960,
+        "cache_peak_bytes": 0,
+        "source_batch_limit": 32,
+        "intermediate_residency": false,
+        "cache_policy": "validated_flow_slack_v2",
+        "upload_dtype_policy": "source_dtype",
+        "upload_alignment": "sample_chunks",
+        "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+      },
+      "source_read_samples": [
+        10284,
+        10284,
+        10284
+      ]
+    },
+    "literal_cpu": {
+      "policy": {
+        "kind": "direct",
+        "policy": "cpu",
+        "implementation": "literal"
+      },
+      "trials": [
+        {
+          "repeat": 1,
+          "process_wall_seconds": 46.269421999924816,
+          "job_call_seconds": 46.08012170006987,
+          "read_compute_seconds": 45.48147670098115,
+          "output_and_provenance_seconds": 0.48751470004208386,
+          "setup_seconds": 0.051553299999795854
+        },
+        {
+          "repeat": 2,
+          "process_wall_seconds": 47.02440039999783,
+          "job_call_seconds": 46.83718360005878,
+          "read_compute_seconds": 46.238616802264005,
+          "output_and_provenance_seconds": 0.48503590002655983,
+          "setup_seconds": 0.05277330009266734
+        },
+        {
+          "repeat": 3,
+          "process_wall_seconds": 44.66190890001599,
+          "job_call_seconds": 44.475943699944764,
+          "read_compute_seconds": 43.88696089829318,
+          "output_and_provenance_seconds": 0.48851479997392744,
+          "setup_seconds": 0.050533800036646426
+        }
+      ],
+      "validation": {
+        "all_passed": true,
+        "values_per_trial": 9284,
+        "checked_values": 27852,
+        "finite_masks_equal": true,
+        "exact_values_equal": true,
+        "max_absolute_error": 0.0,
+        "max_relative_error": 0.0,
+        "references_byte_equal": true,
+        "csv_rows_per_trial": 9284,
+        "device_policy_satisfied": true
+      },
+      "phases_seconds_medians": {
+        "setup": 0.051553299999795854,
+        "read": 2.5320869996212423,
+        "preprocess": 42.82139860128518,
+        "correlation": 0.12675850000232458,
+        "output": 0.48751470004208386,
+        "cleanup": 1.5900004655122757e-05
+      },
+      "preprocessing_work": {
+        "batches": 10284,
+        "calibrated_pixels": 5133772800,
+        "consumed_roi_pixels": 385526592,
+        "signals_bytes": 164544,
+        "input_transfer_block_bytes": 998400,
+        "retained_raw_frames": 1,
+        "signal_residency": "host between preprocessing and correlation"
+      },
+      "transfers": {
+        "upload_calls": 0,
+        "upload_bytes": 0,
+        "download_calls": 0,
+        "download_bytes": 0
+      },
+      "correlation_calls": {
+        "rebuilds": 37,
+        "scalar_updates": 0,
+        "batched_updates": 0,
+        "result_calls": 0,
+        "pair_updates": 55531,
+        "specialized_serial_calls": 0
+      },
+      "correlation_kernel_calls": 0,
+      "gpu_pool_limit_bytes": null
+    },
+    "specialized_cpu": {
+      "policy": {
+        "kind": "direct",
+        "policy": "cpu",
+        "implementation": "specialized"
+      },
+      "trials": [
+        {
+          "repeat": 1,
+          "process_wall_seconds": 6.110767400008626,
+          "job_call_seconds": 5.932196700014174,
+          "read_compute_seconds": 5.370359689230099,
+          "output_and_provenance_seconds": 0.4769393999595195,
+          "setup_seconds": 0.05008860002271831
+        },
+        {
+          "repeat": 2,
+          "process_wall_seconds": 4.766267200000584,
+          "job_call_seconds": 4.583503699977882,
+          "read_compute_seconds": 4.017615291988477,
+          "output_and_provenance_seconds": 0.4845348000526428,
+          "setup_seconds": 0.0503506000386551
+        },
+        {
+          "repeat": 3,
+          "process_wall_seconds": 4.794521900010295,
+          "job_call_seconds": 4.607230799971148,
+          "read_compute_seconds": 4.045022903825156,
+          "output_and_provenance_seconds": 0.4800297999754548,
+          "setup_seconds": 0.05114039999898523
+        }
+      ],
+      "validation": {
+        "all_passed": true,
+        "values_per_trial": 9284,
+        "checked_values": 27852,
+        "finite_masks_equal": true,
+        "exact_values_equal": true,
+        "max_absolute_error": 0.0,
+        "max_relative_error": 0.0,
+        "references_byte_equal": true,
+        "csv_rows_per_trial": 9284,
+        "device_policy_satisfied": true
+      },
+      "phases_seconds_medians": {
+        "setup": 0.0503506000386551,
+        "read": 1.9376578014343977,
+        "preprocess": 1.9940159989055246,
+        "correlation": 0.12530830001924187,
+        "output": 0.4800297999754548,
+        "cleanup": 1.4699995517730713e-05
+      },
+      "preprocessing_work": {
+        "batches": 10284,
+        "calibrated_pixels": 385526592,
+        "consumed_roi_pixels": 385526592,
+        "signals_bytes": 164544,
+        "input_transfer_block_bytes": 74976,
+        "retained_raw_frames": 1,
+        "signal_residency": "host between preprocessing and correlation"
+      },
+      "transfers": {
+        "upload_calls": 0,
+        "upload_bytes": 0,
+        "download_calls": 0,
+        "download_bytes": 0
+      },
+      "correlation_calls": {
+        "rebuilds": 37,
+        "scalar_updates": 0,
+        "batched_updates": 0,
+        "result_calls": 0,
+        "pair_updates": 55531,
+        "specialized_serial_calls": 0
+      },
+      "correlation_kernel_calls": 0,
+      "gpu_pool_limit_bytes": null
+    },
+    "app_gpu_mixed": {
+      "policy": {
+        "kind": "app",
+        "policy": "mixed"
+      },
+      "trials": [
+        {
+          "repeat": 1,
+          "process_wall_seconds": 63.324678700068034,
+          "job_call_seconds": 63.00185949995648,
+          "read_compute_seconds": 61.649287794250995,
+          "output_and_provenance_seconds": 0.9122349146055058,
+          "setup_seconds": 0.3258956999052316
+        },
+        {
+          "repeat": 2,
+          "process_wall_seconds": 49.296238200040534,
+          "job_call_seconds": 48.981750599923544,
+          "read_compute_seconds": 47.65479290159419,
+          "output_and_provenance_seconds": 0.9079783080378547,
+          "setup_seconds": 0.3116559999762103
+        },
+        {
+          "repeat": 3,
+          "process_wall_seconds": 64.39945740008261,
+          "job_call_seconds": 64.07809029996861,
+          "read_compute_seconds": 62.708284398540854,
+          "output_and_provenance_seconds": 0.919276193366386,
+          "setup_seconds": 0.3368394001154229
+        }
+      ],
+      "validation": {
+        "all_passed": true,
+        "values_per_trial": 9284,
+        "checked_values": 27852,
+        "finite_masks_equal": true,
+        "exact_values_equal": false,
+        "max_absolute_error": 2.220446049250313e-16,
+        "max_relative_error": 2.2203665237947624e-16,
+        "references_byte_equal": true,
+        "csv_rows_per_trial": 9284,
+        "device_policy_satisfied": true
+      },
+      "host_seconds_medians": {
+        "setup": 0.3258956999052316,
+        "input_read": 1.2772922998992726,
+        "index_write": 0.0,
+        "cpu_compute": 27.610121396253817,
+        "gpu_submit": 11.075022396515124,
+        "upload": 1.9480521001387388,
+        "download": 18.607587301521562,
+        "references": 0.26889170333743095,
+        "output_statistics": 0.13001390092540532,
+        "output_render": 0.34909809997770935,
+        "output_write": 0.16514660487882793,
+        "other": 0.10985430795699358
+      },
+      "execution_example": {
+        "stage_evaluations": {
+          "6": 9284,
+          "5": 10284,
+          "4": 10284,
+          "3": 10284,
+          "2": 10284,
+          "1": 10284,
+          "0": 10284
+        },
+        "main_storage": {
+          "stage": 5,
+          "storage": "device",
+          "full_axes": "TP",
+          "shape": [
+            10284,
+            2
+          ],
+          "dtype": "float64",
+          "capacity_bytes": 164544,
+          "metadata_bytes": 10284,
+          "block_size": 32,
+          "built_samples": 10284,
+          "hits": 55246,
+          "input_cache_released_bytes": 48318016512,
+          "disk_read_bytes": 0,
+          "disk_write_bytes": 0,
+          "ownership": "exclusive_compact_main_output",
+          "state": "complete"
+        }
+      },
+      "device_execution_example": {
+        "upload_batches": 644,
+        "uploaded_samples": 20568,
+        "downloads": 19568,
+        "device_cache_hits": 19924,
+        "largest_upload_batch": 32,
+        "correlation_update_calls": 19086,
+        "correlation_pairs": 55531,
+        "largest_correlation_batch": 64,
+        "cache_budget_bytes": 2013265920,
+        "cache_peak_bytes": 150422048,
+        "source_batch_limit": 32,
+        "intermediate_residency": true,
+        "cache_policy": "validated_flow_slack_v2",
+        "upload_dtype_policy": "source_dtype",
+        "upload_alignment": "sample_chunks",
+        "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+      },
+      "source_read_samples": [
+        10284,
+        10284,
+        10284
+      ]
+    },
+    "literal_gpu_mixed": {
+      "policy": {
+        "kind": "direct",
+        "policy": "mixed",
+        "implementation": "literal"
+      },
+      "trials": [
+        {
+          "repeat": 1,
+          "process_wall_seconds": 37.88759010005742,
+          "job_call_seconds": 37.65091810002923,
+          "read_compute_seconds": 36.82055479916744,
+          "output_and_provenance_seconds": 0.4736430000048131,
+          "setup_seconds": 0.3505613000597805
+        },
+        {
+          "repeat": 2,
+          "process_wall_seconds": 38.38914750004187,
+          "job_call_seconds": 38.1576258999994,
+          "read_compute_seconds": 37.34146220027469,
+          "output_and_provenance_seconds": 0.46538420009892434,
+          "setup_seconds": 0.34475549997296184
+        },
+        {
+          "repeat": 3,
+          "process_wall_seconds": 38.24862960004248,
+          "job_call_seconds": 38.02069819997996,
+          "read_compute_seconds": 37.20281959709246,
+          "output_and_provenance_seconds": 0.45953049999661744,
+          "setup_seconds": 0.3519192000385374
+        }
+      ],
+      "validation": {
+        "all_passed": true,
+        "values_per_trial": 9284,
+        "checked_values": 27852,
+        "finite_masks_equal": true,
+        "exact_values_equal": false,
+        "max_absolute_error": 2.220446049250313e-16,
+        "max_relative_error": 2.2203665237947624e-16,
+        "references_byte_equal": true,
+        "csv_rows_per_trial": 9284,
+        "device_policy_satisfied": true
+      },
+      "phases_seconds_medians": {
+        "setup": 0.3505613000597805,
+        "read": 2.496425499441102,
+        "preprocess": 34.37288859765977,
+        "correlation": 0.3335054999915883,
+        "output": 0.46538420009892434,
+        "cleanup": 1.6600009985268116e-05
+      },
+      "preprocessing_work": {
+        "batches": 322,
+        "calibrated_pixels": 5133772800,
+        "consumed_roi_pixels": 385526592,
+        "signals_bytes": 164544,
+        "input_transfer_block_bytes": 31948800,
+        "retained_raw_frames": 32,
+        "signal_residency": "host between preprocessing and correlation"
+      },
+      "transfers": {
+        "upload_calls": 10611,
+        "upload_bytes": 48322131016,
+        "download_calls": 20569,
+        "download_bytes": 41070421216
+      },
+      "correlation_calls": {
+        "rebuilds": 37,
+        "scalar_updates": 18494,
+        "batched_updates": 592,
+        "result_calls": 9284,
+        "pair_updates": 55531,
+        "specialized_serial_calls": 0
+      },
+      "correlation_kernel_calls": 28370,
+      "gpu_pool_limit_bytes": 536870912
+    },
+    "app_gpu": {
+      "policy": {
+        "kind": "app",
+        "policy": "gpu"
+      },
+      "trials": [
+        {
+          "repeat": 1,
+          "process_wall_seconds": 9.624088200042024,
+          "job_call_seconds": 9.312201400054619,
+          "read_compute_seconds": 8.011093190056272,
+          "output_and_provenance_seconds": 0.8917015946935862,
+          "setup_seconds": 0.3130829998990521
+        },
+        {
+          "repeat": 2,
+          "process_wall_seconds": 9.598206899943762,
+          "job_call_seconds": 9.2849093999248,
+          "read_compute_seconds": 7.98483059857972,
+          "output_and_provenance_seconds": 0.8940702988766134,
+          "setup_seconds": 0.30968780000694096
+        },
+        {
+          "repeat": 3,
+          "process_wall_seconds": 9.560949499951676,
+          "job_call_seconds": 9.240943099954166,
+          "read_compute_seconds": 7.944816396338865,
+          "output_and_provenance_seconds": 0.890111995046027,
+          "setup_seconds": 0.31086619989946485
+        }
+      ],
+      "validation": {
+        "all_passed": true,
+        "values_per_trial": 9284,
+        "checked_values": 27852,
+        "finite_masks_equal": true,
+        "exact_values_equal": false,
+        "max_absolute_error": 2.220446049250313e-16,
+        "max_relative_error": 2.2203665237947624e-16,
+        "references_byte_equal": true,
+        "csv_rows_per_trial": 9284,
+        "device_policy_satisfied": true
+      },
+      "host_seconds_medians": {
+        "setup": 0.31086619989946485,
+        "input_read": 1.2200220972299576,
+        "index_write": 0.0,
+        "cpu_compute": 0.029353902908042073,
+        "gpu_submit": 5.822159104514867,
+        "upload": 0.46132140094414353,
+        "download": 0.4407902068924159,
+        "references": 0.2614801044110209,
+        "output_statistics": 0.1250413958914578,
+        "output_render": 0.35132310003973544,
+        "output_write": 0.15590489865280688,
+        "other": 0.09203020250424743
+      },
+      "execution_example": {
+        "stage_evaluations": {
+          "6": 9284,
+          "5": 10284,
+          "4": 10284,
+          "3": 10284,
+          "2": 10284,
+          "1": 10284,
+          "0": 10284
+        },
+        "main_storage": {
+          "stage": 5,
+          "storage": "device",
+          "full_axes": "TP",
+          "shape": [
+            10284,
+            2
+          ],
+          "dtype": "float64",
+          "capacity_bytes": 164544,
+          "metadata_bytes": 10284,
+          "block_size": 32,
+          "built_samples": 10284,
+          "hits": 55246,
+          "input_cache_released_bytes": 10267545600,
+          "disk_read_bytes": 0,
+          "disk_write_bytes": 0,
+          "ownership": "exclusive_compact_main_output",
+          "state": "complete"
+        }
+      },
+      "device_execution_example": {
+        "upload_batches": 322,
+        "uploaded_samples": 10284,
+        "downloads": 9284,
+        "device_cache_hits": 9962,
+        "largest_upload_batch": 32,
+        "correlation_update_calls": 19086,
+        "correlation_pairs": 55531,
+        "largest_correlation_batch": 64,
+        "cache_budget_bytes": 2013265920,
+        "cache_peak_bytes": 32023072,
+        "source_batch_limit": 32,
+        "intermediate_residency": true,
+        "cache_policy": "validated_flow_slack_v2",
+        "upload_dtype_policy": "source_dtype",
+        "upload_alignment": "sample_chunks",
+        "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+      },
+      "source_read_samples": [
+        10284,
+        10284,
+        10284
+      ]
+    },
+    "literal_gpu": {
+      "policy": {
+        "kind": "direct",
+        "policy": "gpu",
+        "implementation": "literal"
+      },
+      "trials": [
+        {
+          "repeat": 1,
+          "process_wall_seconds": 9.084081699955277,
+          "job_call_seconds": 8.847120099933818,
+          "read_compute_seconds": 8.043881198973395,
+          "output_and_provenance_seconds": 0.46559300005901605,
+          "setup_seconds": 0.3324403000297025
+        },
+        {
+          "repeat": 2,
+          "process_wall_seconds": 9.006440000026487,
+          "job_call_seconds": 8.773182400036603,
+          "read_compute_seconds": 7.965343199670315,
+          "output_and_provenance_seconds": 0.46799329994246364,
+          "setup_seconds": 0.33489579998422414
+        },
+        {
+          "repeat": 3,
+          "process_wall_seconds": 8.916665599914268,
+          "job_call_seconds": 8.691735200001858,
+          "read_compute_seconds": 7.874680201755837,
+          "output_and_provenance_seconds": 0.4616727000102401,
+          "setup_seconds": 0.35012199997436255
+        }
+      ],
+      "validation": {
+        "all_passed": true,
+        "values_per_trial": 9284,
+        "checked_values": 27852,
+        "finite_masks_equal": true,
+        "exact_values_equal": false,
+        "max_absolute_error": 2.220446049250313e-16,
+        "max_relative_error": 2.2203665237947624e-16,
+        "references_byte_equal": true,
+        "csv_rows_per_trial": 9284,
+        "device_policy_satisfied": true
+      },
+      "phases_seconds_medians": {
+        "setup": 0.33489579998422414,
+        "read": 2.382840600097552,
+        "preprocess": 5.252123999642208,
+        "correlation": 0.33037859993055463,
+        "output": 0.46559300005901605,
+        "cleanup": 1.5099998563528061e-05
+      },
+      "preprocessing_work": {
+        "batches": 322,
+        "calibrated_pixels": 5133772800,
+        "consumed_roi_pixels": 385526592,
+        "signals_bytes": 164544,
+        "input_transfer_block_bytes": 31948800,
+        "retained_raw_frames": 32,
+        "signal_residency": "host between preprocessing and correlation"
+      },
+      "transfers": {
+        "upload_calls": 327,
+        "upload_bytes": 10271660104,
+        "download_calls": 10285,
+        "download_bytes": 238816
+      },
+      "correlation_calls": {
+        "rebuilds": 37,
+        "scalar_updates": 18494,
+        "batched_updates": 592,
+        "result_calls": 9284,
+        "pair_updates": 55531,
+        "specialized_serial_calls": 0
+      },
+      "correlation_kernel_calls": 28370,
+      "gpu_pool_limit_bytes": 536870912
+    },
+    "specialized_gpu": {
+      "policy": {
+        "kind": "direct",
+        "policy": "gpu",
+        "implementation": "specialized"
+      },
+      "trials": [
+        {
+          "repeat": 1,
+          "process_wall_seconds": 2.946427999995649,
+          "job_call_seconds": 2.717607400030829,
+          "read_compute_seconds": 1.9092804997926578,
+          "output_and_provenance_seconds": 0.4645465000066906,
+          "setup_seconds": 0.3236555000767112
+        },
+        {
+          "repeat": 2,
+          "process_wall_seconds": 2.9204824999906123,
+          "job_call_seconds": 2.691856599994935,
+          "read_compute_seconds": 1.8733085006242618,
+          "output_and_provenance_seconds": 0.460463700001128,
+          "setup_seconds": 0.3390672999667004
+        },
+        {
+          "repeat": 3,
+          "process_wall_seconds": 2.9405446000164375,
+          "job_call_seconds": 2.7099561999784783,
+          "read_compute_seconds": 1.8911892058094963,
+          "output_and_provenance_seconds": 0.4637123999418691,
+          "setup_seconds": 0.335782999987714
+        }
+      ],
+      "validation": {
+        "all_passed": true,
+        "values_per_trial": 9284,
+        "checked_values": 27852,
+        "finite_masks_equal": true,
+        "exact_values_equal": false,
+        "max_absolute_error": 2.220446049250313e-16,
+        "max_relative_error": 2.2203665237947624e-16,
+        "references_byte_equal": true,
+        "csv_rows_per_trial": 9284,
+        "device_policy_satisfied": true
+      },
+      "phases_seconds_medians": {
+        "setup": 0.335782999987714,
+        "read": 1.1039896986912936,
+        "preprocess": 0.7656196070602164,
+        "correlation": 0.02157990005798638,
+        "output": 0.4637123999418691,
+        "cleanup": 1.6400008462369442e-05
+      },
+      "preprocessing_work": {
+        "batches": 322,
+        "calibrated_pixels": 385526592,
+        "consumed_roi_pixels": 385526592,
+        "signals_bytes": 164544,
+        "input_transfer_block_bytes": 2399232,
+        "retained_raw_frames": 1,
+        "signal_residency": "device through correlation"
+      },
+      "transfers": {
+        "upload_calls": 323,
+        "upload_bytes": 771071928,
+        "download_calls": 2,
+        "download_bytes": 238816
+      },
+      "correlation_calls": {
+        "rebuilds": 37,
+        "scalar_updates": 0,
+        "batched_updates": 0,
+        "result_calls": 0,
+        "pair_updates": 55531,
+        "specialized_serial_calls": 1
+      },
+      "correlation_kernel_calls": 1,
+      "gpu_pool_limit_bytes": 536870912
+    }
+  },
+  "diagnostics": [
+    {
+      "variant": "app_cpu",
+      "builtins": false,
+      "job_seconds": 50.24179290002212,
+      "top_python_own": [
+        {
+          "file": "src/eip/modes/split_correlation/geometry.py",
+          "line": 87,
+          "function": "apply",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 15.8187198,
+          "cumulative_seconds": 19.761300000000002
+        },
+        {
+          "file": "src/eip/module_ops.py",
+          "line": 7,
+          "function": "intensity_curve",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 7.9393579,
+          "cumulative_seconds": 7.9565628
+        },
+        {
+          "file": "src/eip/modes/split_correlation/photometry.py",
+          "line": 34,
+          "function": "apply",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 7.441551700000001,
+          "cumulative_seconds": 15.3981145
+        },
+        {
+          "file": "src/eip/sequence_engine.py",
+          "line": 694,
+          "function": "_get",
+          "primitive_calls": 9284,
+          "calls": 126556,
+          "own_seconds": 4.285142400000001,
+          "cumulative_seconds": 48.803646300000004
+        },
+        {
+          "file": ".venv/Lib/site-packages/numpy/_core/_methods.py",
+          "line": 96,
+          "function": "_clip",
+          "primitive_calls": 20632,
+          "calls": 20632,
+          "own_seconds": 3.8566241000000003,
+          "cumulative_seconds": 3.8928529000000003
+        },
+        {
+          "file": ".venv/Lib/site-packages/numpy/_core/shape_base.py",
+          "line": 378,
+          "function": "stack",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 3.5743650000000002,
+          "cumulative_seconds": 3.5754997000000004
+        },
+        {
+          "file": "src/eip/cine_reader.py",
+          "line": 46,
+          "function": "_read",
+          "primitive_calls": 30870,
+          "calls": 30870,
+          "own_seconds": 1.7599383000000002,
+          "cumulative_seconds": 1.7599383000000002
+        },
+        {
+          "file": "src/eip/cine_reader.py",
+          "line": 142,
+          "function": "read_frame",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 1.1037629,
+          "cumulative_seconds": 2.8751897
+        },
+        {
+          "file": "src/eip/module_statistics.py",
+          "line": 25,
+          "function": "reduce_finite",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 0.7623109,
+          "cumulative_seconds": 1.1693029000000001
+        },
+        {
+          "file": "src/eip/modes/split_correlation/correlation.py",
+          "line": 51,
+          "function": "add",
+          "primitive_calls": 55531,
+          "calls": 55531,
+          "own_seconds": 0.46863600000000005,
+          "cumulative_seconds": 0.4769993
+        },
+        {
+          "file": ".venv/Lib/site-packages/numpy/_core/_methods.py",
+          "line": 47,
+          "function": "_sum",
+          "primitive_calls": 20633,
+          "calls": 20633,
+          "own_seconds": 0.33379600000000004,
+          "cumulative_seconds": 0.33379600000000004
+        },
+        {
+          "file": "src/eip/sequence_engine.py",
+          "line": 687,
+          "function": "get",
+          "primitive_calls": 9284,
+          "calls": 126556,
+          "own_seconds": 0.1474675,
+          "cumulative_seconds": 48.840397700000004
+        },
+        {
+          "file": "src/eip/reference_index.py",
+          "line": 48,
+          "function": "_update",
+          "primitive_calls": 19567,
+          "calls": 19567,
+          "own_seconds": 0.1436192,
+          "cumulative_seconds": 0.1436192
+        },
+        {
+          "file": "src/eip/sequence_processing.py",
+          "line": 28,
+          "function": "process_sequence_job",
+          "primitive_calls": 1,
+          "calls": 1,
+          "own_seconds": 0.11877810000000001,
+          "cumulative_seconds": 50.233802000000004
+        },
+        {
+          "file": "src/eip/sequence_engine.py",
+          "line": 81,
+          "function": "discard_stages",
+          "primitive_calls": 322,
+          "calls": 322,
+          "own_seconds": 0.114637,
+          "cumulative_seconds": 0.114637
+        },
+        {
+          "file": "C:\\Users\\PC\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\contextlib.py",
+          "line": 141,
+          "function": "__exit__",
+          "primitive_calls": 203095,
+          "calls": 203095,
+          "own_seconds": 0.0815795,
+          "cumulative_seconds": 0.1314073
+        },
+        {
+          "file": "src/eip/sequence_engine.py",
+          "line": 918,
+          "function": "_add_correlation_pairs",
+          "primitive_calls": 37025,
+          "calls": 37025,
+          "own_seconds": 0.07901180000000001,
+          "cumulative_seconds": 48.4909167
+        },
+        {
+          "file": "src/eip/stage_storage.py",
+          "line": 47,
+          "function": "get",
+          "primitive_calls": 55568,
+          "calls": 55568,
+          "own_seconds": 0.07594250000000001,
+          "cumulative_seconds": 47.7993364
+        },
+        {
+          "file": "C:\\Users\\PC\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\contextlib.py",
+          "line": 104,
+          "function": "__init__",
+          "primitive_calls": 203095,
+          "calls": 203095,
+          "own_seconds": 0.06907250000000001,
+          "cumulative_seconds": 0.06907250000000001
+        },
+        {
+          "file": "<frozen importlib._bootstrap_external>",
+          "line": 1187,
+          "function": "get_data",
+          "primitive_calls": 198,
+          "calls": 198,
+          "own_seconds": 0.0675582,
+          "cumulative_seconds": 0.0675582
+        },
+        {
+          "file": ".venv/Lib/site-packages/numpy/_core/fromnumeric.py",
+          "line": 66,
+          "function": "_wrapreduction",
+          "primitive_calls": 38545,
+          "calls": 38545,
+          "own_seconds": 0.06615030000000001,
+          "cumulative_seconds": 0.06615030000000001
+        },
+        {
+          "file": "src/eip/performance.py",
+          "line": 78,
+          "function": "measure",
+          "primitive_calls": 405670,
+          "calls": 405670,
+          "own_seconds": 0.0643558,
+          "cumulative_seconds": 0.10993040000000001
+        },
+        {
+          "file": "src/eip/modes/split_correlation/correlation.py",
+          "line": 86,
+          "function": "result",
+          "primitive_calls": 9284,
+          "calls": 9284,
+          "own_seconds": 0.0541712,
+          "cumulative_seconds": 0.0669605
+        },
+        {
+          "file": "src/eip/sequence_engine.py",
+          "line": 164,
+          "function": "_get",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 0.052917000000000006,
+          "cumulative_seconds": 2.9918237000000003
+        },
+        {
+          "file": "C:\\Users\\PC\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\contextlib.py",
+          "line": 299,
+          "function": "helper",
+          "primitive_calls": 203095,
+          "calls": 203095,
+          "own_seconds": 0.0525846,
+          "cumulative_seconds": 0.1216571
+        }
+      ],
+      "selected_python_cumulative": [
+        {
+          "file": "src/eip/sequence_processing.py",
+          "line": 28,
+          "function": "process_sequence_job",
+          "primitive_calls": 1,
+          "calls": 1,
+          "own_seconds": 0.11877810000000001,
+          "cumulative_seconds": 50.233802000000004
+        },
+        {
+          "file": "src/eip/modes/split_correlation/geometry.py",
+          "line": 87,
+          "function": "apply",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 15.8187198,
+          "cumulative_seconds": 19.761300000000002
+        },
+        {
+          "file": "src/eip/modes/split_correlation/photometry.py",
+          "line": 34,
+          "function": "apply",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 7.441551700000001,
+          "cumulative_seconds": 15.3981145
+        },
+        {
+          "file": "src/eip/module_ops.py",
+          "line": 7,
+          "function": "intensity_curve",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 7.9393579,
+          "cumulative_seconds": 7.9565628
+        },
+        {
+          "file": ".venv/Lib/site-packages/numpy/_core/_methods.py",
+          "line": 96,
+          "function": "_clip",
+          "primitive_calls": 20632,
+          "calls": 20632,
+          "own_seconds": 3.8566241000000003,
+          "cumulative_seconds": 3.8928529000000003
+        },
+        {
+          "file": ".venv/Lib/site-packages/numpy/_core/shape_base.py",
+          "line": 378,
+          "function": "stack",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 3.5743650000000002,
+          "cumulative_seconds": 3.5754997000000004
+        },
+        {
+          "file": "src/eip/module_statistics.py",
+          "line": 25,
+          "function": "reduce_finite",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 0.7623109,
+          "cumulative_seconds": 1.1693029000000001
+        }
+      ]
+    },
+    {
+      "variant": "app_gpu",
+      "builtins": false,
+      "job_seconds": 11.419063800014555,
+      "top_python_own": [
+        {
+          "file": "src/eip/gpu_pipeline.py",
+          "line": 107,
+          "function": "upload",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 1.3167412,
+          "cumulative_seconds": 3.2235253000000004
+        },
+        {
+          "file": "src/eip/cine_reader.py",
+          "line": 46,
+          "function": "_read",
+          "primitive_calls": 30870,
+          "calls": 30870,
+          "own_seconds": 1.0110103000000001,
+          "cumulative_seconds": 1.0110103000000001
+        },
+        {
+          "file": ".venv/Lib/site-packages/cupy/_sorting/search.py",
+          "line": 175,
+          "function": "where",
+          "primitive_calls": 61704,
+          "calls": 61704,
+          "own_seconds": 0.6794629000000001,
+          "cumulative_seconds": 0.6818305
+        },
+        {
+          "file": ".venv/Lib/site-packages/cupy/_creation/from_data.py",
+          "line": 59,
+          "function": "asarray",
+          "primitive_calls": 119807,
+          "calls": 119807,
+          "own_seconds": 0.6362374000000001,
+          "cumulative_seconds": 0.6383362
+        },
+        {
+          "file": "src/eip/gpu_pipeline.py",
+          "line": 272,
+          "function": "structural",
+          "primitive_calls": 30852,
+          "calls": 30852,
+          "own_seconds": 0.6273353,
+          "cumulative_seconds": 2.0024692
+        },
+        {
+          "file": "src/eip/gpu_pipeline.py",
+          "line": 143,
+          "function": "_get",
+          "primitive_calls": 9284,
+          "calls": 126556,
+          "own_seconds": 0.6075396000000001,
+          "cumulative_seconds": 9.006887800000001
+        },
+        {
+          "file": "src/eip/module_statistics.py",
+          "line": 25,
+          "function": "reduce_finite",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 0.5763972,
+          "cumulative_seconds": 0.9521501000000001
+        },
+        {
+          "file": ".venv/Lib/site-packages/cupy/__init__.py",
+          "line": 826,
+          "function": "asnumpy",
+          "primitive_calls": 9284,
+          "calls": 9284,
+          "own_seconds": 0.4552508,
+          "cumulative_seconds": 0.4656987
+        },
+        {
+          "file": "src/eip/gpu_timing.py",
+          "line": 141,
+          "function": "_call",
+          "primitive_calls": 28370,
+          "calls": 28370,
+          "own_seconds": 0.2861964,
+          "cumulative_seconds": 0.29553630000000003
+        },
+        {
+          "file": "src/eip/sequence_engine.py",
+          "line": 943,
+          "function": "detached_pair",
+          "primitive_calls": 37037,
+          "calls": 37037,
+          "own_seconds": 0.28130130000000003,
+          "cumulative_seconds": 1.156927
+        },
+        {
+          "file": ".venv/Lib/site-packages/cupy/_manipulation/join.py",
+          "line": 39,
+          "function": "concatenate",
+          "primitive_calls": 11468,
+          "calls": 11468,
+          "own_seconds": 0.25967850000000003,
+          "cumulative_seconds": 0.2611337
+        },
+        {
+          "file": "src/eip/stage_storage.py",
+          "line": 47,
+          "function": "get",
+          "primitive_calls": 55568,
+          "calls": 55568,
+          "own_seconds": 0.2257152,
+          "cumulative_seconds": 7.555276200000001
+        },
+        {
+          "file": "src/eip/gpu_pipeline.py",
+          "line": 287,
+          "function": "apply",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 0.21646620000000003,
+          "cumulative_seconds": 0.7759699000000001
+        },
+        {
+          "file": "src/eip/cine_reader.py",
+          "line": 142,
+          "function": "read_frame",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 0.21111670000000002,
+          "cumulative_seconds": 1.2295069
+        },
+        {
+          "file": "src/eip/module_ops.py",
+          "line": 7,
+          "function": "intensity_curve",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 0.2073731,
+          "cumulative_seconds": 0.4439133
+        },
+        {
+          "file": "src/eip/sequence_engine.py",
+          "line": 918,
+          "function": "_add_correlation_pairs",
+          "primitive_calls": 37025,
+          "calls": 37025,
+          "own_seconds": 0.2061134,
+          "cumulative_seconds": 8.6739086
+        },
+        {
+          "file": "src/eip/sequence_engine.py",
+          "line": 81,
+          "function": "discard_stages",
+          "primitive_calls": 322,
+          "calls": 322,
+          "own_seconds": 0.1727554,
+          "cumulative_seconds": 0.1727554
+        },
+        {
+          "file": "src/eip/reference_index.py",
+          "line": 48,
+          "function": "_update",
+          "primitive_calls": 19567,
+          "calls": 19567,
+          "own_seconds": 0.1485151,
+          "cumulative_seconds": 0.1485151
+        },
+        {
+          "file": "src/eip/sequence_processing.py",
+          "line": 28,
+          "function": "process_sequence_job",
+          "primitive_calls": 1,
+          "calls": 1,
+          "own_seconds": 0.1361377,
+          "cumulative_seconds": 11.4079283
+        },
+        {
+          "file": "<frozen importlib._bootstrap_external>",
+          "line": 1187,
+          "function": "get_data",
+          "primitive_calls": 412,
+          "calls": 412,
+          "own_seconds": 0.1283677,
+          "cumulative_seconds": 0.1283677
+        },
+        {
+          "file": "src/eip/gpu_pipeline.py",
+          "line": 136,
+          "function": "get",
+          "primitive_calls": 9284,
+          "calls": 126556,
+          "own_seconds": 0.10885510000000001,
+          "cumulative_seconds": 9.028998900000001
+        },
+        {
+          "file": "src/eip/gpu_pipeline.py",
+          "line": 187,
+          "function": "release_consumed_prefix",
+          "primitive_calls": 322,
+          "calls": 322,
+          "own_seconds": 0.1035494,
+          "cumulative_seconds": 0.1035494
+        },
+        {
+          "file": ".venv/Lib/site-packages/cupy/_manipulation/dims.py",
+          "line": 134,
+          "function": "expand_dims",
+          "primitive_calls": 94642,
+          "calls": 94642,
+          "own_seconds": 0.09815810000000001,
+          "cumulative_seconds": 0.1522162
+        },
+        {
+          "file": ".venv/Lib/site-packages/numpy/_core/numeric.py",
+          "line": 1975,
+          "function": "isscalar",
+          "primitive_calls": 292420,
+          "calls": 292420,
+          "own_seconds": 0.0864849,
+          "cumulative_seconds": 0.1031402
+        },
+        {
+          "file": ".venv/Lib/site-packages/cupy/_creation/basic.py",
+          "line": 233,
+          "function": "zeros",
+          "primitive_calls": 10321,
+          "calls": 10321,
+          "own_seconds": 0.08308660000000001,
+          "cumulative_seconds": 0.08308660000000001
+        }
+      ],
+      "selected_python_cumulative": [
+        {
+          "file": "src/eip/sequence_processing.py",
+          "line": 28,
+          "function": "process_sequence_job",
+          "primitive_calls": 1,
+          "calls": 1,
+          "own_seconds": 0.1361377,
+          "cumulative_seconds": 11.4079283
+        },
+        {
+          "file": "src/eip/gpu_pipeline.py",
+          "line": 107,
+          "function": "upload",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 1.3167412,
+          "cumulative_seconds": 3.2235253000000004
+        },
+        {
+          "file": "src/eip/gpu_pipeline.py",
+          "line": 272,
+          "function": "structural",
+          "primitive_calls": 30852,
+          "calls": 30852,
+          "own_seconds": 0.6273353,
+          "cumulative_seconds": 2.0024692
+        },
+        {
+          "file": "src/eip/module_statistics.py",
+          "line": 25,
+          "function": "reduce_finite",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 0.5763972,
+          "cumulative_seconds": 0.9521501000000001
+        },
+        {
+          "file": "src/eip/gpu_pipeline.py",
+          "line": 287,
+          "function": "apply",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 0.21646620000000003,
+          "cumulative_seconds": 0.7759699000000001
+        },
+        {
+          "file": "src/eip/gpu_pipeline.py",
+          "line": 83,
+          "function": "host",
+          "primitive_calls": 9284,
+          "calls": 9284,
+          "own_seconds": 0.010309700000000002,
+          "cumulative_seconds": 0.5065054
+        },
+        {
+          "file": "src/eip/modes/split_correlation/backend.py",
+          "line": 55,
+          "function": "host",
+          "primitive_calls": 9284,
+          "calls": 9284,
+          "own_seconds": 0.0031877000000000003,
+          "cumulative_seconds": 0.46888640000000004
+        },
+        {
+          "file": "src/eip/module_ops.py",
+          "line": 7,
+          "function": "intensity_curve",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 0.2073731,
+          "cumulative_seconds": 0.4439133
+        },
+        {
+          "file": ".venv/Lib/site-packages/cupy/_manipulation/join.py",
+          "line": 147,
+          "function": "stack",
+          "primitive_calls": 11468,
+          "calls": 11468,
+          "own_seconds": 0.0219198,
+          "cumulative_seconds": 0.43526970000000004
+        }
+      ]
+    },
+    {
+      "variant": "app_gpu_mixed",
+      "builtins": false,
+      "job_seconds": 68.32921160000842,
+      "top_python_own": [
+        {
+          "file": ".venv/Lib/site-packages/cupy/__init__.py",
+          "line": 826,
+          "function": "asnumpy",
+          "primitive_calls": 19568,
+          "calls": 19568,
+          "own_seconds": 22.653440500000002,
+          "cumulative_seconds": 22.6816652
+        },
+        {
+          "file": "src/eip/modes/split_correlation/geometry.py",
+          "line": 87,
+          "function": "apply",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 17.8539055,
+          "cumulative_seconds": 22.401284500000003
+        },
+        {
+          "file": "src/eip/gpu_pipeline.py",
+          "line": 107,
+          "function": "upload",
+          "primitive_calls": 10284,
+          "calls": 20568,
+          "own_seconds": 5.6819595000000005,
+          "cumulative_seconds": 54.657925000000006
+        },
+        {
+          "file": ".venv/Lib/site-packages/numpy/_core/_methods.py",
+          "line": 96,
+          "function": "_clip",
+          "primitive_calls": 20632,
+          "calls": 20632,
+          "own_seconds": 4.455322000000001,
+          "cumulative_seconds": 4.4912402
+        },
+        {
+          "file": ".venv/Lib/site-packages/numpy/_core/shape_base.py",
+          "line": 378,
+          "function": "stack",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 3.8882975,
+          "cumulative_seconds": 3.8894131
+        },
+        {
+          "file": ".venv/Lib/site-packages/cupy/_creation/from_data.py",
+          "line": 59,
+          "function": "asarray",
+          "primitive_calls": 109842,
+          "calls": 109842,
+          "own_seconds": 2.1607759,
+          "cumulative_seconds": 2.1634132
+        },
+        {
+          "file": "src/eip/sequence_engine.py",
+          "line": 694,
+          "function": "_get",
+          "primitive_calls": 9284,
+          "calls": 40136,
+          "own_seconds": 1.9578409,
+          "cumulative_seconds": 66.47739580000001
+        },
+        {
+          "file": "src/eip/gpu_pipeline.py",
+          "line": 143,
+          "function": "_get",
+          "primitive_calls": 9284,
+          "calls": 126556,
+          "own_seconds": 1.8576197,
+          "cumulative_seconds": 59.148420400000006
+        },
+        {
+          "file": "src/eip/cine_reader.py",
+          "line": 46,
+          "function": "_read",
+          "primitive_calls": 30870,
+          "calls": 30870,
+          "own_seconds": 1.0481645000000002,
+          "cumulative_seconds": 1.0481645000000002
+        },
+        {
+          "file": "src/eip/module_statistics.py",
+          "line": 25,
+          "function": "reduce_finite",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 0.5081998,
+          "cumulative_seconds": 0.8243157000000001
+        },
+        {
+          "file": ".venv/Lib/site-packages/cupy/_sorting/search.py",
+          "line": 175,
+          "function": "where",
+          "primitive_calls": 41136,
+          "calls": 41136,
+          "own_seconds": 0.45601810000000004,
+          "cumulative_seconds": 0.45819190000000004
+        },
+        {
+          "file": "src/eip/gpu_pipeline.py",
+          "line": 287,
+          "function": "apply",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 0.43477200000000005,
+          "cumulative_seconds": 1.1600824
+        },
+        {
+          "file": "src/eip/sequence_engine.py",
+          "line": 943,
+          "function": "detached_pair",
+          "primitive_calls": 37037,
+          "calls": 37037,
+          "own_seconds": 0.2963198,
+          "cumulative_seconds": 5.3524743
+        },
+        {
+          "file": "src/eip/gpu_timing.py",
+          "line": 141,
+          "function": "_call",
+          "primitive_calls": 28370,
+          "calls": 28370,
+          "own_seconds": 0.2925862,
+          "cumulative_seconds": 0.3012424
+        },
+        {
+          "file": "src/eip/module_ops.py",
+          "line": 7,
+          "function": "intensity_curve",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 0.28045420000000004,
+          "cumulative_seconds": 0.607194
+        },
+        {
+          "file": "src/eip/cine_reader.py",
+          "line": 142,
+          "function": "read_frame",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 0.21818490000000001,
+          "cumulative_seconds": 1.2737658
+        },
+        {
+          "file": "src/eip/sequence_engine.py",
+          "line": 918,
+          "function": "_add_correlation_pairs",
+          "primitive_calls": 37025,
+          "calls": 37025,
+          "own_seconds": 0.20810710000000002,
+          "cumulative_seconds": 58.6415051
+        },
+        {
+          "file": "src/eip/stage_storage.py",
+          "line": 47,
+          "function": "get",
+          "primitive_calls": 55568,
+          "calls": 55568,
+          "own_seconds": 0.2005279,
+          "cumulative_seconds": 57.6702535
+        },
+        {
+          "file": "src/eip/sequence_engine.py",
+          "line": 81,
+          "function": "discard_stages",
+          "primitive_calls": 322,
+          "calls": 322,
+          "own_seconds": 0.14980590000000002,
+          "cumulative_seconds": 0.14980590000000002
+        },
+        {
+          "file": "src/eip/reference_index.py",
+          "line": 48,
+          "function": "_update",
+          "primitive_calls": 19567,
+          "calls": 19567,
+          "own_seconds": 0.1485147,
+          "cumulative_seconds": 0.1485147
+        },
+        {
+          "file": "src/eip/sequence_processing.py",
+          "line": 28,
+          "function": "process_sequence_job",
+          "primitive_calls": 1,
+          "calls": 1,
+          "own_seconds": 0.1413507,
+          "cumulative_seconds": 68.3178522
+        },
+        {
+          "file": "<frozen importlib._bootstrap_external>",
+          "line": 1187,
+          "function": "get_data",
+          "primitive_calls": 412,
+          "calls": 412,
+          "own_seconds": 0.1290885,
+          "cumulative_seconds": 0.1290885
+        },
+        {
+          "file": "src/eip/gpu_pipeline.py",
+          "line": 187,
+          "function": "release_consumed_prefix",
+          "primitive_calls": 322,
+          "calls": 322,
+          "own_seconds": 0.12403510000000001,
+          "cumulative_seconds": 0.12403510000000001
+        },
+        {
+          "file": "src/eip/gpu_pipeline.py",
+          "line": 136,
+          "function": "get",
+          "primitive_calls": 9284,
+          "calls": 126556,
+          "own_seconds": 0.1147321,
+          "cumulative_seconds": 59.1707607
+        },
+        {
+          "file": "C:\\Users\\PC\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\contextlib.py",
+          "line": 141,
+          "function": "__exit__",
+          "primitive_calls": 263446,
+          "calls": 263446,
+          "own_seconds": 0.107034,
+          "cumulative_seconds": 0.20089220000000002
+        }
+      ],
+      "selected_python_cumulative": [
+        {
+          "file": "src/eip/sequence_processing.py",
+          "line": 28,
+          "function": "process_sequence_job",
+          "primitive_calls": 1,
+          "calls": 1,
+          "own_seconds": 0.1413507,
+          "cumulative_seconds": 68.3178522
+        },
+        {
+          "file": "src/eip/gpu_pipeline.py",
+          "line": 107,
+          "function": "upload",
+          "primitive_calls": 10284,
+          "calls": 20568,
+          "own_seconds": 5.6819595000000005,
+          "cumulative_seconds": 54.657925000000006
+        },
+        {
+          "file": "src/eip/gpu_pipeline.py",
+          "line": 83,
+          "function": "host",
+          "primitive_calls": 19568,
+          "calls": 19568,
+          "own_seconds": 0.026109300000000002,
+          "cumulative_seconds": 22.782865400000002
+        },
+        {
+          "file": "src/eip/modes/split_correlation/backend.py",
+          "line": 55,
+          "function": "host",
+          "primitive_calls": 19568,
+          "calls": 19568,
+          "own_seconds": 0.0084442,
+          "cumulative_seconds": 22.6901094
+        },
+        {
+          "file": "src/eip/modes/split_correlation/geometry.py",
+          "line": 87,
+          "function": "apply",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 17.8539055,
+          "cumulative_seconds": 22.401284500000003
+        },
+        {
+          "file": ".venv/Lib/site-packages/numpy/_core/_methods.py",
+          "line": 96,
+          "function": "_clip",
+          "primitive_calls": 20632,
+          "calls": 20632,
+          "own_seconds": 4.455322000000001,
+          "cumulative_seconds": 4.4912402
+        },
+        {
+          "file": ".venv/Lib/site-packages/numpy/_core/shape_base.py",
+          "line": 378,
+          "function": "stack",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 3.8882975,
+          "cumulative_seconds": 3.8894131
+        },
+        {
+          "file": "src/eip/gpu_pipeline.py",
+          "line": 272,
+          "function": "structural",
+          "primitive_calls": 20568,
+          "calls": 20568,
+          "own_seconds": 0.0562577,
+          "cumulative_seconds": 1.2437654
+        },
+        {
+          "file": "src/eip/gpu_pipeline.py",
+          "line": 287,
+          "function": "apply",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 0.43477200000000005,
+          "cumulative_seconds": 1.1600824
+        },
+        {
+          "file": "src/eip/module_statistics.py",
+          "line": 25,
+          "function": "reduce_finite",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 0.5081998,
+          "cumulative_seconds": 0.8243157000000001
+        },
+        {
+          "file": "src/eip/module_ops.py",
+          "line": 7,
+          "function": "intensity_curve",
+          "primitive_calls": 10284,
+          "calls": 10284,
+          "own_seconds": 0.28045420000000004,
+          "cumulative_seconds": 0.607194
+        }
+      ]
+    }
+  ]
+}

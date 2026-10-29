@@ -1,10 +1,11 @@
-"""Inspect 0.9.0 timings and W progress in an isolated CPU-only Web run.
+"""Inspect 0.9.0 timings and W progress in an isolated CPU or real GPU Web run.
 
 Creates only synthetic data below .test-output. Run explicitly after benchmarks;
 the script does not attach to or reuse an existing service on its requested port.
 """
 from pathlib import Path
 import argparse
+import io
 import json
 import os
 import socket
@@ -25,7 +26,7 @@ def check_metrics(item):
     assert item["progress_axis"] == "W", item
     assert item["progress_unit"] == "窗长", item
     performance = item["performance"]
-    assert performance["schema_version"] == 1
+    assert performance["schema_version"] == 2
     assert performance["output_samples"] == 5
     assert performance["input_read_samples"] > 0
     assert performance["input_read_bytes"] > 0
@@ -33,6 +34,14 @@ def check_metrics(item):
     assert performance["output_per_second"] > 0
     assert performance["input_reads_per_second"] > 0
     assert performance["gpu_execution_seconds"] is None
+    timing = performance["gpu_timing"]
+    if any(device["actual"] == "gpu" for device in item["modules"]["devices"].values()):
+        assert timing["timed_calls"] > 0, timing
+        assert performance["gpu_device_seconds"] >= 0
+        assert timing["pending_calls"] == 0
+    else:
+        assert timing is None
+        assert performance["gpu_device_seconds"] is None
     assert abs(sum(performance["host_seconds"].values())-performance["elapsed_seconds"]) < 1e-6
     assert "not unique" in performance["semantics"]["input_read_samples"]
 
@@ -40,6 +49,7 @@ def check_metrics(item):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8911)
+    parser.add_argument("--backend", choices=["cpu", "gpu"], default="cpu")
     args = parser.parse_args()
     # Check before launching: never inspect another task's service by accident.
     with socket.socket() as probe:
@@ -47,7 +57,7 @@ def main():
             probe.bind(("127.0.0.1", args.port))
         except OSError as error:
             raise SystemExit(f"Port {args.port} is already in use; choose --port with an unused port.") from error
-    folder = ROOT/".test-output"/f"acceleration-0.9.0-{int(time.time())}"
+    folder = ROOT/".test-output"/f"acceleration-0.9.0-{args.backend}-{time.time_ns()}"
     folder.mkdir(parents=True)
     t = np.arange(31)[:, None, None]
     grid = np.arange(144).reshape(12, 12)
@@ -73,7 +83,9 @@ def main():
                 state = api.get("/api/state").json()
                 api.headers["X-EIP-Token"] = state["session_token"]
                 resources = api.get("/api/resources").json()["settings"]
-                resources["backend"] = "cpu"
+                if args.backend == "gpu":
+                    assert api.post("/api/resources/refresh", json={}).json()["devices"]["gpu"], "Real CUDA is required"
+                resources["backend"] = args.backend
                 response = api.post("/api/resources", json=resources)
                 response.raise_for_status()
                 response = api.post("/api/sources/open", json=dict(path=str(folder/"source.tif"), interval=.01))
@@ -86,6 +98,16 @@ def main():
                     if request.method == "POST" and request.url.endswith("/api/jobs") else None)
                 page.goto(url)
                 expect(page.locator("#frame-info")).to_contain_text("31")
+                if args.backend == "gpu":
+                    page.locator("#open-run-settings").click()
+                    expect(page.locator("#resource-device")).to_contain_text("CUDA")
+                    expect(page.locator("#resource-backend")).to_have_value("gpu")
+                    page.locator(".resource-runtime summary").click()
+                    expect(page.locator(".resource-runtime pre")).to_contain_text(sys.executable)
+                    memory = api.get("/api/resources/gpu").json()
+                    assert memory["available"] and memory["cards"], memory
+                    page.screenshot(path=str(folder/"gpu-settings.png"), animations="disabled")
+                    page.locator("#run-settings-dialog [data-close-dialog]").click()
                 page.locator("#flow-clear").click()
 
                 def add(algorithm):
@@ -120,7 +142,46 @@ def main():
                 assert job["progress_unit"] == "窗长"
                 item = job["run"]["results"][0]
                 check_metrics(item)
-                assert all(device["actual"] == "cpu" for device in item["modules"]["devices"].values())
+                assert all(device["actual"] == args.backend for device in item["modules"]["devices"].values())
+                if args.backend == "gpu":
+                    assert any(mapping.get("correlation_implementation") == "cupy_fused_float64"
+                               for mapping in item["mappings"].values())
+                response = api.get(f"/api/jobs/{identifier}/download?file=array")
+                response.raise_for_status()
+                actual = np.load(io.BytesIO(response.content), allow_pickle=False).reshape(-1)
+                expected = []
+                for window in [2, 3, 6, 11, 21]:
+                    start = 15 - (window - 1)//2
+                    left = values[start:start+window, 3, 2].astype(float)
+                    right = values[start-2:start-2+window, 3, 14].astype(float)
+                    expected.append((left*right).mean()/(left.mean()*right.mean()))
+                np.testing.assert_allclose(actual, expected, rtol=2e-14, atol=2e-14)
+                trial_identifier = None
+                if args.backend == "gpu":
+                    # Exercise the separate inspection process and its quarter
+                    # GPU budget, then compare a saved trial with the formal run.
+                    for index in (0, 4):
+                        response = api.post("/api/modules/inspect", json=dict(
+                            source_id=job["source_ids"][0], steps=job["run"]["spec"]["steps"], sample_index=index))
+                        response.raise_for_status()
+                        inspection = response.json()
+                        np.testing.assert_allclose(inspection["values"], [[expected[index]]], rtol=2e-14, atol=2e-14)
+                        assert any(m.get("correlation_implementation") == "cupy_fused_float64"
+                                   for m in inspection["mappings"].values())
+                    response = api.post("/api/jobs", json=dict(contract_version=3, mode="trial",
+                        source_ids=job["source_ids"], steps=job["run"]["spec"]["steps"]))
+                    response.raise_for_status()
+                    trial_identifier = response.json()["id"]
+                    for _ in range(300):
+                        trial = api.get(f"/api/jobs/{trial_identifier}").json()
+                        if trial["status"] in {"succeeded", "completed_with_errors", "failed", "cancelled"}:
+                            break
+                        time.sleep(.05)
+                    assert trial["status"] == "succeeded", trial
+                    assert all(d["actual"] == "gpu" for d in trial["run"]["results"][0]["modules"]["devices"].values())
+                    response = api.get(f"/api/jobs/{trial_identifier}/download?file=array")
+                    response.raise_for_status()
+                    np.testing.assert_array_equal(np.load(io.BytesIO(response.content), allow_pickle=False).reshape(-1), actual)
                 manifest = Path(job["directory"])/"run.json"
                 assert manifest.resolve().is_relative_to(folder.resolve())
                 check_metrics(json.loads(manifest.read_text(encoding="utf-8"))["results"][0])
@@ -140,6 +201,13 @@ def main():
                 row.locator("[data-detail]").click()
                 dialog = page.locator("#job-dialog")
                 expect(dialog).to_be_visible()
+                execution = dialog.locator("details").filter(has=page.locator("summary",has_text="执行优化与数据范围"))
+                expect(execution).to_have_count(1)
+                expect(execution).to_have_js_property("open",False)
+                execution.locator("summary").click()
+                expect(execution).to_contain_text("执行策略")
+                expect(execution).to_contain_text("实际输出元素")
+                execution.locator("summary").click()
                 timings = dialog.locator("details").filter(has=page.locator("summary", has_text="运行耗时与吞吐"))
                 expect(timings).to_have_count(1)
                 expect(timings).to_have_js_property("open",False)
@@ -148,8 +216,13 @@ def main():
                 expect(timings).to_contain_text("输入读取吞吐")
                 expect(timings).to_contain_text("窗长/秒")
                 expect(timings).to_contain_text("样本读取/秒")
-                expect(timings).to_contain_text("GPU 内核耗时")
-                expect(timings.locator("dd").filter(has_text="未采集")).to_have_count(1)
+                expect(timings).to_contain_text("GPU 设备区间")
+                if args.backend == "gpu":
+                    expect(timings).to_contain_text("GPU 采集范围")
+                    expect(timings).to_contain_text("g² 融合内核")
+                else:
+                    expect(timings).to_contain_text("无已覆盖的 GPU 内核调用")
+                expect(timings.locator("dd").filter(has_text="未采集")).to_have_count(0)
                 timings.scroll_into_view_if_needed()
                 page.screenshot(path=str(folder/"desktop-details.png"), animations="disabled")
                 with page.expect_download() as downloaded:
@@ -176,10 +249,10 @@ def main():
                 assert not errors, errors
                 assert len(computes) == 1, computes
                 jobs = api.get("/api/jobs").json()
-                assert len(jobs) == 1 and jobs[0]["id"] == identifier, jobs
-                (folder/"checks.json").write_text(json.dumps(dict(status="passed",job_id=identifier,requests=len(computes),javascript_errors=errors,performance=item["performance"]),ensure_ascii=False,indent=2),encoding="utf-8")
+                assert {j["id"] for j in jobs} == ({identifier, trial_identifier} if trial_identifier else {identifier}), jobs
+                (folder/"checks.json").write_text(json.dumps(dict(status="passed",backend=args.backend,job_id=identifier,trial_id=trial_identifier,requests=len(computes),javascript_errors=errors,performance=item["performance"],max_absolute_error=float(np.max(np.abs(actual-expected)))),ensure_ascii=False,indent=2),encoding="utf-8")
                 browser.close()
-            print(json.dumps(dict(status="passed", output=str(folder), checks="one formal CPU W scan, compact tasks, W units, collapsed timing detail, input/output throughput, unknown GPU kernel timing, persisted/downloaded performance, responsive layouts, no hidden jobs")))
+            print(json.dumps(dict(status="passed", backend=args.backend, output=str(folder), checks="formal W scan, real device and independent formula, GPU inspection/trial parity when selected, compact tasks, W units, collapsed timing detail, input/output throughput, CUDA event coverage and honest CPU status, persisted/downloaded performance, responsive layouts, no hidden jobs")))
         finally:
             server.terminate()
             try:

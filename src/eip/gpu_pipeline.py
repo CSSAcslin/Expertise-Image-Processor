@@ -57,7 +57,7 @@ class DevicePipeline:
                             device_cache_hits=0, largest_upload_batch=0,
                             correlation_update_calls=0,correlation_pairs=0,largest_correlation_batch=0)
 
-    def configure_cache(self):
+    def configure_cache(self,extra_retained=0):
         """Use validated slack, leaving all persistent states and scratch room.
 
         This changes capacity only; arrays are still allocated on demand. Using
@@ -66,7 +66,7 @@ class DevicePipeline:
         plans = [r for r in self.engine.resource_plan if "device_working_bytes" in r]
         if not plans:
             return
-        retained = sum(r.get("device_retained_bytes",0) for r in plans)
+        retained = sum(r.get("device_retained_bytes",0) for r in plans)+int(extra_retained)
         working = max(r["device_working_bytes"] for r in plans)
         if retained+working>int(self.budget*.75):
             raise ValueError("全流程保留状态与最大工作数组超过显存预算安全份额；请减少统计或滑窗节点、裁剪输入或提高显存上限")
@@ -145,14 +145,22 @@ class DevicePipeline:
         e.context.check_cancelled()
         if not 0 <= index < e.contracts[stage].length:
             raise IndexError("编辑后的样本号超出范围")
+        if e.main_store is not None and stage==e.main_store.stage and not e._store_building:
+            return e._stored_main(index,backend)
         if not self.backend(stage):
             return self.upload(stage, index, backend)
+        transient = e._transient_target is not None and stage<=e._transient_target
         key = ("result", stage, index)
-        value = self.cache.get(key)
+        value = None if transient else self.cache.get(key)
         if value is not None:
             self.metrics["device_cache_hits"] += 1
             return value
+        if e.spatial is not None and e.spatial.can_select(stage-1):
+            value = e.spatial.evaluate(stage-1,index,backend)
+            return value if transient else self.cache.put(key,value)
         i = stage-1
+        evaluations = e.execution_metrics["stage_evaluations"]
+        evaluations[str(stage)] = evaluations.get(str(stage),0)+1
         op = e.operations[i]
         a, p = op["algorithm"], op["parameters"]
         xp = backend.xp
@@ -177,7 +185,24 @@ class DevicePipeline:
         value = xp.asarray(value, dtype=precision if precision != "native" else None)
         if value.shape != e.contracts[stage].shape:
             raise ValueError("GPU 模块实际输出与声明形状不符")
-        return self.cache.put(key, value)
+        return value if transient else self.cache.put(key, value)
+
+    def release_consumed_prefix(self,stage,stop):
+        removed = 0
+        for key in list(self.cache.entries):
+            if key[0]=="result" and key[1]<=stage:
+                value=self.cache.entries.pop(key)
+                self.cache.size -= value.nbytes
+                removed += value.nbytes
+        # Equal sample counts identify identity temporal numbering for the
+        # frame-local prefix. Other transfer blocks stay under their LRU cap.
+        length = self.engine.contracts[stage].length
+        for key in list(self.upload_cache.entries):
+            if key[1]<stage and self.engine.contracts[key[1]].length==length and key[3]<=stop:
+                value=self.upload_cache.entries.pop(key)
+                self.upload_cache.size -= value.nbytes
+                removed += value.nbytes
+        return removed
 
     def temporal(self, i, index, backend):
         e, xp = self.engine, backend.xp
@@ -220,6 +245,8 @@ class DevicePipeline:
         return self.global_values[i]
 
     def modifier(self, i, index, backend):
+        if self.engine.spatial is not None and self.engine.spatial.can_select(i,side=True):
+            return self.engine.spatial.modifier(i,index,backend)
         if self.engine.operations[i]["algorithm"] == "global_statistics":
             return self.global_fit(i, backend)[0]
         if self.engine.operations[i]["algorithm"] == "distribution":

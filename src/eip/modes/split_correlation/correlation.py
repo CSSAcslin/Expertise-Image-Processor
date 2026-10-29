@@ -28,6 +28,7 @@ class RollingMoments:
                           and type(self.sums).__module__.split(".")[0] == "cupy")
         self.implementation = "cupy_fused_float64" if self.fused_gpu else "array_float64"
         self._kernels = None
+        self._gpu_timer = getattr(backend,"gpu_timer",None)
         # Reuse views as well as kernels: repeatedly indexing six CuPy arrays
         # in Python is measurable overhead for point / small-ROI signals.
         if self.fused_gpu:
@@ -40,11 +41,18 @@ class RollingMoments:
             self._kernels = moment_kernels(self.xp)
         return self._kernels
 
+    def _launch(self, index, *args):
+        kernel = self._gpu_kernels()[index]
+        if self._gpu_timer is None:
+            return kernel(*args)
+        from eip.gpu_timing import KERNEL_NAMES
+        return self._gpu_timer.launch(KERNEL_NAMES[index],kernel,*args)
+
     def add(self,left,right,sign=1):
         xp = self.xp
         left,right = xp.asarray(left,dtype=xp.float64),xp.asarray(right,dtype=xp.float64)
         if self.fused_gpu:
-            self._gpu_kernels()[0](left,right,*self._base_views,sign,*self._sum_views)
+            self._launch(0,left,right,*self._base_views,sign,*self._sum_views)
             return
         valid = xp.isfinite(left)&xp.isfinite(right)&xp.isfinite(self.baseline[0])&xp.isfinite(self.baseline[1])
         dl = xp.where(valid,left-self.baseline[0],0)
@@ -70,7 +78,7 @@ class RollingMoments:
         if not len(left):
             return
         if self.fused_gpu:
-            self._gpu_kernels()[1](left,right,*self._base_views,sign,len(left),*self._sum_views)
+            self._launch(1,left,right,*self._base_views,sign,len(left),*self._sum_views)
         else:
             for l,r in zip(left,right):
                 self.add(l,r,sign)
@@ -80,9 +88,9 @@ class RollingMoments:
         if self.fused_gpu:
             args = (*self._sum_views,*self._base_views,self.min_mean,self.min_samples)
             if count:
-                result,n = self._gpu_kernels()[2](*args)
+                result,n = self._launch(2,*args)
             else:
-                result,n = self._gpu_kernels()[3](*args),None
+                result,n = self._launch(3,*args),None
             if device:
                 return result,n
             return self.backend.host(result),self.backend.host(n) if count else None

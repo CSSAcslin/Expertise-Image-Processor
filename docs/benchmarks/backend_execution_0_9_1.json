@@ -1,0 +1,1501 @@
+{
+  "date": "2026-10-28",
+  "version": "0.9.1",
+  "cpu": "AMD Ryzen 9 9950X",
+  "gpu": "NVIDIA GeForce RTX 5070 Ti",
+  "scope": "One previously recorded baseline per original device policy versus three new fresh-process repetitions. Same source revision and science parameters; file/cache conditions and system activity are not strictly controlled. all_gpu_explicit additionally changes the alignment device and is not an identical-device baseline.",
+  "input": {
+    "frames": 10284,
+    "shape": [
+      600,
+      832
+    ],
+    "dtype": "uint16"
+  },
+  "roi": {
+    "shape_per_channel": [
+      142,
+      132
+    ]
+  },
+  "analysis": {
+    "window": 1001,
+    "lag": 0,
+    "stride": 1,
+    "output_samples": 9284
+  },
+  "baseline_seconds": {
+    "cpu": 565.1811279000249,
+    "gpu_mixed": 700.6425987000111
+  },
+  "regression": {
+    "tests": 469,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "profiles": [
+    {
+      "name": "cpu",
+      "repetitions": [
+        {
+          "repeat": 1,
+          "source_elapsed_seconds": 46.75504419999197,
+          "job_call_seconds": 46.76111870002933,
+          "process_wall_seconds": 47.22992529999465,
+          "host_seconds": {
+            "setup": 0.046373500023037195,
+            "input_read": 2.0001869034022093,
+            "index_write": 0.0,
+            "cpu_compute": 43.8161885853624,
+            "gpu_submit": 0.0,
+            "upload": 0.0,
+            "download": 0.0,
+            "references": 0.24489829468075186,
+            "output_statistics": 0.09521769639104605,
+            "output_render": 0.33917230006773025,
+            "output_write": 0.13343751954380423,
+            "other": 0.07956940052099526
+          },
+          "input_read_samples": 10284,
+          "values": {
+            "shape": [
+              9284
+            ],
+            "dtype": "float64",
+            "shape_equal": true,
+            "dtype_equal": true,
+            "finite_masks_equal": true,
+            "nonfinite_values_equal": true,
+            "exact_values_equal": true,
+            "max_absolute_error": 0.0,
+            "max_relative_error": 0.0,
+            "checked_values": 9284,
+            "rtol": 2e-13,
+            "atol": 2e-13,
+            "passed": true
+          },
+          "references": {
+            "passed": true,
+            "checked_records": 9284,
+            "byte_equal": true,
+            "lag_seconds_atol": 1e-12,
+            "first_mismatches": []
+          },
+          "devices": [
+            {
+              "algorithm": "time_crop",
+              "requested": "cpu",
+              "actual": "cpu",
+              "reason": null
+            },
+            {
+              "algorithm": "calibration",
+              "requested": "cpu",
+              "actual": "cpu",
+              "reason": null
+            },
+            {
+              "algorithm": "alignment",
+              "requested": "cpu",
+              "actual": "cpu",
+              "reason": null
+            },
+            {
+              "algorithm": "roi_crop",
+              "requested": "cpu",
+              "actual": "cpu",
+              "reason": null
+            },
+            {
+              "algorithm": "time_statistics",
+              "requested": "cpu",
+              "actual": "cpu",
+              "reason": null
+            },
+            {
+              "algorithm": "correlation_map",
+              "requested": "cpu",
+              "actual": "cpu",
+              "reason": null
+            }
+          ],
+          "execution": {
+            "stage_evaluations": {
+              "6": 9284,
+              "5": 10284,
+              "4": 10284,
+              "3": 10284,
+              "2": 10284,
+              "1": 10284,
+              "0": 10284
+            },
+            "main_storage": {
+              "stage": 5,
+              "storage": "ram",
+              "full_axes": "TP",
+              "shape": [
+                10284,
+                2
+              ],
+              "dtype": "float64",
+              "capacity_bytes": 164544,
+              "metadata_bytes": 10284,
+              "block_size": 32,
+              "built_samples": 10284,
+              "hits": 55246,
+              "input_cache_released_bytes": 0,
+              "disk_read_bytes": 0,
+              "disk_write_bytes": 0,
+              "ownership": "exclusive_compact_main_output",
+              "state": "complete"
+            }
+          },
+          "reference_execution": {
+            "queries": 28852,
+            "source_queries": 19568,
+            "passthrough_hops_skipped": 78272,
+            "index_transforms": 19568,
+            "budget_bytes": 8388608,
+            "pair_time_queries": 10284,
+            "tree_rebuilds": 1,
+            "tree_pair_updates": 19567,
+            "bounded_fallback_windows": 0,
+            "array_bytes": 65536,
+            "peak_array_bytes": 65536
+          },
+          "device_execution": {
+            "upload_batches": 0,
+            "uploaded_samples": 0,
+            "downloads": 0,
+            "device_cache_hits": 0,
+            "largest_upload_batch": 0,
+            "correlation_update_calls": 0,
+            "correlation_pairs": 0,
+            "largest_correlation_batch": 0,
+            "cache_budget_bytes": 1006632960,
+            "cache_peak_bytes": 0,
+            "source_batch_limit": 32,
+            "intermediate_residency": false,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          }
+        },
+        {
+          "repeat": 2,
+          "source_elapsed_seconds": 47.09795640001539,
+          "job_call_seconds": 47.10115040000528,
+          "process_wall_seconds": 47.57556309993379,
+          "host_seconds": {
+            "setup": 0.04834440001286566,
+            "input_read": 2.0463658957742155,
+            "index_write": 0.0,
+            "cpu_compute": 44.09968300128821,
+            "gpu_submit": 0.0,
+            "upload": 0.0,
+            "download": 0.0,
+            "references": 0.24661849648691714,
+            "output_statistics": 0.09730280330404639,
+            "output_render": 0.34458070003893226,
+            "output_write": 0.13655070692766458,
+            "other": 0.07851039618253708
+          },
+          "input_read_samples": 10284,
+          "values": {
+            "shape": [
+              9284
+            ],
+            "dtype": "float64",
+            "shape_equal": true,
+            "dtype_equal": true,
+            "finite_masks_equal": true,
+            "nonfinite_values_equal": true,
+            "exact_values_equal": true,
+            "max_absolute_error": 0.0,
+            "max_relative_error": 0.0,
+            "checked_values": 9284,
+            "rtol": 2e-13,
+            "atol": 2e-13,
+            "passed": true
+          },
+          "references": {
+            "passed": true,
+            "checked_records": 9284,
+            "byte_equal": true,
+            "lag_seconds_atol": 1e-12,
+            "first_mismatches": []
+          },
+          "devices": [
+            {
+              "algorithm": "time_crop",
+              "requested": "cpu",
+              "actual": "cpu",
+              "reason": null
+            },
+            {
+              "algorithm": "calibration",
+              "requested": "cpu",
+              "actual": "cpu",
+              "reason": null
+            },
+            {
+              "algorithm": "alignment",
+              "requested": "cpu",
+              "actual": "cpu",
+              "reason": null
+            },
+            {
+              "algorithm": "roi_crop",
+              "requested": "cpu",
+              "actual": "cpu",
+              "reason": null
+            },
+            {
+              "algorithm": "time_statistics",
+              "requested": "cpu",
+              "actual": "cpu",
+              "reason": null
+            },
+            {
+              "algorithm": "correlation_map",
+              "requested": "cpu",
+              "actual": "cpu",
+              "reason": null
+            }
+          ],
+          "execution": {
+            "stage_evaluations": {
+              "6": 9284,
+              "5": 10284,
+              "4": 10284,
+              "3": 10284,
+              "2": 10284,
+              "1": 10284,
+              "0": 10284
+            },
+            "main_storage": {
+              "stage": 5,
+              "storage": "ram",
+              "full_axes": "TP",
+              "shape": [
+                10284,
+                2
+              ],
+              "dtype": "float64",
+              "capacity_bytes": 164544,
+              "metadata_bytes": 10284,
+              "block_size": 32,
+              "built_samples": 10284,
+              "hits": 55246,
+              "input_cache_released_bytes": 0,
+              "disk_read_bytes": 0,
+              "disk_write_bytes": 0,
+              "ownership": "exclusive_compact_main_output",
+              "state": "complete"
+            }
+          },
+          "reference_execution": {
+            "queries": 28852,
+            "source_queries": 19568,
+            "passthrough_hops_skipped": 78272,
+            "index_transforms": 19568,
+            "budget_bytes": 8388608,
+            "pair_time_queries": 10284,
+            "tree_rebuilds": 1,
+            "tree_pair_updates": 19567,
+            "bounded_fallback_windows": 0,
+            "array_bytes": 65536,
+            "peak_array_bytes": 65536
+          },
+          "device_execution": {
+            "upload_batches": 0,
+            "uploaded_samples": 0,
+            "downloads": 0,
+            "device_cache_hits": 0,
+            "largest_upload_batch": 0,
+            "correlation_update_calls": 0,
+            "correlation_pairs": 0,
+            "largest_correlation_batch": 0,
+            "cache_budget_bytes": 1006632960,
+            "cache_peak_bytes": 0,
+            "source_batch_limit": 32,
+            "intermediate_residency": false,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          }
+        },
+        {
+          "repeat": 3,
+          "source_elapsed_seconds": 46.73609210003633,
+          "job_call_seconds": 46.73941509996075,
+          "process_wall_seconds": 47.21708590001799,
+          "host_seconds": {
+            "setup": 0.045999899972230196,
+            "input_read": 1.9059920044383034,
+            "index_write": 0.0,
+            "cpu_compute": 43.88758029032033,
+            "gpu_submit": 0.0,
+            "upload": 0.0,
+            "download": 0.0,
+            "references": 0.24492950248531997,
+            "output_statistics": 0.0946804063860327,
+            "output_render": 0.34516710008028895,
+            "output_write": 0.13478098914492875,
+            "other": 0.07696190720889717
+          },
+          "input_read_samples": 10284,
+          "values": {
+            "shape": [
+              9284
+            ],
+            "dtype": "float64",
+            "shape_equal": true,
+            "dtype_equal": true,
+            "finite_masks_equal": true,
+            "nonfinite_values_equal": true,
+            "exact_values_equal": true,
+            "max_absolute_error": 0.0,
+            "max_relative_error": 0.0,
+            "checked_values": 9284,
+            "rtol": 2e-13,
+            "atol": 2e-13,
+            "passed": true
+          },
+          "references": {
+            "passed": true,
+            "checked_records": 9284,
+            "byte_equal": true,
+            "lag_seconds_atol": 1e-12,
+            "first_mismatches": []
+          },
+          "devices": [
+            {
+              "algorithm": "time_crop",
+              "requested": "cpu",
+              "actual": "cpu",
+              "reason": null
+            },
+            {
+              "algorithm": "calibration",
+              "requested": "cpu",
+              "actual": "cpu",
+              "reason": null
+            },
+            {
+              "algorithm": "alignment",
+              "requested": "cpu",
+              "actual": "cpu",
+              "reason": null
+            },
+            {
+              "algorithm": "roi_crop",
+              "requested": "cpu",
+              "actual": "cpu",
+              "reason": null
+            },
+            {
+              "algorithm": "time_statistics",
+              "requested": "cpu",
+              "actual": "cpu",
+              "reason": null
+            },
+            {
+              "algorithm": "correlation_map",
+              "requested": "cpu",
+              "actual": "cpu",
+              "reason": null
+            }
+          ],
+          "execution": {
+            "stage_evaluations": {
+              "6": 9284,
+              "5": 10284,
+              "4": 10284,
+              "3": 10284,
+              "2": 10284,
+              "1": 10284,
+              "0": 10284
+            },
+            "main_storage": {
+              "stage": 5,
+              "storage": "ram",
+              "full_axes": "TP",
+              "shape": [
+                10284,
+                2
+              ],
+              "dtype": "float64",
+              "capacity_bytes": 164544,
+              "metadata_bytes": 10284,
+              "block_size": 32,
+              "built_samples": 10284,
+              "hits": 55246,
+              "input_cache_released_bytes": 0,
+              "disk_read_bytes": 0,
+              "disk_write_bytes": 0,
+              "ownership": "exclusive_compact_main_output",
+              "state": "complete"
+            }
+          },
+          "reference_execution": {
+            "queries": 28852,
+            "source_queries": 19568,
+            "passthrough_hops_skipped": 78272,
+            "index_transforms": 19568,
+            "budget_bytes": 8388608,
+            "pair_time_queries": 10284,
+            "tree_rebuilds": 1,
+            "tree_pair_updates": 19567,
+            "bounded_fallback_windows": 0,
+            "array_bytes": 65536,
+            "peak_array_bytes": 65536
+          },
+          "device_execution": {
+            "upload_batches": 0,
+            "uploaded_samples": 0,
+            "downloads": 0,
+            "device_cache_hits": 0,
+            "largest_upload_batch": 0,
+            "correlation_update_calls": 0,
+            "correlation_pairs": 0,
+            "largest_correlation_batch": 0,
+            "cache_budget_bytes": 1006632960,
+            "cache_peak_bytes": 0,
+            "source_batch_limit": 32,
+            "intermediate_residency": false,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          }
+        }
+      ],
+      "median_source_seconds": 46.75504419999197,
+      "median_job_call_seconds": 46.76111870002933,
+      "median_process_wall_seconds": 47.22992529999465,
+      "median_reference_seconds": 0.24492950248531997,
+      "recorded_baseline_to_new_median_ratio": 12.088131613831774
+    },
+    {
+      "name": "gpu_mixed",
+      "repetitions": [
+        {
+          "repeat": 1,
+          "source_elapsed_seconds": 67.30604559998028,
+          "job_call_seconds": 67.31011930003297,
+          "process_wall_seconds": 67.8129731999943,
+          "host_seconds": {
+            "setup": 0.33510250004474074,
+            "input_read": 1.2392886014422402,
+            "index_write": 0.0,
+            "cpu_compute": 28.49698240007274,
+            "gpu_submit": 11.257143001072109,
+            "upload": 1.9732107027666643,
+            "download": 22.998953595291823,
+            "references": 0.2657080020289868,
+            "output_statistics": 0.12843199900817126,
+            "output_render": 0.3401453000260517,
+            "output_write": 0.16503039991948754,
+            "other": 0.10604909830726683
+          },
+          "input_read_samples": 10284,
+          "values": {
+            "shape": [
+              9284
+            ],
+            "dtype": "float64",
+            "shape_equal": true,
+            "dtype_equal": true,
+            "finite_masks_equal": true,
+            "nonfinite_values_equal": true,
+            "exact_values_equal": true,
+            "max_absolute_error": 0.0,
+            "max_relative_error": 0.0,
+            "checked_values": 9284,
+            "rtol": 2e-13,
+            "atol": 2e-13,
+            "passed": true
+          },
+          "references": {
+            "passed": true,
+            "checked_records": 9284,
+            "byte_equal": true,
+            "lag_seconds_atol": 1e-12,
+            "first_mismatches": []
+          },
+          "devices": [
+            {
+              "algorithm": "time_crop",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "calibration",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "alignment",
+              "requested": "cpu",
+              "actual": "cpu",
+              "reason": null
+            },
+            {
+              "algorithm": "roi_crop",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "time_statistics",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "correlation_map",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            }
+          ],
+          "execution": {
+            "stage_evaluations": {
+              "6": 9284,
+              "5": 10284,
+              "4": 10284,
+              "3": 10284,
+              "2": 10284,
+              "1": 10284,
+              "0": 10284
+            },
+            "main_storage": {
+              "stage": 5,
+              "storage": "device",
+              "full_axes": "TP",
+              "shape": [
+                10284,
+                2
+              ],
+              "dtype": "float64",
+              "capacity_bytes": 164544,
+              "metadata_bytes": 10284,
+              "block_size": 32,
+              "built_samples": 10284,
+              "hits": 55246,
+              "input_cache_released_bytes": 48318016512,
+              "disk_read_bytes": 0,
+              "disk_write_bytes": 0,
+              "ownership": "exclusive_compact_main_output",
+              "state": "complete"
+            }
+          },
+          "reference_execution": {
+            "queries": 28852,
+            "source_queries": 19568,
+            "passthrough_hops_skipped": 78272,
+            "index_transforms": 19568,
+            "budget_bytes": 8388608,
+            "pair_time_queries": 10284,
+            "tree_rebuilds": 1,
+            "tree_pair_updates": 19567,
+            "bounded_fallback_windows": 0,
+            "array_bytes": 65536,
+            "peak_array_bytes": 65536
+          },
+          "device_execution": {
+            "upload_batches": 644,
+            "uploaded_samples": 20568,
+            "downloads": 19568,
+            "device_cache_hits": 19924,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 19086,
+            "correlation_pairs": 55531,
+            "largest_correlation_batch": 64,
+            "cache_budget_bytes": 2013265920,
+            "cache_peak_bytes": 150422048,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          }
+        },
+        {
+          "repeat": 2,
+          "source_elapsed_seconds": 61.741672300035134,
+          "job_call_seconds": 61.74633710004855,
+          "process_wall_seconds": 62.25832299992908,
+          "host_seconds": {
+            "setup": 0.3230364000191912,
+            "input_read": 1.248548403964378,
+            "index_write": 0.0,
+            "cpu_compute": 28.86786559317261,
+            "gpu_submit": 11.95535541314166,
+            "upload": 1.9797992993844673,
+            "download": 16.282874186872505,
+            "references": 0.2884008012479171,
+            "output_statistics": 0.1433164932532236,
+            "output_render": 0.3685816000215709,
+            "output_write": 0.17600080149713904,
+            "other": 0.10789330746047199
+          },
+          "input_read_samples": 10284,
+          "values": {
+            "shape": [
+              9284
+            ],
+            "dtype": "float64",
+            "shape_equal": true,
+            "dtype_equal": true,
+            "finite_masks_equal": true,
+            "nonfinite_values_equal": true,
+            "exact_values_equal": true,
+            "max_absolute_error": 0.0,
+            "max_relative_error": 0.0,
+            "checked_values": 9284,
+            "rtol": 2e-13,
+            "atol": 2e-13,
+            "passed": true
+          },
+          "references": {
+            "passed": true,
+            "checked_records": 9284,
+            "byte_equal": true,
+            "lag_seconds_atol": 1e-12,
+            "first_mismatches": []
+          },
+          "devices": [
+            {
+              "algorithm": "time_crop",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "calibration",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "alignment",
+              "requested": "cpu",
+              "actual": "cpu",
+              "reason": null
+            },
+            {
+              "algorithm": "roi_crop",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "time_statistics",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "correlation_map",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            }
+          ],
+          "execution": {
+            "stage_evaluations": {
+              "6": 9284,
+              "5": 10284,
+              "4": 10284,
+              "3": 10284,
+              "2": 10284,
+              "1": 10284,
+              "0": 10284
+            },
+            "main_storage": {
+              "stage": 5,
+              "storage": "device",
+              "full_axes": "TP",
+              "shape": [
+                10284,
+                2
+              ],
+              "dtype": "float64",
+              "capacity_bytes": 164544,
+              "metadata_bytes": 10284,
+              "block_size": 32,
+              "built_samples": 10284,
+              "hits": 55246,
+              "input_cache_released_bytes": 48318016512,
+              "disk_read_bytes": 0,
+              "disk_write_bytes": 0,
+              "ownership": "exclusive_compact_main_output",
+              "state": "complete"
+            }
+          },
+          "reference_execution": {
+            "queries": 28852,
+            "source_queries": 19568,
+            "passthrough_hops_skipped": 78272,
+            "index_transforms": 19568,
+            "budget_bytes": 8388608,
+            "pair_time_queries": 10284,
+            "tree_rebuilds": 1,
+            "tree_pair_updates": 19567,
+            "bounded_fallback_windows": 0,
+            "array_bytes": 65536,
+            "peak_array_bytes": 65536
+          },
+          "device_execution": {
+            "upload_batches": 644,
+            "uploaded_samples": 20568,
+            "downloads": 19568,
+            "device_cache_hits": 19924,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 19086,
+            "correlation_pairs": 55531,
+            "largest_correlation_batch": 64,
+            "cache_budget_bytes": 2013265920,
+            "cache_peak_bytes": 150422048,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          }
+        },
+        {
+          "repeat": 3,
+          "source_elapsed_seconds": 58.65066569996998,
+          "job_call_seconds": 58.655525500071235,
+          "process_wall_seconds": 59.198211200069636,
+          "host_seconds": {
+            "setup": 0.33642100007273257,
+            "input_read": 1.2639449025737122,
+            "index_write": 0.0,
+            "cpu_compute": 26.92370809975546,
+            "gpu_submit": 13.28811000008136,
+            "upload": 1.928988301078789,
+            "download": 13.710233698482625,
+            "references": 0.33991630224045366,
+            "output_statistics": 0.17939140379894525,
+            "output_render": 0.3515784000046551,
+            "output_write": 0.20467639609705657,
+            "other": 0.12369719578418881
+          },
+          "input_read_samples": 10284,
+          "values": {
+            "shape": [
+              9284
+            ],
+            "dtype": "float64",
+            "shape_equal": true,
+            "dtype_equal": true,
+            "finite_masks_equal": true,
+            "nonfinite_values_equal": true,
+            "exact_values_equal": true,
+            "max_absolute_error": 0.0,
+            "max_relative_error": 0.0,
+            "checked_values": 9284,
+            "rtol": 2e-13,
+            "atol": 2e-13,
+            "passed": true
+          },
+          "references": {
+            "passed": true,
+            "checked_records": 9284,
+            "byte_equal": true,
+            "lag_seconds_atol": 1e-12,
+            "first_mismatches": []
+          },
+          "devices": [
+            {
+              "algorithm": "time_crop",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "calibration",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "alignment",
+              "requested": "cpu",
+              "actual": "cpu",
+              "reason": null
+            },
+            {
+              "algorithm": "roi_crop",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "time_statistics",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "correlation_map",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            }
+          ],
+          "execution": {
+            "stage_evaluations": {
+              "6": 9284,
+              "5": 10284,
+              "4": 10284,
+              "3": 10284,
+              "2": 10284,
+              "1": 10284,
+              "0": 10284
+            },
+            "main_storage": {
+              "stage": 5,
+              "storage": "device",
+              "full_axes": "TP",
+              "shape": [
+                10284,
+                2
+              ],
+              "dtype": "float64",
+              "capacity_bytes": 164544,
+              "metadata_bytes": 10284,
+              "block_size": 32,
+              "built_samples": 10284,
+              "hits": 55246,
+              "input_cache_released_bytes": 48318016512,
+              "disk_read_bytes": 0,
+              "disk_write_bytes": 0,
+              "ownership": "exclusive_compact_main_output",
+              "state": "complete"
+            }
+          },
+          "reference_execution": {
+            "queries": 28852,
+            "source_queries": 19568,
+            "passthrough_hops_skipped": 78272,
+            "index_transforms": 19568,
+            "budget_bytes": 8388608,
+            "pair_time_queries": 10284,
+            "tree_rebuilds": 1,
+            "tree_pair_updates": 19567,
+            "bounded_fallback_windows": 0,
+            "array_bytes": 65536,
+            "peak_array_bytes": 65536
+          },
+          "device_execution": {
+            "upload_batches": 644,
+            "uploaded_samples": 20568,
+            "downloads": 19568,
+            "device_cache_hits": 19924,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 19086,
+            "correlation_pairs": 55531,
+            "largest_correlation_batch": 64,
+            "cache_budget_bytes": 2013265920,
+            "cache_peak_bytes": 150422048,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          }
+        }
+      ],
+      "median_source_seconds": 61.741672300035134,
+      "median_job_call_seconds": 61.74633710004855,
+      "median_process_wall_seconds": 62.25832299992908,
+      "median_reference_seconds": 0.2884008012479171,
+      "recorded_baseline_to_new_median_ratio": 11.347969249929314
+    },
+    {
+      "name": "all_gpu_explicit",
+      "repetitions": [
+        {
+          "repeat": 1,
+          "source_elapsed_seconds": 11.11060809995979,
+          "job_call_seconds": 11.115044299978763,
+          "process_wall_seconds": 11.647740800050087,
+          "host_seconds": {
+            "setup": 0.33911259996239096,
+            "input_read": 1.3198832994094118,
+            "index_write": 0.0,
+            "cpu_compute": 0.03906681411899626,
+            "gpu_submit": 7.30672978120856,
+            "upload": 0.4874992002733052,
+            "download": 0.47034089907538146,
+            "references": 0.3084691014373675,
+            "output_statistics": 0.16505639906972647,
+            "output_render": 0.3692011999664828,
+            "output_write": 0.19357830856461078,
+            "other": 0.11167049687355757
+          },
+          "input_read_samples": 10284,
+          "values": {
+            "shape": [
+              9284
+            ],
+            "dtype": "float64",
+            "shape_equal": true,
+            "dtype_equal": true,
+            "finite_masks_equal": true,
+            "nonfinite_values_equal": true,
+            "exact_values_equal": true,
+            "max_absolute_error": 0.0,
+            "max_relative_error": 0.0,
+            "checked_values": 9284,
+            "rtol": 2e-13,
+            "atol": 2e-13,
+            "passed": true
+          },
+          "references": {
+            "passed": true,
+            "checked_records": 9284,
+            "byte_equal": true,
+            "lag_seconds_atol": 1e-12,
+            "first_mismatches": []
+          },
+          "devices": [
+            {
+              "algorithm": "time_crop",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "calibration",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "alignment",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "roi_crop",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "time_statistics",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "correlation_map",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            }
+          ],
+          "execution": {
+            "stage_evaluations": {
+              "6": 9284,
+              "5": 10284,
+              "4": 10284,
+              "3": 10284,
+              "2": 10284,
+              "1": 10284,
+              "0": 10284
+            },
+            "main_storage": {
+              "stage": 5,
+              "storage": "device",
+              "full_axes": "TP",
+              "shape": [
+                10284,
+                2
+              ],
+              "dtype": "float64",
+              "capacity_bytes": 164544,
+              "metadata_bytes": 10284,
+              "block_size": 32,
+              "built_samples": 10284,
+              "hits": 55246,
+              "input_cache_released_bytes": 10267545600,
+              "disk_read_bytes": 0,
+              "disk_write_bytes": 0,
+              "ownership": "exclusive_compact_main_output",
+              "state": "complete"
+            }
+          },
+          "reference_execution": {
+            "queries": 28852,
+            "source_queries": 19568,
+            "passthrough_hops_skipped": 78272,
+            "index_transforms": 19568,
+            "budget_bytes": 8388608,
+            "pair_time_queries": 10284,
+            "tree_rebuilds": 1,
+            "tree_pair_updates": 19567,
+            "bounded_fallback_windows": 0,
+            "array_bytes": 65536,
+            "peak_array_bytes": 65536
+          },
+          "device_execution": {
+            "upload_batches": 322,
+            "uploaded_samples": 10284,
+            "downloads": 9284,
+            "device_cache_hits": 9962,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 19086,
+            "correlation_pairs": 55531,
+            "largest_correlation_batch": 64,
+            "cache_budget_bytes": 2013265920,
+            "cache_peak_bytes": 32023072,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          }
+        },
+        {
+          "repeat": 2,
+          "source_elapsed_seconds": 11.40561430004891,
+          "job_call_seconds": 11.40965749998577,
+          "process_wall_seconds": 11.966948200017214,
+          "host_seconds": {
+            "setup": 0.3361035000998527,
+            "input_read": 1.3431425967719406,
+            "index_write": 0.0,
+            "cpu_compute": 0.04088429396506399,
+            "gpu_submit": 7.518972612684593,
+            "upload": 0.5151142015820369,
+            "download": 0.4703925991198048,
+            "references": 0.31946310226339847,
+            "output_statistics": 0.17217250016983598,
+            "output_render": 0.3718739999458194,
+            "output_write": 0.20096649113111198,
+            "other": 0.1165284023154527
+          },
+          "input_read_samples": 10284,
+          "values": {
+            "shape": [
+              9284
+            ],
+            "dtype": "float64",
+            "shape_equal": true,
+            "dtype_equal": true,
+            "finite_masks_equal": true,
+            "nonfinite_values_equal": true,
+            "exact_values_equal": true,
+            "max_absolute_error": 0.0,
+            "max_relative_error": 0.0,
+            "checked_values": 9284,
+            "rtol": 2e-13,
+            "atol": 2e-13,
+            "passed": true
+          },
+          "references": {
+            "passed": true,
+            "checked_records": 9284,
+            "byte_equal": true,
+            "lag_seconds_atol": 1e-12,
+            "first_mismatches": []
+          },
+          "devices": [
+            {
+              "algorithm": "time_crop",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "calibration",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "alignment",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "roi_crop",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "time_statistics",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "correlation_map",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            }
+          ],
+          "execution": {
+            "stage_evaluations": {
+              "6": 9284,
+              "5": 10284,
+              "4": 10284,
+              "3": 10284,
+              "2": 10284,
+              "1": 10284,
+              "0": 10284
+            },
+            "main_storage": {
+              "stage": 5,
+              "storage": "device",
+              "full_axes": "TP",
+              "shape": [
+                10284,
+                2
+              ],
+              "dtype": "float64",
+              "capacity_bytes": 164544,
+              "metadata_bytes": 10284,
+              "block_size": 32,
+              "built_samples": 10284,
+              "hits": 55246,
+              "input_cache_released_bytes": 10267545600,
+              "disk_read_bytes": 0,
+              "disk_write_bytes": 0,
+              "ownership": "exclusive_compact_main_output",
+              "state": "complete"
+            }
+          },
+          "reference_execution": {
+            "queries": 28852,
+            "source_queries": 19568,
+            "passthrough_hops_skipped": 78272,
+            "index_transforms": 19568,
+            "budget_bytes": 8388608,
+            "pair_time_queries": 10284,
+            "tree_rebuilds": 1,
+            "tree_pair_updates": 19567,
+            "bounded_fallback_windows": 0,
+            "array_bytes": 65536,
+            "peak_array_bytes": 65536
+          },
+          "device_execution": {
+            "upload_batches": 322,
+            "uploaded_samples": 10284,
+            "downloads": 9284,
+            "device_cache_hits": 9962,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 19086,
+            "correlation_pairs": 55531,
+            "largest_correlation_batch": 64,
+            "cache_budget_bytes": 2013265920,
+            "cache_peak_bytes": 32023072,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          }
+        },
+        {
+          "repeat": 3,
+          "source_elapsed_seconds": 10.862369999988005,
+          "job_call_seconds": 10.866531500010751,
+          "process_wall_seconds": 11.412072600098327,
+          "host_seconds": {
+            "setup": 0.3222265999065712,
+            "input_read": 1.2842758077895269,
+            "index_write": 0.0,
+            "cpu_compute": 0.03771129192318767,
+            "gpu_submit": 7.136404688237235,
+            "upload": 0.4822062001330778,
+            "download": 0.47163550567347556,
+            "references": 0.30262979911640286,
+            "output_statistics": 0.160160199040547,
+            "output_render": 0.36592329991981387,
+            "output_write": 0.18894650624133646,
+            "other": 0.11025010200683028
+          },
+          "input_read_samples": 10284,
+          "values": {
+            "shape": [
+              9284
+            ],
+            "dtype": "float64",
+            "shape_equal": true,
+            "dtype_equal": true,
+            "finite_masks_equal": true,
+            "nonfinite_values_equal": true,
+            "exact_values_equal": true,
+            "max_absolute_error": 0.0,
+            "max_relative_error": 0.0,
+            "checked_values": 9284,
+            "rtol": 2e-13,
+            "atol": 2e-13,
+            "passed": true
+          },
+          "references": {
+            "passed": true,
+            "checked_records": 9284,
+            "byte_equal": true,
+            "lag_seconds_atol": 1e-12,
+            "first_mismatches": []
+          },
+          "devices": [
+            {
+              "algorithm": "time_crop",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "calibration",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "alignment",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "roi_crop",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "time_statistics",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            },
+            {
+              "algorithm": "correlation_map",
+              "requested": "gpu",
+              "actual": "gpu",
+              "reason": null
+            }
+          ],
+          "execution": {
+            "stage_evaluations": {
+              "6": 9284,
+              "5": 10284,
+              "4": 10284,
+              "3": 10284,
+              "2": 10284,
+              "1": 10284,
+              "0": 10284
+            },
+            "main_storage": {
+              "stage": 5,
+              "storage": "device",
+              "full_axes": "TP",
+              "shape": [
+                10284,
+                2
+              ],
+              "dtype": "float64",
+              "capacity_bytes": 164544,
+              "metadata_bytes": 10284,
+              "block_size": 32,
+              "built_samples": 10284,
+              "hits": 55246,
+              "input_cache_released_bytes": 10267545600,
+              "disk_read_bytes": 0,
+              "disk_write_bytes": 0,
+              "ownership": "exclusive_compact_main_output",
+              "state": "complete"
+            }
+          },
+          "reference_execution": {
+            "queries": 28852,
+            "source_queries": 19568,
+            "passthrough_hops_skipped": 78272,
+            "index_transforms": 19568,
+            "budget_bytes": 8388608,
+            "pair_time_queries": 10284,
+            "tree_rebuilds": 1,
+            "tree_pair_updates": 19567,
+            "bounded_fallback_windows": 0,
+            "array_bytes": 65536,
+            "peak_array_bytes": 65536
+          },
+          "device_execution": {
+            "upload_batches": 322,
+            "uploaded_samples": 10284,
+            "downloads": 9284,
+            "device_cache_hits": 9962,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 19086,
+            "correlation_pairs": 55531,
+            "largest_correlation_batch": 64,
+            "cache_budget_bytes": 2013265920,
+            "cache_peak_bytes": 32023072,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          }
+        }
+      ],
+      "median_source_seconds": 11.11060809995979,
+      "median_job_call_seconds": 11.115044299978763,
+      "median_process_wall_seconds": 11.647740800050087,
+      "median_reference_seconds": 0.3084691014373675
+    }
+  ],
+  "browser": [
+    {
+      "status": "passed",
+      "backend": "gpu",
+      "requests": 1,
+      "javascript_errors": [],
+      "performance": {
+        "schema_version": 1,
+        "elapsed_seconds": 0.745000800001435,
+        "host_seconds": {
+          "setup": 0.3571249999804422,
+          "input_read": 0.0018715002806857228,
+          "index_write": 0.0,
+          "cpu_compute": 0.00015910016372799873,
+          "gpu_submit": 0.0632065994432196,
+          "upload": 0.00013399997260421515,
+          "download": 0.0003016000846400857,
+          "references": 0.0008920999243855476,
+          "output_statistics": 0.0001423998037353158,
+          "output_render": 0.3137362999841571,
+          "output_write": 0.002616200130432844,
+          "other": 0.004816000233404338
+        },
+        "labels": {
+          "setup": "准备与校验",
+          "input_read": "输入读取 / 解码",
+          "index_write": "临时视频索引写入",
+          "cpu_compute": "CPU 模块计算",
+          "gpu_submit": "GPU 调度（主机，含同步等待）",
+          "upload": "上传（主机，含等待）",
+          "download": "回传（主机，含等待）",
+          "references": "来源映射",
+          "output_statistics": "输出摘要统计",
+          "output_render": "曲线图生成",
+          "output_write": "输出写入",
+          "other": "其他 / 收尾"
+        },
+        "input_read_samples": 31,
+        "input_read_bytes": 17856,
+        "output_samples": 5,
+        "output_bytes": 40,
+        "input_reads_per_second": 41.61069357232944,
+        "output_per_second": 6.711402189085393,
+        "gpu_execution_seconds": null,
+        "semantics": {
+          "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+          "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+          "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+          "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+          "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+          "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+        }
+      },
+      "max_absolute_error": 2.220446049250313e-16
+    },
+    {
+      "status": "passed",
+      "backend": "cpu",
+      "requests": 1,
+      "javascript_errors": [],
+      "performance": {
+        "schema_version": 1,
+        "elapsed_seconds": 0.3734102000016719,
+        "host_seconds": {
+          "setup": 0.023717200034298003,
+          "input_read": 0.0020479998784139752,
+          "index_write": 0.0,
+          "cpu_compute": 0.0027997998986393213,
+          "gpu_submit": 0.0,
+          "upload": 0.0,
+          "download": 0.0,
+          "references": 0.0010276999091729522,
+          "output_statistics": 0.00012869993224740028,
+          "output_render": 0.33692469995003194,
+          "output_write": 0.0026593002257868648,
+          "other": 0.004104800173081458
+        },
+        "labels": {
+          "setup": "准备与校验",
+          "input_read": "输入读取 / 解码",
+          "index_write": "临时视频索引写入",
+          "cpu_compute": "CPU 模块计算",
+          "gpu_submit": "GPU 调度（主机，含同步等待）",
+          "upload": "上传（主机，含等待）",
+          "download": "回传（主机，含等待）",
+          "references": "来源映射",
+          "output_statistics": "输出摘要统计",
+          "output_render": "曲线图生成",
+          "output_write": "输出写入",
+          "other": "其他 / 收尾"
+        },
+        "input_read_samples": 31,
+        "input_read_bytes": 17856,
+        "output_samples": 5,
+        "output_bytes": 40,
+        "input_reads_per_second": 83.01862134419788,
+        "output_per_second": 13.39010021680611,
+        "gpu_execution_seconds": null,
+        "semantics": {
+          "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+          "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+          "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+          "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+          "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+          "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+        }
+      },
+      "max_absolute_error": 2.220446049250313e-16
+    }
+  ],
+  "source_sha256": {
+    "src\\eip\\sequence_engine.py": "a54436d8c4cb356142dc2e1f011c87681d19c89e044c13ba6a74132142ea6c15",
+    "src\\eip\\reference_index.py": "54b29fe510a9d893109467a4eb37cc97a6e15bf19191b311619cf2fcddfa12eb",
+    "src\\eip\\stage_storage.py": "b4737b582d397b9610492a214bd50f20f2c3f16727acd7ff8dddb6dd6cb0718a",
+    "src\\eip\\gpu_pipeline.py": "599be56bdd3b71376405896e30781f971e6dcfe783d5d66ab5f561c068a8138e"
+  },
+  "activation": {
+    "status": "activated",
+    "version": "0.9.1",
+    "sources": 3,
+    "jobs": 4,
+    "devices": {
+      "cpu": true,
+      "gpu": true,
+      "gpu_name": "NVIDIA GeForce RTX 5070 Ti",
+      "reason": null
+    }
+  }
+}

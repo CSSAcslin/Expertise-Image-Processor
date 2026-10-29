@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from typing import Protocol
 
 import numpy as np
@@ -14,8 +14,8 @@ class RegistrationMethod(Protocol):
     def __call__(self, left: np.ndarray, right: np.ndarray) -> dict: ...
 
 
-def geometry_bounds(config: GeometryConfig, shape):
-    """Exact common bounding box using axis vectors, without a full image grid."""
+def _geometry_extent(config: GeometryConfig, shape):
+    """Exact common box and valid count using one-dimensional axis vectors."""
     if len(shape)!=2:
         raise ValueError("分幅关联要求二维灰度矩阵")
     config.left.validate(tuple(shape))
@@ -48,7 +48,43 @@ def geometry_bounds(config: GeometryConfig, shape):
         raise ValueError("左右幅没有共同有效区域，请检查中线、区域和匹配偏移")
     x0,x1 = int(x[lower[valid].min()]),int(x[(upper[valid]-1).max()])+1
     y0,y1 = int(y[valid].min()),int(y[valid].max())+1
-    return x0,y0,x1,y1
+    count = int(np.maximum(0,upper-lower).sum(dtype=np.int64))
+    return (x0,y0,x1,y1),count
+
+
+def geometry_bounds(config: GeometryConfig, shape):
+    """Exact common bounding box using axis vectors, without a full image grid."""
+    return _geometry_extent(config,shape)[0]
+
+
+@dataclass(frozen=True)
+class RegionMapping:
+    """Immutable fixed sampler, in absolute sensor coordinates.
+
+    ``bounds`` is relative to the complete aligned output. ``samples`` retains
+    the four original bilinear terms and their order; nearest has one term and
+    a ``None`` weight. Broadcast axis views keep integer indices compact.
+    """
+
+    bounds: tuple[int, int, int, int]
+    shape: tuple[int, int]
+    mask: np.ndarray
+    left_y: np.ndarray
+    left_x: np.ndarray
+    samples: tuple
+    local_samples: tuple
+    left_bounds: tuple[int, int, int, int]
+    right_bounds: tuple[int, int, int, int]
+    left_indices: tuple
+    right_indices: tuple
+    source_bounds: tuple[int, int, int, int]
+    xr: np.ndarray
+    yr: np.ndarray
+
+
+def _readonly(value):
+    value.setflags(write=False)
+    return value
 
 
 class Geometry:
@@ -61,52 +97,130 @@ class Geometry:
             raise ValueError("中线端点需位于图像内部")
         self.config = config
         self.input_shape = tuple(shape)
-        l, r = config.left, config.right
-        yy, xx = np.indices((l.height, l.width), dtype=np.float64)
-        xr, yr = xx + config.dx, yy + config.dy
-        if config.mirror_x:
-            xr = r.width - 1 - xr
-        if config.mirror_y:
-            yr = r.height - 1 - yr
-        if config.interpolation == "nearest":
-            xr, yr = np.floor(xr+.5), np.floor(yr+.5)
-        left_line = np.interp(yy + l.y, [0, max(1, shape[0]-1)], config.midline)
-        right_line = np.interp(yr + r.y, [0, max(1, shape[0]-1)], config.midline)
-        valid = ((xx+l.x) < left_line) & ((xr+r.x) >= right_line) & (xr >= 0) & (yr >= 0) & (xr <= r.width-1) & (yr <= r.height-1)
-        vy, vx = np.nonzero(valid)
-        if not vx.size:
-            raise ValueError("左右幅没有共同有效区域，请检查中线、区域和匹配偏移")
-        x0, y0, x1, y1 = int(vx.min()), int(vy.min()), int(vx.max())+1, int(vy.max())+1
-        self.crop = (x0, y0, x1, y1)
-        self.mask = valid[y0:y1, x0:x1]
-        self.xr, self.yr = xr[y0:y1, x0:x1], yr[y0:y1, x0:x1]
-        self.shape = self.mask.shape
-        self.origin = (l.x+x0, l.y+y0)
-        self.record = {"parameters": asdict(config), "reference": "left", "reference_crop": list(self.crop), "origin_in_sensor": list(self.origin), "shape": list(self.shape), "valid_pixels": int(self.mask.sum()), "mapping": "right_local=(left_local+offset), followed by explicit mirrors", "version": "1.0"}
+        self.crop, valid_count = _geometry_extent(config,shape)
+        x0,y0,x1,y1 = self.crop
+        self.shape = (y1-y0,x1-x0)
+        self.origin = (config.left.x+x0,config.left.y+y0)
+        # A point request need not build any full-size two-dimensional arrays.
+        # Retain at most one local mapping and one compatibility/full mapping.
+        self._full_mapping = self._local_mapping = None
+        self.mapping_builds = 0
+        self.record = {"parameters": asdict(config), "reference": "left", "reference_crop": list(self.crop), "origin_in_sensor": list(self.origin), "shape": list(self.shape), "valid_pixels": valid_count, "mapping": "right_local=(left_local+offset), followed by explicit mirrors", "version": "1.0"}
+
+    @property
+    def mask(self):
+        return self.region_mapping().mask
+
+    @property
+    def xr(self):
+        return self.region_mapping().xr
+
+    @property
+    def yr(self):
+        return self.region_mapping().yr
+
+    def region_mapping(self, bounds=None):
+        """Compile reusable samples only for an aligned ``(x,y,width,height)``.
+
+        Public shape/origin/record describe the complete logical geometry.
+        Mapping arrays are read-only and never reference input frame buffers.
+        """
+        bounds = (0,0,self.shape[1],self.shape[0]) if bounds is None else tuple(bounds)
+        if (len(bounds)!=4 or any(not isinstance(v,(int,np.integer)) or isinstance(v,(bool,np.bool_)) for v in bounds)
+                or min(bounds[0],bounds[1])<0 or min(bounds[2],bounds[3])<1
+                or bounds[0]+bounds[2]>self.shape[1] or bounds[1]+bounds[3]>self.shape[0]):
+            raise ValueError("配准采样区域超出完整输出范围")
+        bounds = tuple(int(v) for v in bounds)
+        for cached in (self._full_mapping,self._local_mapping):
+            if cached is not None and cached.bounds==bounds:
+                return cached
+        x,y,w,h = bounds
+        l,r = self.config.left,self.config.right
+        x0,y0,_,_ = self.crop
+        xx = np.arange(x0+x,x0+x+w,dtype=np.float64)[None,:]
+        yy = np.arange(y0+y,y0+y+h,dtype=np.float64)[:,None]
+        xr,yr = xx+self.config.dx,yy+self.config.dy
+        if self.config.mirror_x:
+            xr = r.width-1-xr
+        if self.config.mirror_y:
+            yr = r.height-1-yr
+        if self.config.interpolation=="nearest":
+            xr,yr = np.floor(xr+.5),np.floor(yr+.5)
+        left_line = np.interp(yy+l.y,[0,max(1,self.input_shape[0]-1)],self.config.midline)
+        right_line = np.interp(yr+r.y,[0,max(1,self.input_shape[0]-1)],self.config.midline)
+        mask = _readonly(((xx+l.x)<left_line)&((xr+r.x)>=right_line)
+                         &(xr>=0)&(yr>=0)&(xr<=r.width-1)&(yr<=r.height-1))
+        shape = (h,w)
+        broadcast = lambda a:_readonly(np.broadcast_to(a,shape))
+        left_y,left_x = broadcast(yy.astype(np.intp)+l.y),broadcast(xx.astype(np.intp)+l.x)
+        if self.config.interpolation=="nearest":
+            samples = ((broadcast(np.clip(yr.astype(np.intp),0,r.height-1)+r.y),
+                        broadcast(np.clip(xr.astype(np.intp),0,r.width-1)+r.x),None),)
+        else:
+            bx,by = np.floor(xr).astype(np.intp),np.floor(yr).astype(np.intp)
+            fx,fy = xr-bx,yr-by
+            samples = tuple((broadcast(np.clip(by+oy,0,r.height-1)+r.y),
+                             broadcast(np.clip(bx+ox,0,r.width-1)+r.x),_readonly(weight))
+                            for ox,oy,weight in ((0,0,(1-fx)*(1-fy)),(1,0,fx*(1-fy)),
+                                                (0,1,(1-fx)*fy),(1,1,fx*fy)))
+        lx0,ly0,lx1,ly1 = int(left_x.min()),int(left_y.min()),int(left_x.max())+1,int(left_y.max())+1
+        rx0,ry0 = min(int(sx.min()) for _,sx,_ in samples),min(int(sy.min()) for sy,_,_ in samples)
+        rx1,ry1 = max(int(sx.max()) for _,sx,_ in samples)+1,max(int(sy.max()) for sy,_,_ in samples)+1
+        min_x,min_y,max_x,max_y = min(lx0,rx0),min(ly0,ry0),max(lx1,rx1),max(ly1,ry1)
+        local_samples = tuple((broadcast(sy[:,:1]-r.y),broadcast(sx[:1,:]-r.x),weight)
+                              for sy,sx,weight in samples)
+        left_indices = (broadcast(left_y[:,:1]-ly0),broadcast(left_x[:1,:]-lx0))
+        right_indices = tuple((broadcast(sy[:,:1]-ry0),broadcast(sx[:1,:]-rx0),weight)
+                              for sy,sx,weight in samples)
+        mapping = RegionMapping(bounds,shape,mask,left_y,left_x,samples,local_samples,
+                                (lx0,ly0,lx1-lx0,ly1-ly0),(rx0,ry0,rx1-rx0,ry1-ry0),
+                                left_indices,right_indices,
+                                (min_x,min_y,max_x-min_x,max_y-min_y),broadcast(xr),broadcast(yr))
+        self.mapping_builds += 1
+        if bounds==(0,0,self.shape[1],self.shape[0]):
+            self._full_mapping = mapping
+        else:
+            self._local_mapping = mapping
+        return mapping
 
     def apply(self, pixels, photometry):
+        return self.apply_region(pixels,photometry)
+
+    def apply_region(self, pixels, photometry, bounds=None):
+        """Sample a region while retaining photometry's full-rectangle checks."""
         if tuple(pixels.shape) != self.input_shape:
             raise ValueError("来源帧尺寸发生变化")
+        mapping = self.region_mapping(bounds)
+        out = np.empty((2,*mapping.shape),dtype=np.float64)
+        self.apply_into(pixels,photometry,out,bounds=mapping.bounds)
+        return out[0],out[1]
+
+    def apply_into(self, pixels, photometry, out, *, bounds=None):
+        """Write one aligned pair into an exclusively owned float64 buffer."""
+        if tuple(pixels.shape) != self.input_shape:
+            raise ValueError("来源帧尺寸发生变化")
+        mapping = self.region_mapping(bounds)
+        if tuple(out.shape)!=(2,*mapping.shape) or out.dtype!=np.dtype("float64"):
+            raise ValueError("配准输出缓冲区形状或类型不符")
+        if not out.flags.writeable or np.may_share_memory(out,pixels):
+            raise ValueError("配准输出缓冲区需独占且可写，不能覆盖输入")
         l, r = self.config.left, self.config.right
         left = photometry.apply(pixels[l.y:l.y+l.height, l.x:l.x+l.width], "left")
         right = photometry.apply(pixels[r.y:r.y+r.height, r.x:r.x+r.width], "right")
-        x0, y0, x1, y1 = self.crop
-        left = left[y0:y1, x0:x1].copy()
-        xr, yr = self.xr, self.yr
+        x,y,w,h = mapping.bounds
+        x0,y0,_,_ = self.crop
+        out[0] = left[y0+y:y0+y+h,x0+x:x0+x+w]
         if self.config.interpolation == "nearest":
-            right = right[np.clip(yr.astype(int), 0, r.height-1), np.clip(xr.astype(int), 0, r.width-1)]
+            sy,sx,_ = mapping.local_samples[0]
+            out[1] = right[sy,sx]
         else:
-            bx, by = np.floor(xr).astype(int), np.floor(yr).astype(int)
-            fx, fy = xr-bx, yr-by
-            right_out = np.zeros(self.shape, dtype=np.float64)
+            out[1].fill(0)
             with np.errstate(invalid="ignore"):
-                for ox, oy, weight in ((0,0,(1-fx)*(1-fy)), (1,0,fx*(1-fy)), (0,1,(1-fx)*fy), (1,1,fx*fy)):
-                    samples = right[np.clip(by+oy,0,r.height-1), np.clip(bx+ox,0,r.width-1)]
-                    right_out += np.where(weight > 0, samples*weight, 0)
-            right = right_out
-        left[~self.mask] = np.nan
-        right = np.where(self.mask, right, np.nan)
-        return left, right
+                for sy,sx,weight in mapping.local_samples:
+                    values = right[sy,sx]
+                    out[1] += np.where(weight>0,values*weight,0)
+        out[:,~mapping.mask] = np.nan
+        return out
 
 
 def phase_registration(left, right):

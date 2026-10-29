@@ -1,0 +1,5 @@
+# Verified Windows / Python 3.12 GPU environment; requires an installed CUDA 13 Toolkit.
+# Use the same interpreter for installation, checks, and start.cmd.
+# Install only one CuPy distribution in an environment.
+-r requirements.txt
+cupy-cuda13x==14.2.0

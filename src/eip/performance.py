@@ -40,7 +40,7 @@ class RunProfiler:
 
     Input counts include repeated reads, including reads served by a reader's
     cache. Byte counts describe decoded arrays, not physical disk traffic. No
-    per-sample history or GPU events are retained.
+    per-sample history is retained. Optional CUDA events use a bounded collector.
     """
     def __init__(self, *, clock=None):
         self._clock = clock or time.perf_counter
@@ -50,6 +50,21 @@ class RunProfiler:
         self._seconds = dict.fromkeys(LABELS, 0.0)
         self.input_read_samples = self.input_read_bytes = 0
         self.output_samples = self.output_bytes = 0
+        self._gpu_timer = None
+
+    def gpu_timer(self, xp):
+        """Attach only to real CuPy backends; CPU and test adapters stay null."""
+        if getattr(xp, "__name__", None) != "cupy":
+            return None
+        if self._gpu_timer is None:
+            from eip.gpu_timing import GpuEventTimer
+            self._gpu_timer = GpuEventTimer(xp)
+        return self._gpu_timer
+
+    def finish_gpu(self, *, raise_errors=False):
+        if self._gpu_timer is not None:
+            with self.measure("gpu_submit"):
+                self._gpu_timer.finish(raise_errors=raise_errors)
 
     def _charge(self):
         if self._stopped is not None:
@@ -84,14 +99,16 @@ class RunProfiler:
         self.output_bytes += max(0, int(nbytes))
 
     def finish(self):
+        self.finish_gpu(raise_errors=False)
         self._stopped = self._charge()
         return self.snapshot()
 
     def snapshot(self):
+        gpu = self._gpu_timer.snapshot() if self._gpu_timer else None
         now = self._charge()
         elapsed = max(0.0, now-self._started)
         return dict(
-            schema_version=1,
+            schema_version=2,
             elapsed_seconds=elapsed,
             host_seconds=dict(self._seconds),
             labels=dict(LABELS),
@@ -102,9 +119,12 @@ class RunProfiler:
             input_reads_per_second=self.input_read_samples/elapsed if elapsed else None,
             output_per_second=self.output_samples/elapsed if elapsed else None,
             gpu_execution_seconds=None,
+            gpu_device_seconds=gpu["device_seconds"] if gpu else None,
+            gpu_timing=gpu,
             semantics=dict(
                 host_seconds="Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
                 gpu_execution_seconds="Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+                gpu_device_seconds="CUDA-event elapsed sum of sampled fused g2 launch regions only; includes event/launch gaps, excludes first layout calls, unsampled calls, transfers and other CuPy kernels. No extrapolation to total time. Not pure kernel activity time, not full GPU compute, and not additive with host wall time. See gpu_timing for coverage and omissions.",
                 input_read_samples="Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
                 input_read_bytes="Decoded source array bytes returned by reads; not physical disk bytes.",
                 throughput="Output samples and input sample reads divided by source execution wall time, including setup and output.",

@@ -8,6 +8,26 @@ import tifffile
 import struct
 
 
+def pytest_addoption(parser):
+    parser.addoption("--require-cuda", action="store_true",
+                     help="Fail before collection unless real CUDA kernels execute")
+
+
+def pytest_sessionstart(session):
+    if session.config.getoption("--require-cuda"):
+        from eip.modes.split_correlation.backend import Backend
+        try:
+            backend = Backend("gpu", 64 * 1024**2)
+            try:
+                actual = backend.xp.sum(backend.xp.arange(8, dtype=backend.xp.float64)**2).item()
+                if actual != 140.0:
+                    raise ValueError(f"float64 CUDA self-test returned {actual}")
+            finally:
+                backend.close()
+        except Exception as error:
+            raise pytest.UsageError(f"--require-cuda: real CUDA execution failed: {error}") from error
+
+
 @pytest.fixture
 def scientific_image(tmp_path):
     pixels = np.arange(48, dtype=np.uint16).reshape(6, 8) * 1000

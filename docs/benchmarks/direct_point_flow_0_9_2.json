@@ -1,0 +1,750 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-28",
+  "app_version": "0.9.2",
+  "cpu": "AMD Ryzen 9 9950X 16-Core Processor",
+  "logical_processors": 32,
+  "gpu": "NVIDIA GeForce RTX 5070 Ti",
+  "python": "3.12.10",
+  "versions": {
+    "numpy": "2.4.6",
+    "av": "19.0.1",
+    "cupy-cuda13x": "14.2.0",
+    "tifffile": "2026.6.1"
+  },
+  "dataset": {
+    "name": "Atip10000fps.cine",
+    "samples": 10284,
+    "input_shape": [
+      600,
+      832
+    ],
+    "dtype": "uint16",
+    "file_bytes": 10267926620,
+    "revision": "e7b1451d94380189e5824abc1aa25963f4d897b4501069cdef1ef82fe09c1b7c",
+    "window": 1001,
+    "lag": 0,
+    "stride": 1,
+    "output_shape": [
+      9284
+    ],
+    "output_dtype": "float64",
+    "semantics": "pixel_g2",
+    "point": [
+      0,
+      0
+    ],
+    "finite_output_values": 0
+  },
+  "methodology": {
+    "repeats": 3,
+    "fresh_workers": true,
+    "serial": true,
+    "rotating_order": true,
+    "batch_size": 32,
+    "input_cache": "OS file cache not forcibly cleared; real-data correctness preflight before timed trials",
+    "full_exports": true,
+    "validation_outside_timing": true,
+    "profile_diagnostics_excluded": true,
+    "equality": {
+      "rtol": 2e-13,
+      "atol": 2e-13,
+      "lag_seconds_atol": 1e-12
+    },
+    "caveat": "literal and workbench transfer/output schedules differ; timing difference is not pure module-dispatch cost",
+    "profile_note": null
+  },
+  "code_unchanged": true,
+  "code_sha256": {
+    "src/eip/cine_reader.py": "8b6fd349415abc36d8dcf0aaab92f33dcc05325d3a5bde1b2c99e507e3f949d4",
+    "src/eip/gpu_pipeline.py": "599be56bdd3b71376405896e30781f971e6dcfe783d5d66ab5f561c068a8138e",
+    "src/eip/modes/split_correlation/correlation.py": "bac326c6e7badadd04f3073ade62a1b105c637dd3819f772aab1d5472d9e0da5",
+    "src/eip/modes/split_correlation/geometry.py": "9441c8e0a9309077b50cb5f2aa2ccf840d168d108ae6997c8c9993a9869af134",
+    "src/eip/module_ops.py": "7c1eec1a4e0940635b5ee31faab4a3860f3c1984b6ff39fca896ab61d9c6a33a",
+    "src/eip/sequence_engine.py": "e0c34232a7d0e7418d9f38bd04e7283ad1033043d5d285977b323e2f2ec65890",
+    "tools/benchmark_direct_flow.py": "053065a62a9bea401ae8a72d2c22568b91206edebd80d026be2468a322963c3e",
+    "tools/benchmark_execution_time.py": "65e4b60aa29a001e50030e0e5e72d5ba8fed26f4ab9a097407d0c58b41e87dc2",
+    "tools/direct_cine_exports.py": "530b5f4a9a2432ef897129f22cf583a21ba978788675efe67dfd9e75477c41f9",
+    "tools/direct_cine_flow.py": "5a17a9317f8f9d7c3190e2a090c5e3f2c4728611e554a54fc741c6ee845cd871"
+  },
+  "medians": {
+    "app_cpu": {
+      "repeats": 3,
+      "process_wall_seconds": 49.81036120001227,
+      "job_call_seconds": 49.53748469997663,
+      "read_compute_seconds": 48.59682649723254,
+      "output_and_provenance_seconds": 0.7980376983759925,
+      "setup_seconds": 0.04422890010755509
+    },
+    "app_gpu_mixed": {
+      "repeats": 3,
+      "process_wall_seconds": 65.71292109997012,
+      "job_call_seconds": 65.39547619991936,
+      "read_compute_seconds": 64.07019089488313,
+      "output_and_provenance_seconds": 0.886108402046375,
+      "setup_seconds": 0.31557720014825463
+    },
+    "app_gpu": {
+      "repeats": 3,
+      "process_wall_seconds": 9.020574599970132,
+      "job_call_seconds": 8.67753270000685,
+      "read_compute_seconds": 7.421046593110077,
+      "output_and_provenance_seconds": 0.8425675968173891,
+      "setup_seconds": 0.322616699966602
+    },
+    "specialized_cpu": {
+      "repeats": 3,
+      "process_wall_seconds": 2.7663610000163317,
+      "job_call_seconds": 2.584442500025034,
+      "read_compute_seconds": 2.041504798573442,
+      "output_and_provenance_seconds": 0.45655210001859814,
+      "setup_seconds": 0.05018070002552122
+    },
+    "specialized_gpu": {
+      "repeats": 3,
+      "process_wall_seconds": 2.2383492999942973,
+      "job_call_seconds": 2.023153799935244,
+      "read_compute_seconds": 1.2350446034688503,
+      "output_and_provenance_seconds": 0.4300312000559643,
+      "setup_seconds": 0.33981409994885325
+    }
+  },
+  "variants": {
+    "app_cpu": {
+      "policy": {
+        "kind": "app",
+        "policy": "cpu"
+      },
+      "trials": [
+        {
+          "repeat": 1,
+          "process_wall_seconds": 50.53250080009457,
+          "job_call_seconds": 50.26493590010796,
+          "read_compute_seconds": 49.33351879497059,
+          "output_and_provenance_seconds": 0.7953865985618904,
+          "setup_seconds": 0.04422890010755509
+        },
+        {
+          "repeat": 2,
+          "process_wall_seconds": 49.623348199995235,
+          "job_call_seconds": 49.350686000077985,
+          "read_compute_seconds": 48.41826259891968,
+          "output_and_provenance_seconds": 0.7980376983759925,
+          "setup_seconds": 0.04389489989262074
+        },
+        {
+          "repeat": 3,
+          "process_wall_seconds": 49.81036120001227,
+          "job_call_seconds": 49.53748469997663,
+          "read_compute_seconds": 48.59682649723254,
+          "output_and_provenance_seconds": 0.803793594124727,
+          "setup_seconds": 0.044232199899852276
+        }
+      ],
+      "validation": {
+        "all_passed": true,
+        "values_per_trial": 9284,
+        "checked_values": 27852,
+        "finite_masks_equal": true,
+        "exact_values_equal": true,
+        "max_absolute_error": 0.0,
+        "max_relative_error": 0.0,
+        "references_byte_equal": true,
+        "csv_rows_per_trial": 9284,
+        "device_policy_satisfied": true
+      },
+      "host_seconds_medians": {
+        "setup": 0.04422890010755509,
+        "input_read": 3.0719203132903203,
+        "index_write": 0.0,
+        "cpu_compute": 45.52638179704081,
+        "gpu_submit": 0.0,
+        "upload": 0.0,
+        "download": 0.0,
+        "references": 0.2629857986466959,
+        "output_statistics": 0.058991091907955706,
+        "output_render": 0.33879609999712557,
+        "output_write": 0.13604319968726486,
+        "other": 0.08748050627764314
+      },
+      "execution_example": {
+        "stage_evaluations": {
+          "5": 9284,
+          "4": 10284,
+          "3": 10284,
+          "2": 10284,
+          "1": 10284,
+          "0": 10284
+        },
+        "main_storage": {
+          "stage": 4,
+          "storage": "ram",
+          "full_axes": "TP",
+          "shape": [
+            10284,
+            2
+          ],
+          "dtype": "float64",
+          "capacity_bytes": 164544,
+          "metadata_bytes": 10284,
+          "block_size": 32,
+          "built_samples": 10284,
+          "hits": 55246,
+          "input_cache_released_bytes": 0,
+          "disk_read_bytes": 0,
+          "disk_write_bytes": 0,
+          "ownership": "exclusive_compact_main_output",
+          "state": "complete"
+        }
+      },
+      "device_execution_example": {
+        "upload_batches": 0,
+        "uploaded_samples": 0,
+        "downloads": 0,
+        "device_cache_hits": 0,
+        "largest_upload_batch": 0,
+        "correlation_update_calls": 0,
+        "correlation_pairs": 0,
+        "largest_correlation_batch": 0,
+        "cache_budget_bytes": 1006632960,
+        "cache_peak_bytes": 0,
+        "source_batch_limit": 32,
+        "intermediate_residency": false,
+        "cache_policy": "validated_flow_slack_v2",
+        "upload_dtype_policy": "source_dtype",
+        "upload_alignment": "sample_chunks",
+        "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+      },
+      "source_read_samples": [
+        10284,
+        10284,
+        10284
+      ]
+    },
+    "app_gpu_mixed": {
+      "policy": {
+        "kind": "app",
+        "policy": "mixed"
+      },
+      "trials": [
+        {
+          "repeat": 1,
+          "process_wall_seconds": 65.71292109997012,
+          "job_call_seconds": 65.39547619991936,
+          "read_compute_seconds": 64.07019089488313,
+          "output_and_provenance_seconds": 0.886108402046375,
+          "setup_seconds": 0.31557720014825463
+        },
+        {
+          "repeat": 2,
+          "process_wall_seconds": 51.86933620006312,
+          "job_call_seconds": 51.55439639999531,
+          "read_compute_seconds": 50.230008598882705,
+          "output_and_provenance_seconds": 0.8723908971296623,
+          "setup_seconds": 0.32838209986221045
+        },
+        {
+          "repeat": 3,
+          "process_wall_seconds": 67.61302130005788,
+          "job_call_seconds": 67.29363770002965,
+          "read_compute_seconds": 65.974957097671,
+          "output_and_provenance_seconds": 0.8865500907413661,
+          "setup_seconds": 0.3110689999302849
+        }
+      ],
+      "validation": {
+        "all_passed": true,
+        "values_per_trial": 9284,
+        "checked_values": 27852,
+        "finite_masks_equal": true,
+        "exact_values_equal": true,
+        "max_absolute_error": 0.0,
+        "max_relative_error": 0.0,
+        "references_byte_equal": true,
+        "csv_rows_per_trial": 9284,
+        "device_policy_satisfied": true
+      },
+      "host_seconds_medians": {
+        "setup": 0.31557720014825463,
+        "input_read": 1.319332096958533,
+        "index_write": 0.0,
+        "cpu_compute": 28.220287013449706,
+        "gpu_submit": 10.873900687205605,
+        "upload": 1.8928563005756587,
+        "download": 20.1618737076642,
+        "references": 0.28406619711313397,
+        "output_statistics": 0.0752147858729586,
+        "output_render": 0.3656499999342486,
+        "output_write": 0.16126470325980335,
+        "other": 0.11854660289827734
+      },
+      "execution_example": {
+        "stage_evaluations": {
+          "5": 9284,
+          "4": 10284,
+          "3": 10284,
+          "2": 10284,
+          "1": 10284,
+          "0": 10284
+        },
+        "main_storage": {
+          "stage": 4,
+          "storage": "device",
+          "full_axes": "TP",
+          "shape": [
+            10284,
+            2
+          ],
+          "dtype": "float64",
+          "capacity_bytes": 164544,
+          "metadata_bytes": 10284,
+          "block_size": 32,
+          "built_samples": 10284,
+          "hits": 55246,
+          "input_cache_released_bytes": 48318016512,
+          "disk_read_bytes": 0,
+          "disk_write_bytes": 0,
+          "ownership": "exclusive_compact_main_output",
+          "state": "complete"
+        }
+      },
+      "device_execution_example": {
+        "upload_batches": 644,
+        "uploaded_samples": 20568,
+        "downloads": 19568,
+        "device_cache_hits": 19924,
+        "largest_upload_batch": 32,
+        "correlation_update_calls": 19086,
+        "correlation_pairs": 55531,
+        "largest_correlation_batch": 64,
+        "cache_budget_bytes": 2013265920,
+        "cache_peak_bytes": 150422048,
+        "source_batch_limit": 32,
+        "intermediate_residency": true,
+        "cache_policy": "validated_flow_slack_v2",
+        "upload_dtype_policy": "source_dtype",
+        "upload_alignment": "sample_chunks",
+        "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+      },
+      "source_read_samples": [
+        10284,
+        10284,
+        10284
+      ]
+    },
+    "app_gpu": {
+      "policy": {
+        "kind": "app",
+        "policy": "gpu"
+      },
+      "trials": [
+        {
+          "repeat": 1,
+          "process_wall_seconds": 8.930908599984832,
+          "job_call_seconds": 8.620668399962597,
+          "read_compute_seconds": 7.353804296348244,
+          "output_and_provenance_seconds": 0.8425675968173891,
+          "setup_seconds": 0.322616699966602
+        },
+        {
+          "repeat": 2,
+          "process_wall_seconds": 9.195080399978906,
+          "job_call_seconds": 8.87730890000239,
+          "read_compute_seconds": 7.58101080043707,
+          "output_and_provenance_seconds": 0.8549834871664643,
+          "setup_seconds": 0.33700230007525533
+        },
+        {
+          "repeat": 3,
+          "process_wall_seconds": 9.020574599970132,
+          "job_call_seconds": 8.67753270000685,
+          "read_compute_seconds": 7.421046593110077,
+          "output_and_provenance_seconds": 0.8391231067944318,
+          "setup_seconds": 0.3146423000143841
+        }
+      ],
+      "validation": {
+        "all_passed": true,
+        "values_per_trial": 9284,
+        "checked_values": 27852,
+        "finite_masks_equal": true,
+        "exact_values_equal": true,
+        "max_absolute_error": 0.0,
+        "max_relative_error": 0.0,
+        "references_byte_equal": true,
+        "csv_rows_per_trial": 9284,
+        "device_policy_satisfied": true
+      },
+      "host_seconds_medians": {
+        "setup": 0.322616699966602,
+        "input_read": 1.2570972063113004,
+        "index_write": 0.0,
+        "cpu_compute": 0.033880095928907394,
+        "gpu_submit": 5.2013470033416525,
+        "upload": 0.46419510093983263,
+        "download": 0.46488729410339147,
+        "references": 0.2750504002906382,
+        "output_statistics": 0.07107249717228115,
+        "output_render": 0.3445836999453604,
+        "output_write": 0.15121829882264137,
+        "other": 0.09796220005955547
+      },
+      "execution_example": {
+        "stage_evaluations": {
+          "5": 9284,
+          "4": 10284,
+          "3": 10284,
+          "2": 10284,
+          "1": 10284,
+          "0": 10284
+        },
+        "main_storage": {
+          "stage": 4,
+          "storage": "device",
+          "full_axes": "TP",
+          "shape": [
+            10284,
+            2
+          ],
+          "dtype": "float64",
+          "capacity_bytes": 164544,
+          "metadata_bytes": 10284,
+          "block_size": 32,
+          "built_samples": 10284,
+          "hits": 55246,
+          "input_cache_released_bytes": 10267545600,
+          "disk_read_bytes": 0,
+          "disk_write_bytes": 0,
+          "ownership": "exclusive_compact_main_output",
+          "state": "complete"
+        }
+      },
+      "device_execution_example": {
+        "upload_batches": 322,
+        "uploaded_samples": 10284,
+        "downloads": 9284,
+        "device_cache_hits": 9962,
+        "largest_upload_batch": 32,
+        "correlation_update_calls": 19086,
+        "correlation_pairs": 55531,
+        "largest_correlation_batch": 64,
+        "cache_budget_bytes": 2013265920,
+        "cache_peak_bytes": 32023072,
+        "source_batch_limit": 32,
+        "intermediate_residency": true,
+        "cache_policy": "validated_flow_slack_v2",
+        "upload_dtype_policy": "source_dtype",
+        "upload_alignment": "sample_chunks",
+        "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+      },
+      "source_read_samples": [
+        10284,
+        10284,
+        10284
+      ]
+    },
+    "specialized_cpu": {
+      "policy": {
+        "kind": "direct",
+        "policy": "cpu",
+        "implementation": "specialized"
+      },
+      "trials": [
+        {
+          "repeat": 1,
+          "process_wall_seconds": 2.7663610000163317,
+          "job_call_seconds": 2.584442500025034,
+          "read_compute_seconds": 2.041504798573442,
+          "output_and_provenance_seconds": 0.4674794999882579,
+          "setup_seconds": 0.050044099916704
+        },
+        {
+          "repeat": 2,
+          "process_wall_seconds": 2.832986900000833,
+          "job_call_seconds": 2.65246760006994,
+          "read_compute_seconds": 2.130582105368376,
+          "output_and_provenance_seconds": 0.4461763999424875,
+          "setup_seconds": 0.05019699991680682
+        },
+        {
+          "repeat": 3,
+          "process_wall_seconds": 2.668187399976887,
+          "job_call_seconds": 2.4861714999424294,
+          "read_compute_seconds": 1.9544235033681616,
+          "output_and_provenance_seconds": 0.45655210001859814,
+          "setup_seconds": 0.05018070002552122
+        }
+      ],
+      "validation": {
+        "all_passed": true,
+        "values_per_trial": 9284,
+        "checked_values": 27852,
+        "finite_masks_equal": true,
+        "exact_values_equal": true,
+        "max_absolute_error": 0.0,
+        "max_relative_error": 0.0,
+        "references_byte_equal": true,
+        "csv_rows_per_trial": 9284,
+        "device_policy_satisfied": true
+      },
+      "phases_seconds_medians": {
+        "setup": 0.05018070002552122,
+        "read": 1.8601093991892412,
+        "preprocess": 0.059838499408215284,
+        "correlation": 0.12163509998936206,
+        "output": 0.45655210001859814,
+        "cleanup": 1.6200006939470768e-05
+      },
+      "preprocessing_work": {
+        "batches": 10284,
+        "calibrated_pixels": 20568,
+        "consumed_roi_pixels": null,
+        "consumed_point_samples": 20568,
+        "consumed_sensor_values": 20568,
+        "signals_bytes": 164544,
+        "spatial_reduction": "none (direct paired point extraction)",
+        "sampling_sensor_coordinates": {
+          "left": [
+            0,
+            0
+          ],
+          "right": [
+            4,
+            444
+          ]
+        },
+        "input_transfer_block_bytes": 4,
+        "retained_raw_frames": 1,
+        "signal_residency": "host between preprocessing and correlation"
+      },
+      "transfers": {
+        "upload_calls": 0,
+        "upload_bytes": 0,
+        "download_calls": 0,
+        "download_bytes": 0
+      },
+      "correlation_calls": {
+        "rebuilds": 37,
+        "scalar_updates": 0,
+        "batched_updates": 0,
+        "result_calls": 0,
+        "pair_updates": 55531,
+        "specialized_serial_calls": 0
+      },
+      "correlation_kernel_calls": 0,
+      "gpu_pool_limit_bytes": null,
+      "signal_statistics": [
+        {
+          "channel": "left",
+          "finite_count": 10284,
+          "invalid_count": 0,
+          "zero_count": 10284,
+          "minimum": 0.0,
+          "maximum": 0.0,
+          "mean": 0.0
+        },
+        {
+          "channel": "right",
+          "finite_count": 10284,
+          "invalid_count": 0,
+          "zero_count": 10284,
+          "minimum": 0.0,
+          "maximum": 0.0,
+          "mean": 0.0
+        }
+      ],
+      "finite_output_samples": 0
+    },
+    "specialized_gpu": {
+      "policy": {
+        "kind": "direct",
+        "policy": "gpu",
+        "implementation": "specialized"
+      },
+      "trials": [
+        {
+          "repeat": 1,
+          "process_wall_seconds": 2.2383492999942973,
+          "job_call_seconds": 2.023153799935244,
+          "read_compute_seconds": 1.2379513991763815,
+          "output_and_provenance_seconds": 0.4296980000799522,
+          "setup_seconds": 0.33981409994885325
+        },
+        {
+          "repeat": 2,
+          "process_wall_seconds": 2.1987001999514177,
+          "job_call_seconds": 1.9847203000681475,
+          "read_compute_seconds": 1.2164915965404361,
+          "output_and_provenance_seconds": 0.4300312000559643,
+          "setup_seconds": 0.3226386000169441
+        },
+        {
+          "repeat": 3,
+          "process_wall_seconds": 2.256272199912928,
+          "job_call_seconds": 2.0401926999911666,
+          "read_compute_seconds": 1.2350446034688503,
+          "output_and_provenance_seconds": 0.4407197000691667,
+          "setup_seconds": 0.34889339993242174
+        }
+      ],
+      "validation": {
+        "all_passed": true,
+        "values_per_trial": 9284,
+        "checked_values": 27852,
+        "finite_masks_equal": true,
+        "exact_values_equal": true,
+        "max_absolute_error": 0.0,
+        "max_relative_error": 0.0,
+        "references_byte_equal": true,
+        "csv_rows_per_trial": 9284,
+        "device_policy_satisfied": true
+      },
+      "phases_seconds_medians": {
+        "setup": 0.33981409994885325,
+        "read": 1.0813036013860255,
+        "preprocess": 0.12248210038524121,
+        "correlation": 0.03110650007147342,
+        "output": 0.4300312000559643,
+        "cleanup": 1.6200006939470768e-05
+      },
+      "preprocessing_work": {
+        "batches": 322,
+        "calibrated_pixels": 20568,
+        "consumed_roi_pixels": null,
+        "consumed_point_samples": 20568,
+        "consumed_sensor_values": 20568,
+        "signals_bytes": 164544,
+        "spatial_reduction": "none (direct paired point extraction)",
+        "sampling_sensor_coordinates": {
+          "left": [
+            0,
+            0
+          ],
+          "right": [
+            4,
+            444
+          ]
+        },
+        "input_transfer_block_bytes": 128,
+        "retained_raw_frames": 1,
+        "signal_residency": "device through correlation"
+      },
+      "transfers": {
+        "upload_calls": 322,
+        "upload_bytes": 41136,
+        "download_calls": 2,
+        "download_bytes": 238816
+      },
+      "correlation_calls": {
+        "rebuilds": 37,
+        "scalar_updates": 0,
+        "batched_updates": 0,
+        "result_calls": 0,
+        "pair_updates": 55531,
+        "specialized_serial_calls": 1
+      },
+      "correlation_kernel_calls": 1,
+      "gpu_pool_limit_bytes": 536870912,
+      "signal_statistics": [
+        {
+          "channel": "left",
+          "finite_count": 10284,
+          "invalid_count": 0,
+          "zero_count": 10284,
+          "minimum": 0.0,
+          "maximum": 0.0,
+          "mean": 0.0
+        },
+        {
+          "channel": "right",
+          "finite_count": 10284,
+          "invalid_count": 0,
+          "zero_count": 10284,
+          "minimum": 0.0,
+          "maximum": 0.0,
+          "mean": 0.0
+        }
+      ],
+      "finite_output_samples": 0
+    }
+  },
+  "diagnostics": [],
+  "signal_validation": {
+    "scope": "Complete EIP prefix signal buffer versus all six dedicated point runs, outside benchmark timing",
+    "shape": [
+      10284,
+      2
+    ],
+    "dtype": "float64",
+    "source_revision": "e7b1451d94380189e5824abc1aa25963f4d897b4501069cdef1ef82fe09c1b7c",
+    "channels": {
+      "left": {
+        "samples": 10284,
+        "finite_count": 10284,
+        "nan_count": 0,
+        "inf_count": 0,
+        "minimum": 0.0,
+        "maximum": 0.0,
+        "zero_count": 10284,
+        "positive_count": 0,
+        "negative_count": 0,
+        "all_finite": true,
+        "all_zero": true
+      },
+      "right": {
+        "samples": 10284,
+        "finite_count": 10284,
+        "nan_count": 0,
+        "inf_count": 0,
+        "minimum": 0.0,
+        "maximum": 0.0,
+        "zero_count": 10284,
+        "positive_count": 0,
+        "negative_count": 0,
+        "all_finite": true,
+        "all_zero": true
+      }
+    },
+    "min_mean": 1e-09,
+    "explanation": "Both corresponding point signals are zero for every source sample. Positive mean threshold rejects every normalized g2 output; matching NaNs alone was not used as evidence of signal equivalence.",
+    "trials": [
+      {
+        "variant": "specialized_cpu",
+        "repeat": 1,
+        "exact_values_equal": true,
+        "checked_values": 20568
+      },
+      {
+        "variant": "specialized_gpu",
+        "repeat": 1,
+        "exact_values_equal": true,
+        "checked_values": 20568
+      },
+      {
+        "variant": "specialized_cpu",
+        "repeat": 2,
+        "exact_values_equal": true,
+        "checked_values": 20568
+      },
+      {
+        "variant": "specialized_gpu",
+        "repeat": 2,
+        "exact_values_equal": true,
+        "checked_values": 20568
+      },
+      {
+        "variant": "specialized_cpu",
+        "repeat": 3,
+        "exact_values_equal": true,
+        "checked_values": 20568
+      },
+      {
+        "variant": "specialized_gpu",
+        "repeat": 3,
+        "exact_values_equal": true,
+        "checked_values": 20568
+      }
+    ]
+  },
+  "case": "Latest saved five-step point flow; separate from earlier ROI spatial mean experiment"
+}

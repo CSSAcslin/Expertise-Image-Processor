@@ -163,6 +163,7 @@ def main():
     parser.add_argument("--source-root", type=Path, default=SOURCE_ROOT, help="Explicit EIP src directory to import, including in fresh workers")
     parser.add_argument("--output-dir", type=Path, help="Parent for a new unique benchmark directory; default system temporary directory")
     parser.add_argument("--backend", choices=["cpu","gpu","both"], default="both")
+    parser.add_argument("--require-cuda", action="store_true", help="Fail instead of skipping unavailable CUDA")
     parser.add_argument("--frames", type=int, default=129)
     parser.add_argument("--height", type=int, default=128)
     parser.add_argument("--width", type=int, default=128, help="Width of each aligned half")
@@ -174,6 +175,8 @@ def main():
     parser.add_argument("--cases", nargs="+", choices=["image","point","pixel-mean"], default=["image","point","pixel-mean"])
     parser.add_argument("--timeout", type=int, default=300)
     args = parser.parse_args()
+    if args.require_cuda and args.backend == "cpu":
+        parser.error("--require-cuda requires --backend gpu or both")
     if min(args.height,args.width,args.repeats,args.timeout)<1 or args.frames<9 or not 2<=args.window_max<=args.frames-2*abs(args.lag):
         parser.error("Use positive sizes/repeats/timeout, at least 9 frames, and a window that fits the signed lag")
     if args.repeats>10 or args.window_max>8193:
@@ -206,6 +209,8 @@ def main():
     from eip.modes.split_correlation.backend import devices
     from eip.resources import ResourceSettings
     availability = devices() if args.backend in {"gpu","both"} else dict(gpu=None,reason="not probed")
+    if args.require_cuda and not availability["gpu"]:
+        raise SystemExit(f"CUDA required: {availability['reason']}")
     if availability["gpu"]:
         import cupy as cp
         availability.update(cupy_version=cp.__version__,cuda_runtime_version=cp.cuda.runtime.runtimeGetVersion(),
@@ -261,6 +266,10 @@ def main():
                     values=np.load(Path(event["directory"])/item["output_directory"]/"values.npy",mmap_mode="r")
                     error=formula_error(path,values,windows,center,args.lag,case,args.height,args.width)
                     del values
+                    if backend == "gpu":
+                        devices_used = item.get("modules",{}).get("devices",{})
+                        if not devices_used or any(d["actual"] != "gpu" for d in devices_used.values()):
+                            error.update(passed=False, device_error="Requested GPU flow did not execute entirely on GPU")
                     result.update(status="succeeded" if error["passed"] else "failed",job_call_seconds=summary["job_call_seconds"],
                         output_samples=len(windows),outputs_per_second=len(windows)/summary["job_call_seconds"],
                         run_directory=event["directory"],devices=item.get("modules",{}).get("devices"),

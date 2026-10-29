@@ -1,0 +1,4797 @@
+{
+  "date": "2026-10-27",
+  "base_commit": "cc73a5eac005be7d078d71a5aeac1a1e38d136ba",
+  "app_version": "0.9.0",
+  "cpu": "AMD Ryzen 9 9950X 16-Core Processor",
+  "gpu": "NVIDIA GeForce RTX 5070 Ti",
+  "driver": "616.56",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "python": "3.12.10",
+  "numpy": "2.4.6",
+  "cupy": "14.2.0",
+  "cuda_linked_runtime": 13020,
+  "cuda_driver_api": 13040,
+  "local_toolkit": "13.4",
+  "diagnostics": {
+    "status": "passed",
+    "implementation": "cupy_fused_float64",
+    "signed_lag_checks": [
+      {
+        "lag": -2,
+        "max_absolute_error": 4.440892098500626e-16
+      },
+      {
+        "lag": 0,
+        "max_absolute_error": 4.440892098500626e-16
+      },
+      {
+        "lag": 3,
+        "max_absolute_error": 5.551115123125783e-16
+      }
+    ]
+  },
+  "tests": {
+    "tests": 415,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "require_cuda": true
+  },
+  "browser": [
+    {
+      "status": "passed",
+      "backend": "cpu",
+      "requests": 1,
+      "javascript_errors": [],
+      "performance": {
+        "schema_version": 1,
+        "elapsed_seconds": 0.3623314999276772,
+        "host_seconds": {
+          "setup": 0.022049700026400387,
+          "input_read": 0.0018127000657841563,
+          "index_write": 0.0,
+          "cpu_compute": 0.002040499937720597,
+          "gpu_submit": 0.0,
+          "upload": 0.0,
+          "download": 0.0,
+          "references": 0.0003920999588444829,
+          "output_statistics": 9.520002640783787e-05,
+          "output_render": 0.3293566999491304,
+          "output_write": 0.0027049999916926026,
+          "other": 0.0038795999716967344
+        },
+        "labels": {
+          "setup": "准备与校验",
+          "input_read": "输入读取 / 解码",
+          "index_write": "临时视频索引写入",
+          "cpu_compute": "CPU 模块计算",
+          "gpu_submit": "GPU 调度（主机，含同步等待）",
+          "upload": "上传（主机，含等待）",
+          "download": "回传（主机，含等待）",
+          "references": "来源映射",
+          "output_statistics": "输出摘要统计",
+          "output_render": "曲线图生成",
+          "output_write": "输出写入",
+          "other": "其他 / 收尾"
+        },
+        "input_read_samples": 23,
+        "input_read_bytes": 13248,
+        "output_samples": 5,
+        "output_bytes": 40,
+        "input_reads_per_second": 63.47778209896432,
+        "output_per_second": 13.799517847600939,
+        "gpu_execution_seconds": null,
+        "semantics": {
+          "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+          "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+          "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+          "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+          "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+          "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+        }
+      },
+      "max_absolute_error": 2.220446049250313e-16
+    },
+    {
+      "status": "passed",
+      "backend": "gpu",
+      "requests": 1,
+      "javascript_errors": [],
+      "performance": {
+        "schema_version": 1,
+        "elapsed_seconds": 0.7117614999879152,
+        "host_seconds": {
+          "setup": 0.33517269999720156,
+          "input_read": 0.001877999515272677,
+          "index_write": 0.0,
+          "cpu_compute": 0.00016930082347244024,
+          "gpu_submit": 0.049167099641636014,
+          "upload": 0.00014789996203035116,
+          "download": 0.00030930014327168465,
+          "references": 0.00041129987221211195,
+          "output_statistics": 0.00015750015154480934,
+          "output_render": 0.3163473999593407,
+          "output_write": 0.0027820999966934323,
+          "other": 0.005218899925239384
+        },
+        "labels": {
+          "setup": "准备与校验",
+          "input_read": "输入读取 / 解码",
+          "index_write": "临时视频索引写入",
+          "cpu_compute": "CPU 模块计算",
+          "gpu_submit": "GPU 调度（主机，含同步等待）",
+          "upload": "上传（主机，含等待）",
+          "download": "回传（主机，含等待）",
+          "references": "来源映射",
+          "output_statistics": "输出摘要统计",
+          "output_render": "曲线图生成",
+          "output_write": "输出写入",
+          "other": "其他 / 收尾"
+        },
+        "input_read_samples": 31,
+        "input_read_bytes": 17856,
+        "output_samples": 5,
+        "output_bytes": 40,
+        "input_reads_per_second": 43.55391518159713,
+        "output_per_second": 7.024825029289859,
+        "gpu_execution_seconds": null,
+        "semantics": {
+          "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+          "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+          "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+          "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+          "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+          "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+        }
+      },
+      "max_absolute_error": 2.220446049250313e-16
+    }
+  ],
+  "scope": "Synthetic TIFF; OS and CUDA disk compilation caches warmed. Fresh process per formal run. Job call includes preparation, CUDA context initialization, I/O, computation and normal exports; process wall also includes Python startup. No pure GPU kernel timing is claimed.",
+  "scenarios": [
+    {
+      "source": {
+        "frames": 769,
+        "shape": [
+          128,
+          256
+        ],
+        "dtype": "uint16"
+      },
+      "lag": 1,
+      "windows": [
+        2,
+        4,
+        6,
+        8,
+        10,
+        12,
+        14,
+        16,
+        18,
+        20,
+        22,
+        24,
+        26,
+        28,
+        30,
+        32,
+        34,
+        36,
+        38,
+        40,
+        42,
+        44,
+        46,
+        48,
+        50,
+        52,
+        54,
+        56,
+        58,
+        60,
+        62,
+        64,
+        66,
+        68,
+        70,
+        72,
+        74,
+        76,
+        78,
+        80,
+        82,
+        84,
+        86,
+        88,
+        90,
+        92,
+        94,
+        96,
+        98,
+        100,
+        102,
+        104,
+        106,
+        108,
+        110,
+        112,
+        114,
+        116,
+        118,
+        120,
+        122,
+        124,
+        126,
+        128,
+        130,
+        132,
+        134,
+        136,
+        138,
+        140,
+        142,
+        144,
+        146,
+        148,
+        150,
+        152,
+        154,
+        156,
+        158,
+        160,
+        162,
+        164,
+        166,
+        168,
+        170,
+        172,
+        174,
+        176,
+        178,
+        180,
+        182,
+        184,
+        186,
+        188,
+        190,
+        192,
+        194,
+        196,
+        198,
+        200,
+        202,
+        204,
+        206,
+        208,
+        210,
+        212,
+        214,
+        216,
+        218,
+        220,
+        222,
+        224,
+        226,
+        228,
+        230,
+        232,
+        234,
+        236,
+        238,
+        240,
+        242,
+        244,
+        246,
+        248,
+        250,
+        252,
+        254,
+        256,
+        258,
+        260,
+        262,
+        264,
+        266,
+        268,
+        270,
+        272,
+        274,
+        276,
+        278,
+        280,
+        282,
+        284,
+        286,
+        288,
+        290,
+        292,
+        294,
+        296,
+        298,
+        300,
+        302,
+        304,
+        306,
+        308,
+        310,
+        312,
+        314,
+        316,
+        318,
+        320,
+        322,
+        324,
+        326,
+        328,
+        330,
+        332,
+        334,
+        336,
+        338,
+        340,
+        342,
+        344,
+        346,
+        348,
+        350,
+        352,
+        354,
+        356,
+        358,
+        360,
+        362,
+        364,
+        366,
+        368,
+        370,
+        372,
+        374,
+        376,
+        378,
+        380,
+        382,
+        384,
+        386,
+        388,
+        390,
+        392,
+        394,
+        396,
+        398,
+        400,
+        402,
+        404,
+        406,
+        408,
+        410,
+        412,
+        414,
+        416,
+        418,
+        420,
+        422,
+        424,
+        426,
+        428,
+        430,
+        432,
+        434,
+        436,
+        438,
+        440,
+        442,
+        444,
+        446,
+        448,
+        450,
+        452,
+        454,
+        456,
+        458,
+        460,
+        462,
+        464,
+        466,
+        468,
+        470,
+        472,
+        474,
+        476,
+        478,
+        480,
+        482,
+        484,
+        486,
+        488,
+        490,
+        492,
+        494,
+        496,
+        498,
+        500,
+        502,
+        504,
+        506,
+        508,
+        510,
+        512,
+        514,
+        516,
+        518,
+        520,
+        522,
+        524,
+        526,
+        528,
+        530,
+        532,
+        534,
+        536,
+        538,
+        540,
+        542,
+        544,
+        546,
+        548,
+        550,
+        552,
+        554,
+        556,
+        558,
+        560,
+        562,
+        564,
+        566,
+        568,
+        570,
+        572,
+        574,
+        576,
+        578,
+        580,
+        582,
+        584,
+        586,
+        588,
+        590,
+        592,
+        594,
+        596,
+        598,
+        600
+      ],
+      "medians": [
+        {
+          "backend": "cpu",
+          "case": "image",
+          "repeats": 3,
+          "job_call_seconds": 0.28348189999815077,
+          "process_wall_seconds": 0.7192827999824658,
+          "outputs_per_second": 1058.2686231535663
+        },
+        {
+          "backend": "cpu",
+          "case": "point",
+          "repeats": 3,
+          "job_call_seconds": 0.5224129999987781,
+          "process_wall_seconds": 1.0013073000591248,
+          "outputs_per_second": 574.2582975551942
+        },
+        {
+          "backend": "cpu",
+          "case": "pixel-mean",
+          "repeats": 3,
+          "job_call_seconds": 0.5942751000402495,
+          "process_wall_seconds": 1.044678600039333,
+          "outputs_per_second": 504.81670859115815
+        },
+        {
+          "backend": "gpu",
+          "case": "image",
+          "repeats": 3,
+          "job_call_seconds": 0.6518145001027733,
+          "process_wall_seconds": 1.1257715999381617,
+          "outputs_per_second": 460.25364571162226
+        },
+        {
+          "backend": "gpu",
+          "case": "point",
+          "repeats": 3,
+          "job_call_seconds": 0.9327136999927461,
+          "process_wall_seconds": 1.4322844999842346,
+          "outputs_per_second": 321.64210732868315
+        },
+        {
+          "backend": "gpu",
+          "case": "pixel-mean",
+          "repeats": 3,
+          "job_call_seconds": 1.033860299969092,
+          "process_wall_seconds": 1.539440399967134,
+          "outputs_per_second": 290.1746009678181
+        }
+      ],
+      "runs": [
+        {
+          "case": "image",
+          "backend": "cpu",
+          "repeat": 1,
+          "status": "succeeded",
+          "job_call_seconds": 0.2841465000528842,
+          "process_wall_seconds": 0.7192827999824658,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 1024,
+            "backend": "cpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              302,
+              600
+            ],
+            "max_absolute_error": 2.220446049250313e-16,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 0,
+            "uploaded_samples": 0,
+            "downloads": 0,
+            "device_cache_hits": 0,
+            "largest_upload_batch": 0,
+            "correlation_update_calls": 0,
+            "correlation_pairs": 0,
+            "largest_correlation_batch": 0,
+            "cache_budget_bytes": 100663296,
+            "cache_peak_bytes": 0,
+            "source_batch_limit": 32,
+            "intermediate_residency": false,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.2811006000265479,
+            "host_seconds": {
+              "setup": 0.018919399939477444,
+              "input_read": 0.04218860063701868,
+              "index_write": 0.0,
+              "cpu_compute": 0.15266279981005937,
+              "gpu_submit": 0.0,
+              "upload": 0.0,
+              "download": 0.0,
+              "references": 0.005588199943304062,
+              "output_statistics": 0.007826497894711792,
+              "output_render": 0.0,
+              "output_write": 0.03459450078662485,
+              "other": 0.019320601015351713
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 601,
+            "input_read_bytes": 39387136,
+            "output_samples": 300,
+            "output_bytes": 39321600,
+            "input_reads_per_second": 2138.024607358504,
+            "output_per_second": 1067.2335810441784,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "cpu"
+          ],
+          "correlation_implementations": [
+            "array_float64"
+          ]
+        },
+        {
+          "case": "image",
+          "backend": "cpu",
+          "repeat": 2,
+          "status": "succeeded",
+          "job_call_seconds": 0.27543480007443577,
+          "process_wall_seconds": 0.7115718999411911,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 1024,
+            "backend": "cpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              302,
+              600
+            ],
+            "max_absolute_error": 2.220446049250313e-16,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 0,
+            "uploaded_samples": 0,
+            "downloads": 0,
+            "device_cache_hits": 0,
+            "largest_upload_batch": 0,
+            "correlation_update_calls": 0,
+            "correlation_pairs": 0,
+            "largest_correlation_batch": 0,
+            "cache_budget_bytes": 100663296,
+            "cache_peak_bytes": 0,
+            "source_batch_limit": 32,
+            "intermediate_residency": false,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.272118299966678,
+            "host_seconds": {
+              "setup": 0.018924199976027012,
+              "input_read": 0.04170610022265464,
+              "index_write": 0.0,
+              "cpu_compute": 0.1522245992673561,
+              "gpu_submit": 0.0,
+              "upload": 0.0,
+              "download": 0.0,
+              "references": 0.00553740153554827,
+              "output_statistics": 0.007699799258261919,
+              "output_render": 0.0,
+              "output_write": 0.028627400053665042,
+              "other": 0.017398799653165042
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 601,
+            "input_read_bytes": 39387136,
+            "output_samples": 300,
+            "output_bytes": 39321600,
+            "input_reads_per_second": 2208.5982459599186,
+            "output_per_second": 1102.4616868352339,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "cpu"
+          ],
+          "correlation_implementations": [
+            "array_float64"
+          ]
+        },
+        {
+          "case": "image",
+          "backend": "cpu",
+          "repeat": 3,
+          "status": "succeeded",
+          "job_call_seconds": 0.28348189999815077,
+          "process_wall_seconds": 0.7343514999374747,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 1024,
+            "backend": "cpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              302,
+              600
+            ],
+            "max_absolute_error": 2.220446049250313e-16,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 0,
+            "uploaded_samples": 0,
+            "downloads": 0,
+            "device_cache_hits": 0,
+            "largest_upload_batch": 0,
+            "correlation_update_calls": 0,
+            "correlation_pairs": 0,
+            "largest_correlation_batch": 0,
+            "cache_budget_bytes": 100663296,
+            "cache_peak_bytes": 0,
+            "source_batch_limit": 32,
+            "intermediate_residency": false,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.2806741000385955,
+            "host_seconds": {
+              "setup": 0.020070899976417422,
+              "input_read": 0.043215301469899714,
+              "index_write": 0.0,
+              "cpu_compute": 0.154979599872604,
+              "gpu_submit": 0.0,
+              "upload": 0.0,
+              "download": 0.0,
+              "references": 0.0056763989850878716,
+              "output_statistics": 0.007934099528938532,
+              "output_render": 0.0,
+              "output_write": 0.029719199636019766,
+              "other": 0.01907860056962818
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 601,
+            "input_read_bytes": 39387136,
+            "output_samples": 300,
+            "output_bytes": 39321600,
+            "input_reads_per_second": 2141.273455289806,
+            "output_per_second": 1068.855302141334,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "cpu"
+          ],
+          "correlation_implementations": [
+            "array_float64"
+          ]
+        },
+        {
+          "case": "point",
+          "backend": "cpu",
+          "repeat": 1,
+          "status": "succeeded",
+          "job_call_seconds": 0.5402861000038683,
+          "process_wall_seconds": 1.0101425999309868,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 1024,
+            "backend": "cpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              302,
+              600
+            ],
+            "max_absolute_error": 0.0,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 0,
+            "uploaded_samples": 0,
+            "downloads": 0,
+            "device_cache_hits": 0,
+            "largest_upload_batch": 0,
+            "correlation_update_calls": 0,
+            "correlation_pairs": 0,
+            "largest_correlation_batch": 0,
+            "cache_budget_bytes": 100663296,
+            "cache_peak_bytes": 0,
+            "source_batch_limit": 32,
+            "intermediate_residency": false,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.536869200062938,
+            "host_seconds": {
+              "setup": 0.02393239992670715,
+              "input_read": 0.0427828012034297,
+              "index_write": 0.0,
+              "cpu_compute": 0.10184129886329174,
+              "gpu_submit": 0.0,
+              "upload": 0.0,
+              "download": 0.0,
+              "references": 0.006755701964721084,
+              "output_statistics": 0.003745700349099934,
+              "output_render": 0.32898860005661845,
+              "output_write": 0.012561498559080064,
+              "other": 0.016261199139989913
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 601,
+            "input_read_bytes": 39387136,
+            "output_samples": 300,
+            "output_bytes": 2400,
+            "input_reads_per_second": 1119.4533043235556,
+            "output_per_second": 558.7953266174154,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "cpu"
+          ],
+          "correlation_implementations": [
+            "array_float64"
+          ]
+        },
+        {
+          "case": "point",
+          "backend": "cpu",
+          "repeat": 2,
+          "status": "succeeded",
+          "job_call_seconds": 0.5224129999987781,
+          "process_wall_seconds": 1.0013073000591248,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 1024,
+            "backend": "cpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              302,
+              600
+            ],
+            "max_absolute_error": 0.0,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 0,
+            "uploaded_samples": 0,
+            "downloads": 0,
+            "device_cache_hits": 0,
+            "largest_upload_batch": 0,
+            "correlation_update_calls": 0,
+            "correlation_pairs": 0,
+            "largest_correlation_batch": 0,
+            "cache_budget_bytes": 100663296,
+            "cache_peak_bytes": 0,
+            "source_batch_limit": 32,
+            "intermediate_residency": false,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.5191986999707296,
+            "host_seconds": {
+              "setup": 0.02381389995571226,
+              "input_read": 0.043123598326928914,
+              "index_write": 0.0,
+              "cpu_compute": 0.10087840224150568,
+              "gpu_submit": 0.0,
+              "upload": 0.0,
+              "download": 0.0,
+              "references": 0.006722701480612159,
+              "output_statistics": 0.003652900573797524,
+              "output_render": 0.31797390000429004,
+              "output_write": 0.00906869862228632,
+              "other": 0.013964598765596747
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 601,
+            "input_read_bytes": 39387136,
+            "output_samples": 300,
+            "output_bytes": 2400,
+            "input_reads_per_second": 1157.552975448286,
+            "output_per_second": 577.8134652820063,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "cpu"
+          ],
+          "correlation_implementations": [
+            "array_float64"
+          ]
+        },
+        {
+          "case": "point",
+          "backend": "cpu",
+          "repeat": 3,
+          "status": "succeeded",
+          "job_call_seconds": 0.5221054999856278,
+          "process_wall_seconds": 0.9810340000549331,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 1024,
+            "backend": "cpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              302,
+              600
+            ],
+            "max_absolute_error": 0.0,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 0,
+            "uploaded_samples": 0,
+            "downloads": 0,
+            "device_cache_hits": 0,
+            "largest_upload_batch": 0,
+            "correlation_update_calls": 0,
+            "correlation_pairs": 0,
+            "largest_correlation_batch": 0,
+            "cache_budget_bytes": 100663296,
+            "cache_peak_bytes": 0,
+            "source_batch_limit": 32,
+            "intermediate_residency": false,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.5180752999149263,
+            "host_seconds": {
+              "setup": 0.02372350008226931,
+              "input_read": 0.04219560092315078,
+              "index_write": 0.0,
+              "cpu_compute": 0.09874989918898791,
+              "gpu_submit": 0.0,
+              "upload": 0.0,
+              "download": 0.0,
+              "references": 0.006515600252896547,
+              "output_statistics": 0.0035214003873988986,
+              "output_render": 0.3180864000460133,
+              "output_write": 0.008574399747885764,
+              "other": 0.016708499286323786
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 601,
+            "input_read_bytes": 39387136,
+            "output_samples": 300,
+            "output_bytes": 2400,
+            "input_reads_per_second": 1160.0630257777023,
+            "output_per_second": 579.066402218487,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "cpu"
+          ],
+          "correlation_implementations": [
+            "array_float64"
+          ]
+        },
+        {
+          "case": "pixel-mean",
+          "backend": "cpu",
+          "repeat": 1,
+          "status": "succeeded",
+          "job_call_seconds": 0.5949131000088528,
+          "process_wall_seconds": 1.048365999944508,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 1024,
+            "backend": "cpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              302,
+              600
+            ],
+            "max_absolute_error": 0.0,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 0,
+            "uploaded_samples": 0,
+            "downloads": 0,
+            "device_cache_hits": 0,
+            "largest_upload_batch": 0,
+            "correlation_update_calls": 0,
+            "correlation_pairs": 0,
+            "largest_correlation_batch": 0,
+            "cache_budget_bytes": 100663296,
+            "cache_peak_bytes": 0,
+            "source_batch_limit": 32,
+            "intermediate_residency": false,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.5915595000842586,
+            "host_seconds": {
+              "setup": 0.023019199958071113,
+              "input_read": 0.04179809964261949,
+              "index_write": 0.0,
+              "cpu_compute": 0.1648096013814211,
+              "gpu_submit": 0.0,
+              "upload": 0.0,
+              "download": 0.0,
+              "references": 0.005893300753086805,
+              "output_statistics": 0.00379399920348078,
+              "output_render": 0.32747259992174804,
+              "output_write": 0.009140398818999529,
+              "other": 0.015632300404831767
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 601,
+            "input_read_bytes": 39387136,
+            "output_samples": 300,
+            "output_bytes": 2400,
+            "input_reads_per_second": 1015.9586650445082,
+            "output_per_second": 507.134109007242,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "cpu"
+          ],
+          "correlation_implementations": [
+            "array_float64"
+          ]
+        },
+        {
+          "case": "pixel-mean",
+          "backend": "cpu",
+          "repeat": 2,
+          "status": "succeeded",
+          "job_call_seconds": 0.5865194000070915,
+          "process_wall_seconds": 1.0440095000667498,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 1024,
+            "backend": "cpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              302,
+              600
+            ],
+            "max_absolute_error": 0.0,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 0,
+            "uploaded_samples": 0,
+            "downloads": 0,
+            "device_cache_hits": 0,
+            "largest_upload_batch": 0,
+            "correlation_update_calls": 0,
+            "correlation_pairs": 0,
+            "largest_correlation_batch": 0,
+            "cache_budget_bytes": 100663296,
+            "cache_peak_bytes": 0,
+            "source_batch_limit": 32,
+            "intermediate_residency": false,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.5829499999526888,
+            "host_seconds": {
+              "setup": 0.023129999986849725,
+              "input_read": 0.041930300765670836,
+              "index_write": 0.0,
+              "cpu_compute": 0.16553649923298508,
+              "gpu_submit": 0.0,
+              "upload": 0.0,
+              "download": 0.0,
+              "references": 0.005823900573886931,
+              "output_statistics": 0.0038233003579080105,
+              "output_render": 0.31964829994831234,
+              "output_write": 0.00866769952699542,
+              "other": 0.014389999560080469
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 601,
+            "input_read_bytes": 39387136,
+            "output_samples": 300,
+            "output_bytes": 2400,
+            "input_reads_per_second": 1030.9632044751284,
+            "output_per_second": 514.6238957446565,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "cpu"
+          ],
+          "correlation_implementations": [
+            "array_float64"
+          ]
+        },
+        {
+          "case": "pixel-mean",
+          "backend": "cpu",
+          "repeat": 3,
+          "status": "succeeded",
+          "job_call_seconds": 0.5942751000402495,
+          "process_wall_seconds": 1.044678600039333,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 1024,
+            "backend": "cpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              302,
+              600
+            ],
+            "max_absolute_error": 0.0,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 0,
+            "uploaded_samples": 0,
+            "downloads": 0,
+            "device_cache_hits": 0,
+            "largest_upload_batch": 0,
+            "correlation_update_calls": 0,
+            "correlation_pairs": 0,
+            "largest_correlation_batch": 0,
+            "cache_budget_bytes": 100663296,
+            "cache_peak_bytes": 0,
+            "source_batch_limit": 32,
+            "intermediate_residency": false,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.59058949991595,
+            "host_seconds": {
+              "setup": 0.02345239999704063,
+              "input_read": 0.04193130228668451,
+              "index_write": 0.0,
+              "cpu_compute": 0.1643879977054894,
+              "gpu_submit": 0.0,
+              "upload": 0.0,
+              "download": 0.0,
+              "references": 0.005813601310364902,
+              "output_statistics": 0.0037395997205749154,
+              "output_render": 0.32591749995481223,
+              "output_write": 0.008976699784398079,
+              "other": 0.016370399156585336
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 601,
+            "input_read_bytes": 39387136,
+            "output_samples": 300,
+            "output_bytes": 2400,
+            "input_reads_per_second": 1017.6273030345639,
+            "output_per_second": 507.9670397843081,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "cpu"
+          ],
+          "correlation_implementations": [
+            "array_float64"
+          ]
+        },
+        {
+          "case": "image",
+          "backend": "gpu",
+          "repeat": 1,
+          "status": "succeeded",
+          "job_call_seconds": 0.8992693999316543,
+          "process_wall_seconds": 1.3802956000436097,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 1024,
+            "backend": "gpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              302,
+              600
+            ],
+            "max_absolute_error": 2.220446049250313e-16,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 20,
+            "uploaded_samples": 640,
+            "downloads": 300,
+            "device_cache_hits": 1181,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 600,
+            "correlation_pairs": 600,
+            "largest_correlation_batch": 1,
+            "cache_budget_bytes": 201326592,
+            "cache_peak_bytes": 142606336,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.896312199998647,
+            "host_seconds": {
+              "setup": 0.3265335999894887,
+              "input_read": 0.0504458014620468,
+              "index_write": 0.0,
+              "cpu_compute": 0.0023242987226694822,
+              "gpu_submit": 0.40990259998943657,
+              "upload": 0.005353000131435692,
+              "download": 0.02376759913749993,
+              "references": 0.00579619943164289,
+              "output_statistics": 0.020413400838151574,
+              "output_render": 0.0,
+              "output_write": 0.0325316006783396,
+              "other": 0.019244099617935717
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 640,
+            "input_read_bytes": 41943040,
+            "output_samples": 300,
+            "output_bytes": 39321600,
+            "input_reads_per_second": 714.0369170485085,
+            "output_per_second": 334.70480486648836,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "gpu"
+          ],
+          "correlation_implementations": [
+            "cupy_fused_float64"
+          ]
+        },
+        {
+          "case": "image",
+          "backend": "gpu",
+          "repeat": 2,
+          "status": "succeeded",
+          "job_call_seconds": 0.6518145001027733,
+          "process_wall_seconds": 1.1257715999381617,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 1024,
+            "backend": "gpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              302,
+              600
+            ],
+            "max_absolute_error": 2.220446049250313e-16,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 20,
+            "uploaded_samples": 640,
+            "downloads": 300,
+            "device_cache_hits": 1181,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 600,
+            "correlation_pairs": 600,
+            "largest_correlation_batch": 1,
+            "cache_budget_bytes": 201326592,
+            "cache_peak_bytes": 142606336,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.6481496000196785,
+            "host_seconds": {
+              "setup": 0.3136694999411702,
+              "input_read": 0.049936802010051906,
+              "index_write": 0.0,
+              "cpu_compute": 0.002314299694262445,
+              "gpu_submit": 0.17447689839173108,
+              "upload": 0.005172399920411408,
+              "download": 0.023802400683052838,
+              "references": 0.005844099447131157,
+              "output_statistics": 0.019374300492927432,
+              "output_render": 0.0,
+              "output_write": 0.032019701902754605,
+              "other": 0.021539197536185384
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 640,
+            "input_read_bytes": 41943040,
+            "output_samples": 300,
+            "output_bytes": 39321600,
+            "input_reads_per_second": 987.4263595635467,
+            "output_per_second": 462.8561060454125,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "gpu"
+          ],
+          "correlation_implementations": [
+            "cupy_fused_float64"
+          ]
+        },
+        {
+          "case": "image",
+          "backend": "gpu",
+          "repeat": 3,
+          "status": "succeeded",
+          "job_call_seconds": 0.635627800016664,
+          "process_wall_seconds": 1.1161891999654472,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 1024,
+            "backend": "gpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              302,
+              600
+            ],
+            "max_absolute_error": 2.220446049250313e-16,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 20,
+            "uploaded_samples": 640,
+            "downloads": 300,
+            "device_cache_hits": 1181,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 600,
+            "correlation_pairs": 600,
+            "largest_correlation_batch": 1,
+            "cache_budget_bytes": 201326592,
+            "cache_peak_bytes": 142606336,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.6327208000002429,
+            "host_seconds": {
+              "setup": 0.3170881998958066,
+              "input_read": 0.04672729957383126,
+              "index_write": 0.0,
+              "cpu_compute": 0.0022517016623169184,
+              "gpu_submit": 0.161998700350523,
+              "upload": 0.004932399722747505,
+              "download": 0.023981799487955868,
+              "references": 0.00584289978723973,
+              "output_statistics": 0.018526700092479587,
+              "output_render": 0.0,
+              "output_write": 0.03187120123766363,
+              "other": 0.019499898189678788
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 640,
+            "input_read_bytes": 41943040,
+            "output_samples": 300,
+            "output_bytes": 39321600,
+            "input_reads_per_second": 1011.5046004489726,
+            "output_per_second": 474.1427814604559,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "gpu"
+          ],
+          "correlation_implementations": [
+            "cupy_fused_float64"
+          ]
+        },
+        {
+          "case": "point",
+          "backend": "gpu",
+          "repeat": 1,
+          "status": "succeeded",
+          "job_call_seconds": 0.9409855999983847,
+          "process_wall_seconds": 1.4416917000198737,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 1024,
+            "backend": "gpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              302,
+              600
+            ],
+            "max_absolute_error": 0.0,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 20,
+            "uploaded_samples": 640,
+            "downloads": 300,
+            "device_cache_hits": 1181,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 599,
+            "correlation_pairs": 600,
+            "largest_correlation_batch": 2,
+            "cache_budget_bytes": 201326592,
+            "cache_peak_bytes": 142351904,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.9377396999625489,
+            "host_seconds": {
+              "setup": 0.3191519998945296,
+              "input_read": 0.04660409956704825,
+              "index_write": 0.0,
+              "cpu_compute": 0.0023026014678180218,
+              "gpu_submit": 0.18832409847527742,
+              "upload": 0.004929699702188373,
+              "download": 0.01997660123743117,
+              "references": 0.007173199555836618,
+              "output_statistics": 0.005600500386208296,
+              "output_render": 0.3177731999894604,
+              "output_write": 0.010273200226947665,
+              "other": 0.015630499459803104
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 640,
+            "input_read_bytes": 41943040,
+            "output_samples": 300,
+            "output_bytes": 2400,
+            "input_reads_per_second": 682.4921670966474,
+            "output_per_second": 319.9182033265535,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "gpu"
+          ],
+          "correlation_implementations": [
+            "cupy_fused_float64"
+          ]
+        },
+        {
+          "case": "point",
+          "backend": "gpu",
+          "repeat": 2,
+          "status": "succeeded",
+          "job_call_seconds": 0.9161122000077739,
+          "process_wall_seconds": 1.4294386999681592,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 1024,
+            "backend": "gpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              302,
+              600
+            ],
+            "max_absolute_error": 0.0,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 20,
+            "uploaded_samples": 640,
+            "downloads": 300,
+            "device_cache_hits": 1181,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 599,
+            "correlation_pairs": 600,
+            "largest_correlation_batch": 2,
+            "cache_budget_bytes": 201326592,
+            "cache_peak_bytes": 142351904,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.9131999000674114,
+            "host_seconds": {
+              "setup": 0.3200222998857498,
+              "input_read": 0.04678269743453711,
+              "index_write": 0.0,
+              "cpu_compute": 0.002253202022984624,
+              "gpu_submit": 0.1702266987413168,
+              "upload": 0.004818700137548149,
+              "download": 0.019796301028691232,
+              "references": 0.006985999410971999,
+              "output_statistics": 0.005792800686322153,
+              "output_render": 0.3092953999293968,
+              "output_write": 0.010816900292411447,
+              "other": 0.016408900497481227
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 640,
+            "input_read_bytes": 41943040,
+            "output_samples": 300,
+            "output_bytes": 2400,
+            "input_reads_per_second": 700.8323149758951,
+            "output_per_second": 328.51514764495084,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "gpu"
+          ],
+          "correlation_implementations": [
+            "cupy_fused_float64"
+          ]
+        },
+        {
+          "case": "point",
+          "backend": "gpu",
+          "repeat": 3,
+          "status": "succeeded",
+          "job_call_seconds": 0.9327136999927461,
+          "process_wall_seconds": 1.4322844999842346,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 1024,
+            "backend": "gpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              302,
+              600
+            ],
+            "max_absolute_error": 0.0,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 20,
+            "uploaded_samples": 640,
+            "downloads": 300,
+            "device_cache_hits": 1181,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 599,
+            "correlation_pairs": 600,
+            "largest_correlation_batch": 2,
+            "cache_budget_bytes": 201326592,
+            "cache_peak_bytes": 142351904,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.9293122999370098,
+            "host_seconds": {
+              "setup": 0.3236413000850007,
+              "input_read": 0.046186101040802896,
+              "index_write": 0.0,
+              "cpu_compute": 0.0023281993344426155,
+              "gpu_submit": 0.17194430087693036,
+              "upload": 0.005481599946506321,
+              "download": 0.019959498196840286,
+              "references": 0.007145600393414497,
+              "output_statistics": 0.005681099137291312,
+              "output_render": 0.31983670010231435,
+              "output_write": 0.010818999842740595,
+              "other": 0.016288900980725884
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 640,
+            "input_read_bytes": 41943040,
+            "output_samples": 300,
+            "output_bytes": 2400,
+            "input_reads_per_second": 688.6812969583855,
+            "output_per_second": 322.81935794924317,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "gpu"
+          ],
+          "correlation_implementations": [
+            "cupy_fused_float64"
+          ]
+        },
+        {
+          "case": "pixel-mean",
+          "backend": "gpu",
+          "repeat": 1,
+          "status": "succeeded",
+          "job_call_seconds": 3.507159199914895,
+          "process_wall_seconds": 4.038360300008208,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 1024,
+            "backend": "gpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              302,
+              600
+            ],
+            "max_absolute_error": 2.220446049250313e-16,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 20,
+            "uploaded_samples": 640,
+            "downloads": 300,
+            "device_cache_hits": 1181,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 600,
+            "correlation_pairs": 600,
+            "largest_correlation_batch": 1,
+            "cache_budget_bytes": 201326592,
+            "cache_peak_bytes": 142476488,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 3.5036423000274226,
+            "host_seconds": {
+              "setup": 0.3292842999799177,
+              "input_read": 0.047587400185875595,
+              "index_write": 0.0,
+              "cpu_compute": 0.002373600611463189,
+              "gpu_submit": 2.7392369981389493,
+              "upload": 0.006033799960277975,
+              "download": 0.02080380020197481,
+              "references": 0.006773700471967459,
+              "output_statistics": 0.006377699784934521,
+              "output_render": 0.3171439999714494,
+              "output_write": 0.010810598381794989,
+              "other": 0.017216402338817716
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 640,
+            "input_read_bytes": 41943040,
+            "output_samples": 300,
+            "output_bytes": 2400,
+            "input_reads_per_second": 182.66704908631536,
+            "output_per_second": 85.62517925921031,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "gpu"
+          ],
+          "correlation_implementations": [
+            "cupy_fused_float64"
+          ]
+        },
+        {
+          "case": "pixel-mean",
+          "backend": "gpu",
+          "repeat": 2,
+          "status": "succeeded",
+          "job_call_seconds": 1.033860299969092,
+          "process_wall_seconds": 1.539440399967134,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 1024,
+            "backend": "gpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              302,
+              600
+            ],
+            "max_absolute_error": 2.220446049250313e-16,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 20,
+            "uploaded_samples": 640,
+            "downloads": 300,
+            "device_cache_hits": 1181,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 600,
+            "correlation_pairs": 600,
+            "largest_correlation_batch": 1,
+            "cache_budget_bytes": 201326592,
+            "cache_peak_bytes": 142476488,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 1.0302455000346527,
+            "host_seconds": {
+              "setup": 0.32125739997718483,
+              "input_read": 0.04903290083166212,
+              "index_write": 0.0,
+              "cpu_compute": 0.002348798792809248,
+              "gpu_submit": 0.26341890054754913,
+              "upload": 0.006028999574482441,
+              "download": 0.020363300223834813,
+              "references": 0.00681490043643862,
+              "output_statistics": 0.006504800752736628,
+              "output_render": 0.3242359000723809,
+              "output_write": 0.012141501065343618,
+              "other": 0.018098097760230303
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 640,
+            "input_read_bytes": 41943040,
+            "output_samples": 300,
+            "output_bytes": 2400,
+            "input_reads_per_second": 621.2111579021441,
+            "output_per_second": 291.19273026663006,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "gpu"
+          ],
+          "correlation_implementations": [
+            "cupy_fused_float64"
+          ]
+        },
+        {
+          "case": "pixel-mean",
+          "backend": "gpu",
+          "repeat": 3,
+          "status": "succeeded",
+          "job_call_seconds": 0.9872703000437468,
+          "process_wall_seconds": 1.5070252999430522,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 1024,
+            "backend": "gpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              302,
+              600
+            ],
+            "max_absolute_error": 2.220446049250313e-16,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 20,
+            "uploaded_samples": 640,
+            "downloads": 300,
+            "device_cache_hits": 1181,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 600,
+            "correlation_pairs": 600,
+            "largest_correlation_batch": 1,
+            "cache_budget_bytes": 201326592,
+            "cache_peak_bytes": 142476488,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.9837003999855369,
+            "host_seconds": {
+              "setup": 0.3225737999891862,
+              "input_read": 0.04721689934376627,
+              "index_write": 0.0,
+              "cpu_compute": 0.002295801299624145,
+              "gpu_submit": 0.23624339944217354,
+              "upload": 0.005403700168244541,
+              "download": 0.020709699485450983,
+              "references": 0.006441402598284185,
+              "output_statistics": 0.006300699431449175,
+              "output_render": 0.30851609993260354,
+              "output_write": 0.01062910258769989,
+              "other": 0.017369795707054436
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 640,
+            "input_read_bytes": 41943040,
+            "output_samples": 300,
+            "output_bytes": 2400,
+            "input_reads_per_second": 650.6045946605386,
+            "output_per_second": 304.97090374712747,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "gpu"
+          ],
+          "correlation_implementations": [
+            "cupy_fused_float64"
+          ]
+        }
+      ]
+    },
+    {
+      "source": {
+        "frames": 129,
+        "shape": [
+          512,
+          1024
+        ],
+        "dtype": "uint16"
+      },
+      "lag": 1,
+      "windows": [
+        2,
+        4,
+        6,
+        8,
+        10,
+        12,
+        14,
+        16,
+        18,
+        20,
+        22,
+        24,
+        26,
+        28,
+        30,
+        32,
+        34,
+        36,
+        38,
+        40,
+        42,
+        44,
+        46,
+        48,
+        50,
+        52,
+        54,
+        56,
+        58,
+        60,
+        62,
+        64
+      ],
+      "medians": [
+        {
+          "backend": "cpu",
+          "case": "image",
+          "repeats": 3,
+          "job_call_seconds": 0.6379565999377519,
+          "process_wall_seconds": 1.0781073999824002,
+          "outputs_per_second": 50.160151965074704
+        },
+        {
+          "backend": "cpu",
+          "case": "point",
+          "repeats": 3,
+          "job_call_seconds": 0.614394300035201,
+          "process_wall_seconds": 1.0714321000268683,
+          "outputs_per_second": 52.08381652981904
+        },
+        {
+          "backend": "cpu",
+          "case": "pixel-mean",
+          "repeats": 3,
+          "job_call_seconds": 0.9271266999421641,
+          "process_wall_seconds": 1.3941458000335842,
+          "outputs_per_second": 34.51523939715707
+        },
+        {
+          "backend": "gpu",
+          "case": "image",
+          "repeats": 3,
+          "job_call_seconds": 0.5228938000509515,
+          "process_wall_seconds": 0.9915145999984816,
+          "outputs_per_second": 61.197895245424355
+        },
+        {
+          "backend": "gpu",
+          "case": "point",
+          "repeats": 3,
+          "job_call_seconds": 0.7824434000067413,
+          "process_wall_seconds": 1.2934772999724373,
+          "outputs_per_second": 40.897526900634986
+        },
+        {
+          "backend": "gpu",
+          "case": "pixel-mean",
+          "repeats": 3,
+          "job_call_seconds": 0.8248871000250801,
+          "process_wall_seconds": 1.3342833999777213,
+          "outputs_per_second": 38.79318757564164
+        }
+      ],
+      "runs": [
+        {
+          "case": "image",
+          "backend": "cpu",
+          "repeat": 1,
+          "status": "succeeded",
+          "job_call_seconds": 0.6379565999377519,
+          "process_wall_seconds": 1.0781073999824002,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 2048,
+            "backend": "cpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              34,
+              64
+            ],
+            "max_absolute_error": 2.220446049250313e-16,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 0,
+            "uploaded_samples": 0,
+            "downloads": 0,
+            "device_cache_hits": 0,
+            "largest_upload_batch": 0,
+            "correlation_update_calls": 0,
+            "correlation_pairs": 0,
+            "largest_correlation_batch": 0,
+            "cache_budget_bytes": 201326592,
+            "cache_peak_bytes": 0,
+            "source_batch_limit": 32,
+            "intermediate_residency": false,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.6350138999987394,
+            "host_seconds": {
+              "setup": 0.024150399956852198,
+              "input_read": 0.022418299922719598,
+              "index_write": 0.0,
+              "cpu_compute": 0.51684140029829,
+              "gpu_submit": 0.0,
+              "upload": 0.0,
+              "download": 0.0,
+              "references": 0.0015913001261651516,
+              "output_statistics": 0.01491209992673248,
+              "output_render": 0.0,
+              "output_write": 0.04200110037345439,
+              "other": 0.013099299394525588
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 65,
+            "input_read_bytes": 68157440,
+            "output_samples": 32,
+            "output_bytes": 67108864,
+            "input_reads_per_second": 102.35996408917826,
+            "output_per_second": 50.39259770544161,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "cpu"
+          ],
+          "correlation_implementations": [
+            "array_float64"
+          ]
+        },
+        {
+          "case": "image",
+          "backend": "cpu",
+          "repeat": 2,
+          "status": "succeeded",
+          "job_call_seconds": 0.6316123999422416,
+          "process_wall_seconds": 1.0719465999864042,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 2048,
+            "backend": "cpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              34,
+              64
+            ],
+            "max_absolute_error": 2.220446049250313e-16,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 0,
+            "uploaded_samples": 0,
+            "downloads": 0,
+            "device_cache_hits": 0,
+            "largest_upload_batch": 0,
+            "correlation_update_calls": 0,
+            "correlation_pairs": 0,
+            "largest_correlation_batch": 0,
+            "cache_budget_bytes": 201326592,
+            "cache_peak_bytes": 0,
+            "source_batch_limit": 32,
+            "intermediate_residency": false,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.628677099943161,
+            "host_seconds": {
+              "setup": 0.024376300047151744,
+              "input_read": 0.022401400026865304,
+              "index_write": 0.0,
+              "cpu_compute": 0.5167163998121396,
+              "gpu_submit": 0.0,
+              "upload": 0.0,
+              "download": 0.0,
+              "references": 0.0015528994845226407,
+              "output_statistics": 0.01511529996059835,
+              "output_render": 0.0,
+              "output_write": 0.03558619995601475,
+              "other": 0.01292860065586865
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 65,
+            "input_read_bytes": 68157440,
+            "output_samples": 32,
+            "output_bytes": 67108864,
+            "input_reads_per_second": 103.39170936220944,
+            "output_per_second": 50.900533839856955,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "cpu"
+          ],
+          "correlation_implementations": [
+            "array_float64"
+          ]
+        },
+        {
+          "case": "image",
+          "backend": "cpu",
+          "repeat": 3,
+          "status": "succeeded",
+          "job_call_seconds": 0.6403118000598624,
+          "process_wall_seconds": 1.0810408000834286,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 2048,
+            "backend": "cpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              34,
+              64
+            ],
+            "max_absolute_error": 2.220446049250313e-16,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 0,
+            "uploaded_samples": 0,
+            "downloads": 0,
+            "device_cache_hits": 0,
+            "largest_upload_batch": 0,
+            "correlation_update_calls": 0,
+            "correlation_pairs": 0,
+            "largest_correlation_batch": 0,
+            "cache_budget_bytes": 201326592,
+            "cache_peak_bytes": 0,
+            "source_batch_limit": 32,
+            "intermediate_residency": false,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.6373284000437707,
+            "host_seconds": {
+              "setup": 0.02457959996536374,
+              "input_read": 0.022832900402136147,
+              "index_write": 0.0,
+              "cpu_compute": 0.5232063998701051,
+              "gpu_submit": 0.0,
+              "upload": 0.0,
+              "download": 0.0,
+              "references": 0.0014662002213299274,
+              "output_statistics": 0.015262899803929031,
+              "output_render": 0.0,
+              "output_write": 0.036495600361377,
+              "other": 0.013484799419529736
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 65,
+            "input_read_bytes": 68157440,
+            "output_samples": 32,
+            "output_bytes": 67108864,
+            "input_reads_per_second": 101.98823714043797,
+            "output_per_second": 50.20959366913869,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "cpu"
+          ],
+          "correlation_implementations": [
+            "array_float64"
+          ]
+        },
+        {
+          "case": "point",
+          "backend": "cpu",
+          "repeat": 1,
+          "status": "succeeded",
+          "job_call_seconds": 0.617038800031878,
+          "process_wall_seconds": 1.0875367000699043,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 2048,
+            "backend": "cpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              34,
+              64
+            ],
+            "max_absolute_error": 0.0,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 0,
+            "uploaded_samples": 0,
+            "downloads": 0,
+            "device_cache_hits": 0,
+            "largest_upload_batch": 0,
+            "correlation_update_calls": 0,
+            "correlation_pairs": 0,
+            "largest_correlation_batch": 0,
+            "cache_budget_bytes": 201326592,
+            "cache_peak_bytes": 0,
+            "source_batch_limit": 32,
+            "intermediate_residency": false,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.613656900008209,
+            "host_seconds": {
+              "setup": 0.02836669993121177,
+              "input_read": 0.018295500427484512,
+              "index_write": 0.0,
+              "cpu_compute": 0.2187976996647194,
+              "gpu_submit": 0.0,
+              "upload": 0.0,
+              "download": 0.0,
+              "references": 0.0011127002071589231,
+              "output_statistics": 0.0007864995859563351,
+              "output_render": 0.3304087999276817,
+              "output_write": 0.007333100074902177,
+              "other": 0.008555900189094245
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 65,
+            "input_read_bytes": 68157440,
+            "output_samples": 32,
+            "output_bytes": 256,
+            "input_reads_per_second": 105.92238105548961,
+            "output_per_second": 52.146402981164115,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "cpu"
+          ],
+          "correlation_implementations": [
+            "array_float64"
+          ]
+        },
+        {
+          "case": "point",
+          "backend": "cpu",
+          "repeat": 2,
+          "status": "succeeded",
+          "job_call_seconds": 0.614394300035201,
+          "process_wall_seconds": 1.0712588999886066,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 2048,
+            "backend": "cpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              34,
+              64
+            ],
+            "max_absolute_error": 0.0,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 0,
+            "uploaded_samples": 0,
+            "downloads": 0,
+            "device_cache_hits": 0,
+            "largest_upload_batch": 0,
+            "correlation_update_calls": 0,
+            "correlation_pairs": 0,
+            "largest_correlation_batch": 0,
+            "cache_budget_bytes": 201326592,
+            "cache_peak_bytes": 0,
+            "source_batch_limit": 32,
+            "intermediate_residency": false,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.611082800081931,
+            "host_seconds": {
+              "setup": 0.028780899941921234,
+              "input_read": 0.018174799624830484,
+              "index_write": 0.0,
+              "cpu_compute": 0.21887160057667643,
+              "gpu_submit": 0.0,
+              "upload": 0.0,
+              "download": 0.0,
+              "references": 0.0010936999460682273,
+              "output_statistics": 0.0008310996927320957,
+              "output_render": 0.3309456999413669,
+              "output_write": 0.0037751002237200737,
+              "other": 0.0086099001346156
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 65,
+            "input_read_bytes": 68157440,
+            "output_samples": 32,
+            "output_bytes": 256,
+            "input_reads_per_second": 106.36856411485499,
+            "output_per_second": 52.36606233346708,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "cpu"
+          ],
+          "correlation_implementations": [
+            "array_float64"
+          ]
+        },
+        {
+          "case": "point",
+          "backend": "cpu",
+          "repeat": 3,
+          "status": "succeeded",
+          "job_call_seconds": 0.6142694000154734,
+          "process_wall_seconds": 1.0714321000268683,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 2048,
+            "backend": "cpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              34,
+              64
+            ],
+            "max_absolute_error": 0.0,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 0,
+            "uploaded_samples": 0,
+            "downloads": 0,
+            "device_cache_hits": 0,
+            "largest_upload_batch": 0,
+            "correlation_update_calls": 0,
+            "correlation_pairs": 0,
+            "largest_correlation_batch": 0,
+            "cache_budget_bytes": 201326592,
+            "cache_peak_bytes": 0,
+            "source_batch_limit": 32,
+            "intermediate_residency": false,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.6111084000440314,
+            "host_seconds": {
+              "setup": 0.029528000159189105,
+              "input_read": 0.01814100018236786,
+              "index_write": 0.0,
+              "cpu_compute": 0.22266569908242673,
+              "gpu_submit": 0.0,
+              "upload": 0.0,
+              "download": 0.0,
+              "references": 0.0011352000292390585,
+              "output_statistics": 0.000793699873611331,
+              "output_render": 0.32564270007424057,
+              "output_write": 0.003983299829997122,
+              "other": 0.009218800812959671
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 65,
+            "input_read_bytes": 68157440,
+            "output_samples": 32,
+            "output_bytes": 256,
+            "input_reads_per_second": 106.36410822583463,
+            "output_per_second": 52.363868665026274,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "cpu"
+          ],
+          "correlation_implementations": [
+            "array_float64"
+          ]
+        },
+        {
+          "case": "pixel-mean",
+          "backend": "cpu",
+          "repeat": 1,
+          "status": "succeeded",
+          "job_call_seconds": 0.9341741999378428,
+          "process_wall_seconds": 1.3912353999912739,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 2048,
+            "backend": "cpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              34,
+              64
+            ],
+            "max_absolute_error": 0.0,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 0,
+            "uploaded_samples": 0,
+            "downloads": 0,
+            "device_cache_hits": 0,
+            "largest_upload_batch": 0,
+            "correlation_update_calls": 0,
+            "correlation_pairs": 0,
+            "largest_correlation_batch": 0,
+            "cache_budget_bytes": 201326592,
+            "cache_peak_bytes": 0,
+            "source_batch_limit": 32,
+            "intermediate_residency": false,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.9313593000406399,
+            "host_seconds": {
+              "setup": 0.029756699921563268,
+              "input_read": 0.022077900590375066,
+              "index_write": 0.0,
+              "cpu_compute": 0.5323149990290403,
+              "gpu_submit": 0.0,
+              "upload": 0.0,
+              "download": 0.0,
+              "references": 0.0012416996760293841,
+              "output_statistics": 0.0011981000425294042,
+              "output_render": 0.33194429997820407,
+              "output_write": 0.003869899665005505,
+              "other": 0.008955701137892902
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 65,
+            "input_read_bytes": 68157440,
+            "output_samples": 32,
+            "output_bytes": 256,
+            "input_reads_per_second": 69.79046646891669,
+            "output_per_second": 34.358383492389756,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "cpu"
+          ],
+          "correlation_implementations": [
+            "array_float64"
+          ]
+        },
+        {
+          "case": "pixel-mean",
+          "backend": "cpu",
+          "repeat": 2,
+          "status": "succeeded",
+          "job_call_seconds": 0.9253412999678403,
+          "process_wall_seconds": 1.3987784999189898,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 2048,
+            "backend": "cpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              34,
+              64
+            ],
+            "max_absolute_error": 0.0,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 0,
+            "uploaded_samples": 0,
+            "downloads": 0,
+            "device_cache_hits": 0,
+            "largest_upload_batch": 0,
+            "correlation_update_calls": 0,
+            "correlation_pairs": 0,
+            "largest_correlation_batch": 0,
+            "cache_budget_bytes": 201326592,
+            "cache_peak_bytes": 0,
+            "source_batch_limit": 32,
+            "intermediate_residency": false,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.922162700095214,
+            "host_seconds": {
+              "setup": 0.029339900007471442,
+              "input_read": 0.02234249992761761,
+              "index_write": 0.0,
+              "cpu_compute": 0.5245120003819466,
+              "gpu_submit": 0.0,
+              "upload": 0.0,
+              "download": 0.0,
+              "references": 0.0013070995919406414,
+              "output_statistics": 0.0012611002894118428,
+              "output_render": 0.330766599974595,
+              "output_write": 0.004066500114277005,
+              "other": 0.008566999807953835
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 65,
+            "input_read_bytes": 68157440,
+            "output_samples": 32,
+            "output_bytes": 256,
+            "input_reads_per_second": 70.48647705365735,
+            "output_per_second": 34.70103485718516,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "cpu"
+          ],
+          "correlation_implementations": [
+            "array_float64"
+          ]
+        },
+        {
+          "case": "pixel-mean",
+          "backend": "cpu",
+          "repeat": 3,
+          "status": "succeeded",
+          "job_call_seconds": 0.9271266999421641,
+          "process_wall_seconds": 1.3941458000335842,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 2048,
+            "backend": "cpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              34,
+              64
+            ],
+            "max_absolute_error": 0.0,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 0,
+            "uploaded_samples": 0,
+            "downloads": 0,
+            "device_cache_hits": 0,
+            "largest_upload_batch": 0,
+            "correlation_update_calls": 0,
+            "correlation_pairs": 0,
+            "largest_correlation_batch": 0,
+            "cache_budget_bytes": 201326592,
+            "cache_peak_bytes": 0,
+            "source_batch_limit": 32,
+            "intermediate_residency": false,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.9233674000715837,
+            "host_seconds": {
+              "setup": 0.029901300091296434,
+              "input_read": 0.022405599942430854,
+              "index_write": 0.0,
+              "cpu_compute": 0.531762000056915,
+              "gpu_submit": 0.0,
+              "upload": 0.0,
+              "download": 0.0,
+              "references": 0.0014211001107469201,
+              "output_statistics": 0.0011982996948063374,
+              "output_render": 0.3231740000192076,
+              "output_write": 0.004214599844999611,
+              "other": 0.00929050031118095
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 65,
+            "input_read_bytes": 68157440,
+            "output_samples": 32,
+            "output_bytes": 256,
+            "input_reads_per_second": 70.39451468067955,
+            "output_per_second": 34.655761073565316,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "cpu"
+          ],
+          "correlation_implementations": [
+            "array_float64"
+          ]
+        },
+        {
+          "case": "image",
+          "backend": "gpu",
+          "repeat": 1,
+          "status": "succeeded",
+          "job_call_seconds": 0.5497398999286816,
+          "process_wall_seconds": 1.0261725999880582,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 2048,
+            "backend": "gpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              34,
+              64
+            ],
+            "max_absolute_error": 2.220446049250313e-16,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 3,
+            "uploaded_samples": 96,
+            "downloads": 32,
+            "device_cache_hits": 126,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 64,
+            "correlation_pairs": 64,
+            "largest_correlation_batch": 1,
+            "cache_budget_bytes": 402653184,
+            "cache_peak_bytes": 301989888,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.546680900035426,
+            "host_seconds": {
+              "setup": 0.33479899971280247,
+              "input_read": 0.026576999691314995,
+              "index_write": 0.0,
+              "cpu_compute": 0.001266100094653666,
+              "gpu_submit": 0.08047680032905191,
+              "upload": 0.008242400013841689,
+              "download": 0.014364599948748946,
+              "references": 0.0007297003176063299,
+              "output_statistics": 0.02127330028451979,
+              "output_render": 0.0,
+              "output_write": 0.036591499811038375,
+              "other": 0.022360499831847847
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 96,
+            "input_read_bytes": 100663296,
+            "output_samples": 32,
+            "output_bytes": 67108864,
+            "input_reads_per_second": 175.6051839268191,
+            "output_per_second": 58.5350613089397,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "gpu"
+          ],
+          "correlation_implementations": [
+            "cupy_fused_float64"
+          ]
+        },
+        {
+          "case": "image",
+          "backend": "gpu",
+          "repeat": 2,
+          "status": "succeeded",
+          "job_call_seconds": 0.5195784999523312,
+          "process_wall_seconds": 0.9905864000320435,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 2048,
+            "backend": "gpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              34,
+              64
+            ],
+            "max_absolute_error": 2.220446049250313e-16,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 3,
+            "uploaded_samples": 96,
+            "downloads": 32,
+            "device_cache_hits": 126,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 64,
+            "correlation_pairs": 64,
+            "largest_correlation_batch": 1,
+            "cache_budget_bytes": 402653184,
+            "cache_peak_bytes": 301989888,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.5168194000143558,
+            "host_seconds": {
+              "setup": 0.31128129991702735,
+              "input_read": 0.02622620016336441,
+              "index_write": 0.0,
+              "cpu_compute": 0.0012466995976865292,
+              "gpu_submit": 0.08012689999304712,
+              "upload": 0.007400500006042421,
+              "download": 0.014216399751603603,
+              "references": 0.0007267006440088153,
+              "output_statistics": 0.01895800034981221,
+              "output_render": 0.0,
+              "output_write": 0.03596229967661202,
+              "other": 0.020674399915151298
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 96,
+            "input_read_bytes": 100663296,
+            "output_samples": 32,
+            "output_bytes": 67108864,
+            "input_reads_per_second": 185.751541055412,
+            "output_per_second": 61.917180351804,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "gpu"
+          ],
+          "correlation_implementations": [
+            "cupy_fused_float64"
+          ]
+        },
+        {
+          "case": "image",
+          "backend": "gpu",
+          "repeat": 3,
+          "status": "succeeded",
+          "job_call_seconds": 0.5228938000509515,
+          "process_wall_seconds": 0.9915145999984816,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 2048,
+            "backend": "gpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              34,
+              64
+            ],
+            "max_absolute_error": 2.220446049250313e-16,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 3,
+            "uploaded_samples": 96,
+            "downloads": 32,
+            "device_cache_hits": 126,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 64,
+            "correlation_pairs": 64,
+            "largest_correlation_batch": 1,
+            "cache_budget_bytes": 402653184,
+            "cache_peak_bytes": 301989888,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.5202716999920085,
+            "host_seconds": {
+              "setup": 0.31172440003138036,
+              "input_read": 0.025802100310102105,
+              "index_write": 0.0,
+              "cpu_compute": 0.0014865001430734992,
+              "gpu_submit": 0.08013669971842319,
+              "upload": 0.008245799923315644,
+              "download": 0.014438499929383397,
+              "references": 0.0007735999533906579,
+              "output_statistics": 0.018496300093829632,
+              "output_render": 0.0,
+              "output_write": 0.03556400001980364,
+              "other": 0.023603799869306386
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 96,
+            "input_read_bytes": 100663296,
+            "output_samples": 32,
+            "output_bytes": 67108864,
+            "input_reads_per_second": 184.51897345459034,
+            "output_per_second": 61.50632448486344,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "gpu"
+          ],
+          "correlation_implementations": [
+            "cupy_fused_float64"
+          ]
+        },
+        {
+          "case": "point",
+          "backend": "gpu",
+          "repeat": 1,
+          "status": "succeeded",
+          "job_call_seconds": 0.7755773999961093,
+          "process_wall_seconds": 1.274348699953407,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 2048,
+            "backend": "gpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              34,
+              64
+            ],
+            "max_absolute_error": 0.0,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 3,
+            "uploaded_samples": 96,
+            "downloads": 32,
+            "device_cache_hits": 126,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 63,
+            "correlation_pairs": 64,
+            "largest_correlation_batch": 2,
+            "cache_budget_bytes": 402653184,
+            "cache_peak_bytes": 297796576,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.7719656999688596,
+            "host_seconds": {
+              "setup": 0.3180262999376282,
+              "input_read": 0.024837600300088525,
+              "index_write": 0.0,
+              "cpu_compute": 0.0004375996068120003,
+              "gpu_submit": 0.07883890019729733,
+              "upload": 0.007982400013133883,
+              "download": 0.0026146998861804605,
+              "references": 0.0008002003887668252,
+              "output_statistics": 0.0007875999435782433,
+              "output_render": 0.3160465999972075,
+              "output_write": 0.0034709004685282707,
+              "other": 0.01812289922963828
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 96,
+            "input_read_bytes": 100663296,
+            "output_samples": 32,
+            "output_bytes": 256,
+            "input_reads_per_second": 124.35785683725658,
+            "output_per_second": 41.45261894575219,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "gpu"
+          ],
+          "correlation_implementations": [
+            "cupy_fused_float64"
+          ]
+        },
+        {
+          "case": "point",
+          "backend": "gpu",
+          "repeat": 2,
+          "status": "succeeded",
+          "job_call_seconds": 0.7824434000067413,
+          "process_wall_seconds": 1.2934772999724373,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 2048,
+            "backend": "gpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              34,
+              64
+            ],
+            "max_absolute_error": 0.0,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 3,
+            "uploaded_samples": 96,
+            "downloads": 32,
+            "device_cache_hits": 126,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 63,
+            "correlation_pairs": 64,
+            "largest_correlation_batch": 2,
+            "cache_budget_bytes": 402653184,
+            "cache_peak_bytes": 297796576,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.779159199912101,
+            "host_seconds": {
+              "setup": 0.32114849984645844,
+              "input_read": 0.025125299696810544,
+              "index_write": 0.0,
+              "cpu_compute": 0.0004556007916107774,
+              "gpu_submit": 0.07815199962351471,
+              "upload": 0.008156200055964291,
+              "download": 0.0027541997842490673,
+              "references": 0.000824199989438057,
+              "output_statistics": 0.0008116998942568898,
+              "output_render": 0.32100390002597123,
+              "output_write": 0.003551100264303386,
+              "other": 0.017176499939523637
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 96,
+            "input_read_bytes": 100663296,
+            "output_samples": 32,
+            "output_bytes": 256,
+            "input_reads_per_second": 123.20973686870413,
+            "output_per_second": 41.06991228956804,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "gpu"
+          ],
+          "correlation_implementations": [
+            "cupy_fused_float64"
+          ]
+        },
+        {
+          "case": "point",
+          "backend": "gpu",
+          "repeat": 3,
+          "status": "succeeded",
+          "job_call_seconds": 0.7855015000095591,
+          "process_wall_seconds": 1.2969113999279216,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 2048,
+            "backend": "gpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              34,
+              64
+            ],
+            "max_absolute_error": 0.0,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 3,
+            "uploaded_samples": 96,
+            "downloads": 32,
+            "device_cache_hits": 126,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 63,
+            "correlation_pairs": 64,
+            "largest_correlation_batch": 2,
+            "cache_budget_bytes": 402653184,
+            "cache_peak_bytes": 297796576,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.7821063000010327,
+            "host_seconds": {
+              "setup": 0.33020219998434186,
+              "input_read": 0.024233200238086283,
+              "index_write": 0.0,
+              "cpu_compute": 0.000475600128993392,
+              "gpu_submit": 0.07886299944948405,
+              "upload": 0.008083999971859157,
+              "download": 0.0026287002256140113,
+              "references": 0.0007889994885772467,
+              "output_statistics": 0.0007668002508580685,
+              "output_render": 0.31649220001418144,
+              "output_write": 0.003597299219109118,
+              "other": 0.01597430102992803
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 96,
+            "input_read_bytes": 100663296,
+            "output_samples": 32,
+            "output_bytes": 256,
+            "input_reads_per_second": 122.74546311655237,
+            "output_per_second": 40.915154372184126,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "gpu"
+          ],
+          "correlation_implementations": [
+            "cupy_fused_float64"
+          ]
+        },
+        {
+          "case": "pixel-mean",
+          "backend": "gpu",
+          "repeat": 1,
+          "status": "succeeded",
+          "job_call_seconds": 0.826785699930042,
+          "process_wall_seconds": 1.3412682000780478,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 2048,
+            "backend": "gpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              34,
+              64
+            ],
+            "max_absolute_error": 2.220446049250313e-16,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 3,
+            "uploaded_samples": 96,
+            "downloads": 32,
+            "device_cache_hits": 126,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 64,
+            "correlation_pairs": 64,
+            "largest_correlation_batch": 1,
+            "cache_budget_bytes": 402653184,
+            "cache_peak_bytes": 299892888,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.8230442999629304,
+            "host_seconds": {
+              "setup": 0.3230823000194505,
+              "input_read": 0.024614199763163924,
+              "index_write": 0.0,
+              "cpu_compute": 0.0004337998107075691,
+              "gpu_submit": 0.11903090076521039,
+              "upload": 0.008815999957732856,
+              "download": 0.0016098000342026353,
+              "references": 0.0007297999691218138,
+              "output_statistics": 0.0008365996181964874,
+              "output_render": 0.3204129000660032,
+              "output_write": 0.0037582996301352978,
+              "other": 0.019719700329005718
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 96,
+            "input_read_bytes": 100663296,
+            "output_samples": 32,
+            "output_bytes": 256,
+            "input_reads_per_second": 116.6401371157346,
+            "output_per_second": 38.88004570524487,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "gpu"
+          ],
+          "correlation_implementations": [
+            "cupy_fused_float64"
+          ]
+        },
+        {
+          "case": "pixel-mean",
+          "backend": "gpu",
+          "repeat": 2,
+          "status": "succeeded",
+          "job_call_seconds": 0.8164765000110492,
+          "process_wall_seconds": 1.3276196999941021,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 2048,
+            "backend": "gpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              34,
+              64
+            ],
+            "max_absolute_error": 2.220446049250313e-16,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 3,
+            "uploaded_samples": 96,
+            "downloads": 32,
+            "device_cache_hits": 126,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 64,
+            "correlation_pairs": 64,
+            "largest_correlation_batch": 1,
+            "cache_budget_bytes": 402653184,
+            "cache_peak_bytes": 299892888,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.8129602000117302,
+            "host_seconds": {
+              "setup": 0.32360080000944436,
+              "input_read": 0.02491230017039925,
+              "index_write": 0.0,
+              "cpu_compute": 0.0004524004179984331,
+              "gpu_submit": 0.11829449911601841,
+              "upload": 0.008119600010104477,
+              "download": 0.0017454002518206835,
+              "references": 0.0007522006053477526,
+              "output_statistics": 0.0008315999293699861,
+              "output_render": 0.3125416999682784,
+              "output_write": 0.0034387997584417462,
+              "other": 0.018270899774506688
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 96,
+            "input_read_bytes": 100663296,
+            "output_samples": 32,
+            "output_bytes": 256,
+            "input_reads_per_second": 118.08696169703612,
+            "output_per_second": 39.3623205656787,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "gpu"
+          ],
+          "correlation_implementations": [
+            "cupy_fused_float64"
+          ]
+        },
+        {
+          "case": "pixel-mean",
+          "backend": "gpu",
+          "repeat": 3,
+          "status": "succeeded",
+          "job_call_seconds": 0.8248871000250801,
+          "process_wall_seconds": 1.3342833999777213,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 2048,
+            "backend": "gpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              34,
+              64
+            ],
+            "max_absolute_error": 2.220446049250313e-16,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 3,
+            "uploaded_samples": 96,
+            "downloads": 32,
+            "device_cache_hits": 126,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 64,
+            "correlation_pairs": 64,
+            "largest_correlation_batch": 1,
+            "cache_budget_bytes": 402653184,
+            "cache_peak_bytes": 299892888,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.821511400048621,
+            "host_seconds": {
+              "setup": 0.3249721999745816,
+              "input_read": 0.025224200449883938,
+              "index_write": 0.0,
+              "cpu_compute": 0.0004362995969131589,
+              "gpu_submit": 0.12009230011608452,
+              "upload": 0.0083223000401631,
+              "download": 0.0017866997513920069,
+              "references": 0.0007243998115882277,
+              "output_statistics": 0.0008130004862323403,
+              "output_render": 0.31696650001686066,
+              "output_write": 0.00391869992017746,
+              "other": 0.01825479988474399
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 96,
+            "input_read_bytes": 100663296,
+            "output_samples": 32,
+            "output_bytes": 256,
+            "input_reads_per_second": 116.85778188144225,
+            "output_per_second": 38.95259396048075,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "gpu"
+          ],
+          "correlation_implementations": [
+            "cupy_fused_float64"
+          ]
+        }
+      ]
+    },
+    {
+      "source": {
+        "frames": 65,
+        "shape": [
+          768,
+          1536
+        ],
+        "dtype": "uint16"
+      },
+      "lag": 1,
+      "windows": [
+        2,
+        4,
+        6,
+        8,
+        10,
+        12,
+        14,
+        16,
+        18,
+        20,
+        22,
+        24,
+        26,
+        28,
+        30,
+        32,
+        34,
+        36,
+        38,
+        40,
+        42,
+        44,
+        46,
+        48,
+        50,
+        52,
+        54,
+        56,
+        58,
+        60,
+        62
+      ],
+      "medians": [
+        {
+          "backend": "cpu",
+          "case": "image",
+          "repeats": 3,
+          "job_call_seconds": 1.378755799960345,
+          "process_wall_seconds": 1.8255800000624731,
+          "outputs_per_second": 22.484039596345927
+        },
+        {
+          "backend": "gpu",
+          "case": "image",
+          "repeats": 3,
+          "job_call_seconds": 0.6733396999770775,
+          "process_wall_seconds": 1.1635494999354705,
+          "outputs_per_second": 46.03916864111136
+        }
+      ],
+      "runs": [
+        {
+          "case": "image",
+          "backend": "cpu",
+          "repeat": 1,
+          "status": "succeeded",
+          "job_call_seconds": 1.3636597000295296,
+          "process_wall_seconds": 1.814309100038372,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 4096,
+            "backend": "cpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              32,
+              62
+            ],
+            "max_absolute_error": 2.220446049250313e-16,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 0,
+            "uploaded_samples": 0,
+            "downloads": 0,
+            "device_cache_hits": 0,
+            "largest_upload_batch": 0,
+            "correlation_update_calls": 0,
+            "correlation_pairs": 0,
+            "largest_correlation_batch": 0,
+            "cache_budget_bytes": 402653184,
+            "cache_peak_bytes": 0,
+            "source_batch_limit": 32,
+            "intermediate_residency": false,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 1.3604803000343964,
+            "host_seconds": {
+              "setup": 0.03301449993159622,
+              "input_read": 0.03782269940711558,
+              "index_write": 0.0,
+              "cpu_compute": 1.1606445002835244,
+              "gpu_submit": 0.0,
+              "upload": 0.0,
+              "download": 0.0,
+              "references": 0.0016480996273458004,
+              "output_statistics": 0.0313711998751387,
+              "output_render": 0.0,
+              "output_write": 0.07678859983570874,
+              "other": 0.01919070107396692
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 63,
+            "input_read_bytes": 148635648,
+            "output_samples": 31,
+            "output_bytes": 146276352,
+            "input_reads_per_second": 46.307175486780075,
+            "output_per_second": 22.78607047762194,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "cpu"
+          ],
+          "correlation_implementations": [
+            "array_float64"
+          ]
+        },
+        {
+          "case": "image",
+          "backend": "cpu",
+          "repeat": 2,
+          "status": "succeeded",
+          "job_call_seconds": 1.378755799960345,
+          "process_wall_seconds": 1.8255800000624731,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 4096,
+            "backend": "cpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              32,
+              62
+            ],
+            "max_absolute_error": 2.220446049250313e-16,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 0,
+            "uploaded_samples": 0,
+            "downloads": 0,
+            "device_cache_hits": 0,
+            "largest_upload_batch": 0,
+            "correlation_update_calls": 0,
+            "correlation_pairs": 0,
+            "largest_correlation_batch": 0,
+            "cache_budget_bytes": 402653184,
+            "cache_peak_bytes": 0,
+            "source_batch_limit": 32,
+            "intermediate_residency": false,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 1.375436499947682,
+            "host_seconds": {
+              "setup": 0.032893800060264766,
+              "input_read": 0.03859819960780442,
+              "index_write": 0.0,
+              "cpu_compute": 1.1770070003112778,
+              "gpu_submit": 0.0,
+              "upload": 0.0,
+              "download": 0.0,
+              "references": 0.0015652001602575183,
+              "output_statistics": 0.033098899642936885,
+              "output_render": 0.0,
+              "output_write": 0.07129909947980195,
+              "other": 0.020974300685338676
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 63,
+            "input_read_bytes": 148635648,
+            "output_samples": 31,
+            "output_bytes": 146276352,
+            "input_reads_per_second": 45.80364124581277,
+            "output_per_second": 22.538299660638028,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "cpu"
+          ],
+          "correlation_implementations": [
+            "array_float64"
+          ]
+        },
+        {
+          "case": "image",
+          "backend": "cpu",
+          "repeat": 3,
+          "status": "succeeded",
+          "job_call_seconds": 1.695226899930276,
+          "process_wall_seconds": 2.151447399985045,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 4096,
+            "backend": "cpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              32,
+              62
+            ],
+            "max_absolute_error": 2.220446049250313e-16,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 0,
+            "uploaded_samples": 0,
+            "downloads": 0,
+            "device_cache_hits": 0,
+            "largest_upload_batch": 0,
+            "correlation_update_calls": 0,
+            "correlation_pairs": 0,
+            "largest_correlation_batch": 0,
+            "cache_budget_bytes": 402653184,
+            "cache_peak_bytes": 0,
+            "source_batch_limit": 32,
+            "intermediate_residency": false,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 1.6915889999363571,
+            "host_seconds": {
+              "setup": 0.032720900140702724,
+              "input_read": 0.04615460068453103,
+              "index_write": 0.0,
+              "cpu_compute": 1.4726442989194766,
+              "gpu_submit": 0.0,
+              "upload": 0.0,
+              "download": 0.0,
+              "references": 0.0016765999607741833,
+              "output_statistics": 0.03753409965429455,
+              "output_render": 0.0,
+              "output_write": 0.08136740024201572,
+              "other": 0.01949110033456236
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 63,
+            "input_read_bytes": 148635648,
+            "output_samples": 31,
+            "output_bytes": 146276352,
+            "input_reads_per_second": 37.24308919150589,
+            "output_per_second": 18.325964522804487,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "cpu"
+          ],
+          "correlation_implementations": [
+            "array_float64"
+          ]
+        },
+        {
+          "case": "image",
+          "backend": "gpu",
+          "repeat": 1,
+          "status": "succeeded",
+          "job_call_seconds": 0.7370166999753565,
+          "process_wall_seconds": 1.2265532000456005,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 4096,
+            "backend": "gpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              32,
+              62
+            ],
+            "max_absolute_error": 2.220446049250313e-16,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 2,
+            "uploaded_samples": 64,
+            "downloads": 31,
+            "device_cache_hits": 123,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 62,
+            "correlation_pairs": 62,
+            "largest_correlation_batch": 1,
+            "cache_budget_bytes": 805306368,
+            "cache_peak_bytes": 552075264,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.7335883999476209,
+            "host_seconds": {
+              "setup": 0.3692185999825597,
+              "input_read": 0.042820900096558034,
+              "index_write": 0.0,
+              "cpu_compute": 0.002509299898520112,
+              "gpu_submit": 0.10358209989499301,
+              "upload": 0.029163399944081903,
+              "download": 0.030685500241816044,
+              "references": 0.000742599368095398,
+              "output_statistics": 0.04275160015095025,
+              "output_render": 0.0,
+              "output_write": 0.07053779996931553,
+              "other": 0.04157660040073097
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 64,
+            "input_read_bytes": 150994944,
+            "output_samples": 31,
+            "output_bytes": 146276352,
+            "input_reads_per_second": 87.24238279199845,
+            "output_per_second": 42.25802916487425,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "gpu"
+          ],
+          "correlation_implementations": [
+            "cupy_fused_float64"
+          ]
+        },
+        {
+          "case": "image",
+          "backend": "gpu",
+          "repeat": 2,
+          "status": "succeeded",
+          "job_call_seconds": 0.6675046000164002,
+          "process_wall_seconds": 1.1542940000072122,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 4096,
+            "backend": "gpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              32,
+              62
+            ],
+            "max_absolute_error": 2.220446049250313e-16,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 2,
+            "uploaded_samples": 64,
+            "downloads": 31,
+            "device_cache_hits": 123,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 62,
+            "correlation_pairs": 62,
+            "largest_correlation_batch": 1,
+            "cache_budget_bytes": 805306368,
+            "cache_peak_bytes": 552075264,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.6639425000175834,
+            "host_seconds": {
+              "setup": 0.32062099990434945,
+              "input_read": 0.04379060002975166,
+              "index_write": 0.0,
+              "cpu_compute": 0.0022529991110786796,
+              "gpu_submit": 0.09987100050784647,
+              "upload": 0.01959569996688515,
+              "download": 0.028399400180205703,
+              "references": 0.0008048006566241384,
+              "output_statistics": 0.03809420007746667,
+              "output_render": 0.0,
+              "output_write": 0.070423599681817,
+              "other": 0.04008919990155846
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 64,
+            "input_read_bytes": 150994944,
+            "output_samples": 31,
+            "output_bytes": 146276352,
+            "input_reads_per_second": 96.39388952854361,
+            "output_per_second": 46.69079024038832,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "gpu"
+          ],
+          "correlation_implementations": [
+            "cupy_fused_float64"
+          ]
+        },
+        {
+          "case": "image",
+          "backend": "gpu",
+          "repeat": 3,
+          "status": "succeeded",
+          "job_call_seconds": 0.6733396999770775,
+          "process_wall_seconds": 1.1635494999354705,
+          "resources": {
+            "memory_mb": 2048,
+            "preview_mb": 16,
+            "cache_mb": 128,
+            "gpu_mb": 4096,
+            "backend": "gpu"
+          },
+          "validation": {
+            "checked_windows": [
+              2,
+              32,
+              62
+            ],
+            "max_absolute_error": 2.220446049250313e-16,
+            "finite_masks_equal": true,
+            "tolerance": 2e-11,
+            "passed": true,
+            "reference": "direct float64 mean(L*R)/(mean(L)*mean(R)); positive uint16 synthetic input"
+          },
+          "device_execution": {
+            "upload_batches": 2,
+            "uploaded_samples": 64,
+            "downloads": 31,
+            "device_cache_hits": 123,
+            "largest_upload_batch": 32,
+            "correlation_update_calls": 62,
+            "correlation_pairs": 62,
+            "largest_correlation_batch": 1,
+            "cache_budget_bytes": 805306368,
+            "cache_peak_bytes": 552075264,
+            "source_batch_limit": 32,
+            "intermediate_residency": true,
+            "cache_policy": "validated_flow_slack_v2",
+            "upload_dtype_policy": "source_dtype",
+            "upload_alignment": "sample_chunks",
+            "transfer_scope": "array boundaries; excludes scalar synchronization and library internals"
+          },
+          "performance": {
+            "schema_version": 1,
+            "elapsed_seconds": 0.6699179999995977,
+            "host_seconds": {
+              "setup": 0.32808500004466623,
+              "input_read": 0.04389339976478368,
+              "index_write": 0.0,
+              "cpu_compute": 0.002508800011128187,
+              "gpu_submit": 0.10014549968764186,
+              "upload": 0.020423800102435052,
+              "download": 0.0276040006428957,
+              "references": 0.000831800396554172,
+              "output_statistics": 0.036123200436122715,
+              "output_render": 0.0,
+              "output_write": 0.07117190002463758,
+              "other": 0.03913059888873249
+            },
+            "labels": {
+              "setup": "准备与校验",
+              "input_read": "输入读取 / 解码",
+              "index_write": "临时视频索引写入",
+              "cpu_compute": "CPU 模块计算",
+              "gpu_submit": "GPU 调度（主机，含同步等待）",
+              "upload": "上传（主机，含等待）",
+              "download": "回传（主机，含等待）",
+              "references": "来源映射",
+              "output_statistics": "输出摘要统计",
+              "output_render": "曲线图生成",
+              "output_write": "输出写入",
+              "other": "其他 / 收尾"
+            },
+            "input_read_samples": 64,
+            "input_read_bytes": 150994944,
+            "output_samples": 31,
+            "output_bytes": 146276352,
+            "input_reads_per_second": 95.53408029048097,
+            "output_per_second": 46.274320140701725,
+            "gpu_execution_seconds": null,
+            "semantics": {
+              "host_seconds": "Exclusive host wall time; nested categories are subtracted from their parent. Includes I/O and synchronization waits.",
+              "gpu_execution_seconds": "Not collected. GPU host submission and transfer times are not CUDA kernel execution times.",
+              "input_read_samples": "Source sample reads, including video decoding during index creation, temporary-index rereads, repeated reads and reader-cache hits; not unique source frames.",
+              "input_read_bytes": "Decoded source array bytes returned by reads; not physical disk bytes.",
+              "throughput": "Output samples and input sample reads divided by source execution wall time, including setup and output.",
+              "scope": "One source in the compute worker; excludes worker process startup, queueing and final run publication."
+            }
+          },
+          "actual_devices": [
+            "gpu"
+          ],
+          "correlation_implementations": [
+            "cupy_fused_float64"
+          ]
+        }
+      ]
+    }
+  ],
+  "formal_benchmark_runs": 42,
+  "maximum_benchmark_absolute_error": 2.220446049250313e-16
+}

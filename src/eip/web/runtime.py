@@ -37,6 +37,7 @@ from eip.module_contracts import compile_flow, source_contract
 from eip.sequence_processing import sequence_job_entry
 from eip.resources import load_resources, ResourceSettings, process_memory, system_memory, MIB
 from eip.gpu_memory import GpuMemoryMonitor
+from eip.device_telemetry import HostTelemetryMonitor
 from eip.performance import progress_metadata
 
 
@@ -191,6 +192,7 @@ class Workbench:
         self.frames = FrameStore(self.resources.preview_mb*MIB//2)
         self.lock = threading.RLock()
         self.gpu_memory = GpuMemoryMonitor()
+        self.host_telemetry = HostTelemetryMonitor()
         self.sources = OrderedDict()
         self.algorithms = {spec.id: spec for spec in BUILTINS}
         self.jobs = OrderedDict()
@@ -251,11 +253,15 @@ class Workbench:
         with self.lock:
             return {"workspace": str(self.workspace), "output_dir": str(self.workspace / "outputs"), "project_path": self.project_path, "sources": list(self.sources.values()), "algorithms": [asdict(spec) for spec in self.algorithms.values()], "modules":catalog(self.algorithms.values()), "modes": ["general","split_correlation"], "split_devices": self.split.devices,"resources":self.resources.record(),"result_recovery_errors":self.result_recovery_errors}
 
+    def _resource_processes(self):
+        """Caller holds self.lock; all monitors use the same application scope."""
+        return [("工作台", os.getpid()), ("数据读取", self.preview.process.pid),
+                ("阶段检查", self.inspection.process.pid if self.inspection.process else None),
+                ("正式 / 试算", self.active["process"].pid if self.active else None)]
+
     def resource_status(self):
         with self.lock:
-            processes = [("工作台",os.getpid()),("数据读取",self.preview.process.pid),
-                         ("阶段检查",self.inspection.process.pid if self.inspection.process else None),
-                         ("正式 / 试算",self.active["process"].pid if self.active else None)]
+            processes = self._resource_processes()
             rows = [dict(name=name,pid=pid,resident_bytes=process_memory(pid)) for name,pid in processes if pid]
             return dict(settings=self.resources.record(),processing_mb=self.resources.processing_mb,job_mb=self.resources.job_mb,inspection_mb=self.resources.inspection_mb,
                         system=system_memory(),processes=rows,frame_cache_bytes=self.frames.size,
@@ -269,13 +275,28 @@ class Workbench:
 
     def gpu_memory_status(self):
         with self.lock:
-            pids = [os.getpid(), self.preview.process.pid]
-            if self.inspection.process:
-                pids.append(self.inspection.process.pid)
-            if self.active:
-                pids.append(self.active["process"].pid)
+            pids = [pid for _, pid in self._resource_processes() if pid]
             budget = self.resources.gpu_mb
-        return dict(self.gpu_memory.sample(pid for pid in pids if pid), budget_mb=budget)
+        return dict(self.gpu_memory.sample(pids), budget_mb=budget)
+
+    def resource_telemetry(self):
+        with self.lock:
+            named_processes = [(name,pid) for name,pid in self._resource_processes() if pid]
+            pids = [pid for _,pid in named_processes]
+            active_job = self.jobs.get(self.active["id"], {}) if self.active else {}
+            activity = dict(busy=bool(self.pending or self.active or self.inspection.active), pending=len(self.pending),
+                            job_name=active_job.get("name"), status=active_job.get("status"))
+            budgets = dict(memory_mb=self.resources.memory_mb, gpu_mb=self.resources.gpu_mb,
+                           processing_mb=self.resources.processing_mb, job_mb=self.resources.job_mb,
+                           inspection_mb=self.resources.inspection_mb, preview_mb=self.resources.preview_mb,
+                           cache_mb=self.resources.cache_mb)
+            cache = dict(frame_cache_bytes=self.frames.size, frame_cache_count=len(self.frames.frames),
+                         frame_cache_limit_bytes=self.resources.preview_mb*MIB//2)
+        host = self.host_telemetry.sample(pids)
+        rows = {row["pid"]:row for row in host["processes"]}
+        processes = [dict(rows[pid],name=name) for name,pid in named_processes]
+        return dict(host, processes=processes, gpu=self.gpu_memory.sample(pids), budgets=budgets,
+                    cache=cache, activity=activity)
 
     def update_resources(self,value):
         settings = ResourceSettings.from_dict(value)

@@ -83,9 +83,8 @@ def process_sequence_job(payload,emit,cancelled):
                         writer = csv.DictWriter(file,fieldnames=fields)
                         writer.writeheader()
                         last_progress = 0.0
-                        for out,j in enumerate(indices):
+                        for out,(j,arr) in enumerate(engine.iter_outputs(indices)):
                             context.check_cancelled()
-                            arr = engine.get(len(engine.nodes),j)
                             with profiler.measure("references"):
                                 ref = engine.ref(len(engine.nodes),j)
                             with profiler.measure("output_write"):
@@ -141,6 +140,9 @@ def process_sequence_job(payload,emit,cancelled):
                             calibrations[engine.nodes[i]["id"]] = instance.record
                             if instance.lut is not None:
                                 np.save(part/f"lut_{engine.nodes[i]['id']}.npy",instance.lut,allow_pickle=False)
+                    # Resolve the bounded device-event collector before saving
+                    # performance; monitoring errors retain explicit coverage.
+                    profiler.finish_gpu()
                     engine.plan=engine._actual_plan()
                     item.update(status="succeeded",contract=output_c.record(),base_shape=[c.shape[c.axes.index(a)] for a in "YX"] if c.spatial else [],origin=list(c.origin),result_kind="label" if c.semantic=="label" else "coefficient" if c.semantic in {"g2","processed_g2"} else "image",modules=engine.plan,mappings=engine.mappings,calibrations=calibrations)
                     # This manifest is written only after all numeric samples and
@@ -162,24 +164,26 @@ def process_sequence_job(payload,emit,cancelled):
                 # Keep an interim snapshot even if failed-output cleanup itself
                 # raises; the outer handler can still persist this source's work.
                 item["performance"] = profiler.snapshot()
-                if item["status"] != "succeeded":
-                    for side in item.get("side_outputs",[]):
-                        if side["status"] == "succeeded":
-                            side.update(status="incomplete",error="所属来源未完整完成，截流输出未发布")
-                        folder = part/side["output_directory"]
-                        (folder/"dataset.json").unlink(missing_ok=True)
-                        (folder/"export.zip").unlink(missing_ok=True)
-                        write_json(folder/"delivery.json",side)
                 try:
-                    if engine:
-                        engine.close()
+                    if item["status"] != "succeeded":
+                        for side in item.get("side_outputs",[]):
+                            if side["status"] == "succeeded":
+                                side.update(status="incomplete",error="所属来源未完整完成，截流输出未发布")
+                            folder = part/side["output_directory"]
+                            (folder/"dataset.json").unlink(missing_ok=True)
+                            (folder/"export.zip").unlink(missing_ok=True)
+                            write_json(folder/"delivery.json",side)
                 finally:
                     try:
-                        if reader:
-                            reader.close()
+                        if engine:
+                            engine.close()
                     finally:
-                        item["performance"] = profiler.finish()
-                        write_json(staging/"run.json",run)
+                        try:
+                            if reader:
+                                reader.close()
+                        finally:
+                            item["performance"] = profiler.finish()
+                            write_json(staging/"run.json",run)
         successes = sum(item["status"]=="succeeded" for item in run["results"])
         run["status"] = "succeeded" if successes==len(run["results"]) else "completed_with_errors" if successes else "failed"
         run["completed_at"] = datetime.now(timezone.utc).isoformat()

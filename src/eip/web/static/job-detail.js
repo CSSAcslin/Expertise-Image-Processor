@@ -4,6 +4,44 @@ const statuses={queued:"排队",running:"运行中",cancelling:"取消中",cance
 const taskNames={statistics:"全源统计",trial:"当前中心系数图",curve:"τ 扫描曲线",run:"空间系数图"};
 const rect=r=>r?`(${r.x}, ${r.y}) · ${r.width} × ${r.height}`:"全幅";
 const units={T:"样本",W:"窗长",Q:"延迟点",N:"记录"};
+function executionHTML(job){
+  const parts=(job.run?.results||[]).filter(r=>r.modules?.execution?.optimization_enabled!=null);
+  if(!parts.length)return "";
+  const row=(k,v)=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`;
+  const number=v=>Number(v||0).toLocaleString();
+  return `<details><summary>执行优化与数据范围</summary>${parts.map((r,i)=>{
+    const e=r.modules.execution,s=e.spatial_execution;
+    let rows=row("执行策略",e.optimization_enabled?"按模块依赖规划范围与批次":"兼容逐样本执行");
+    if(e.full_frame_cpu_policy)rows+=row("全幅CPU策略","逐帧交接，避免额外批量复制");
+    if(s){
+      rows+=row("物理批次",`${number(s.blocks)} 批 · ${number(s.samples)} 个样本请求`)+row("范围路径读取 / 块内复用",`${number(s.source_reads)} / ${number(s.source_reuses)}`);
+      const stages=e.physical_plan?.logical_stages||[];
+      rows+=row("实际输出元素",Object.entries(s.region_elements||{}).map(([stage,n])=>`${stages.find(x=>String(x.output_stage)===stage)?.algorithm||"阶段 "+stage} · ${number(n)}`).join("\n")||"未使用局部执行");
+      rows+=row("缓冲区交接",`${number(s.ownership_transfers)} 次直接交接 · ${number(s.compact_copies)} 次压紧复制`);
+      if(Object.keys(s.full_barriers||{}).length)rows+=row("完整输入边界",Object.entries(s.full_barriers).map(([reason,n])=>`${reason} · ${number(n)} 次`).join("\n"));
+    }
+    for(const [label,key] of [["GPU连续输出","gpu_output_blocks"],["CPU连续输出","cpu_output_blocks"],["τ批量输出","lag_output_blocks"]]){
+      const records=Object.values(e[key]||{}).filter(x=>x.output_blocks);
+      if(records.length)rows+=row(label,records.map(x=>`${number(x.output_samples)} 个结果 · ${number(x.output_blocks)} 批`).join("\n"));
+    }
+    const lag=Object.values(e.lag_output_blocks||{}).filter(x=>x.output_blocks);
+    if(lag.length)rows+=row("τ关联配对",lag.map(x=>`${number(x.pair_updates)} 对 · ${String(x.implementation).startsWith("cupy")?number(x.kernel_calls)+" 次GPU发射":"CPU保序累计"}`).join("\n"));
+    const storage=e.main_storage;
+    if(storage?.range_requests)rows+=row("连续信号块",`${number(storage.range_requests)} 次请求 · ${number(storage.range_samples)} 个样本`);
+    const refs=r.modules.reference_execution;
+    if(refs?.lag_time_summaries)rows+=row("τ来源时间",`${number(refs.lag_time_summaries)} 个窗口 · ${number(refs.lag_time_source_queries)} 次样本时间读取`);
+    return `<p>${esc(r.source?.name||r.source?.path||"来源 "+(i+1))}</p><dl class="job-detail-grid">${rows}</dl>`;
+  }).join("")}<p class="hint">逻辑模块顺序、精度与来源保留。实际元素数表示模块输出的物理工作量；跨设备边界及完整输入依赖仍按实例设置执行。</p></details>`;
+}
+function gpuTimingRows(p,row,duration){
+  const t=p.gpu_timing;
+  if(!t)return p.schema_version>=2?row("GPU 设备区间","无已覆盖的 GPU 内核调用"):row("GPU 内核耗时",p.gpu_execution_seconds==null?"未采集（旧记录）":duration(p.gpu_execution_seconds));
+  const timed=Number(t.timed_calls)||0,warmup=Number(t.warmup_excluded_calls)||0,capacity=Number(t.capacity_excluded_calls)||0,pending=Number(t.pending_calls)||0,signature=Number(t.signature_excluded_calls)||0,nested=Number(t.nested_excluded_calls)||0,sampling=Number(t.sampling_excluded_calls)||0;
+  const measured=timed>0&&Number.isFinite(p.gpu_device_seconds);
+  const state=measured?duration(p.gpu_device_seconds)+(t.sample_every>1?"（抽样累计）":""):t.error?"采集异常":warmup?"仅首次调用，已排除编译预热":"无已覆盖的 GPU 内核调用";
+  const coverage=[`g² 融合内核 · 已计时 ${timed} 次`,sampling?`未抽取 ${sampling} 次`:null,warmup?`首调排除 ${warmup} 次`:null,capacity?`采集容量排除 ${capacity} 次`:null,signature?`签名容量排除 ${signature} 次`:null,nested?`嵌套排除 ${nested} 次`:null,pending?`待完成 ${pending} 次`:null,t.status==="partial"||t.status==="error"?"部分采集":null,t.error?"采集异常，详见运行记录":null].filter(Boolean).join("；");
+  return row("GPU 设备区间",state)+row("GPU 采集范围",coverage)+(Number.isFinite(p.gpu_execution_seconds)?row("GPU 纯内核总耗时",duration(p.gpu_execution_seconds)):"");
+}
 export function progressUnit(job) {
   if(job.progress_unit)return job.progress_unit;
   if(job.engine!=="sequence")return "帧";
@@ -17,7 +55,7 @@ function performanceHTML(job) {
   const number=v=>Number.isFinite(v)?v.toLocaleString(undefined,{maximumFractionDigits:2}):"—";
   const duration=v=>!Number.isFinite(v)?"—":v>0&&v<.1?(v<.00001?"<0.01 毫秒":`${number(v*1000)} 毫秒`):`${number(v)} 秒`;
   const row=(k,v)=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`;
-  return `<details><summary>运行耗时与吞吐</summary>${records.map(({name,p,unit})=>`<p>${esc(name)}</p><dl class="job-detail-grid">${row("来源总耗时",duration(p.elapsed_seconds))}${row("输出吞吐",`${number(p.output_per_second)} ${unit}/秒 · ${p.output_samples??0} ${unit}`)}${row("输入读取吞吐",`${number(p.input_reads_per_second)} 样本读取/秒 · ${p.input_read_samples??0} 次`)}${Object.entries(p.host_seconds||{}).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).map(([k,v])=>row(p.labels?.[k]||k,duration(v))).join("")}${row("GPU 内核耗时",p.gpu_execution_seconds==null?"未采集":duration(p.gpu_execution_seconds))}</dl>`).join("")}<p class="hint">主机分段互斥，包含读取、传输和同步等待。GPU 调度时间不能视为内核时间。输入读取次数包含视频建索引、重复读取及缓存命中，并非唯一原始帧数；字节为解码后数组大小。吞吐按来源总耗时计算，包含准备与输出，不含排队和计算进程启动。</p></details>`;
+  return `<details><summary>运行耗时与吞吐</summary>${records.map(({name,p,unit})=>`<p>${esc(name)}</p><dl class="job-detail-grid">${row("来源总耗时",duration(p.elapsed_seconds))}${row("输出吞吐",`${number(p.output_per_second)} ${unit}/秒 · ${p.output_samples??0} ${unit}`)}${row("输入读取吞吐",`${number(p.input_reads_per_second)} 样本读取/秒 · ${p.input_read_samples??0} 次`)}${Object.entries(p.host_seconds||{}).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).map(([k,v])=>row(p.labels?.[k]||k,duration(v))).join("")}${gpuTimingRows(p,row,duration)}</dl>`).join("")}<p class="hint">主机分段互斥，包含读取、传输和同步等待。GPU 设备区间使用 CUDA 事件抽样，仅累计已覆盖的 g² 融合内核调用，不外推总量；排除每种签名的首次调用，可能包含设备调度间隙，不代表全部模块的纯内核总耗时，也不与主机分段相加。GPU 调度时间不能视为内核时间。输入读取次数包含视频建索引、重复读取及缓存命中，并非唯一原始帧数；字节为解码后数组大小。吞吐按来源总耗时计算，包含准备与输出，不含排队和计算进程启动。</p></details>`;
 }
 export function detailHTML(job) {
   const run=job.run||{},c=run.config||job.parameters||run.spec||job.payload||{},p=c.photometry||{},g=c.geometry;
@@ -41,7 +79,7 @@ export function detailHTML(job) {
   for(const r of run.results||[])if(r.modules?.devices)rows+=row("实际计算设备",Object.entries(r.modules.devices).map(([id,d])=>`${id.slice(0,8)} · ${d.actual.toUpperCase()}${d.reason?" · "+d.reason:""}`).join("\n"));
   const stages=run.results?.find(r=>r.status==="succeeded")?.modules?.stages||[];
   const flow=(c.workflow||c.steps||[]).map((n,i)=>{const stage=stages.find(s=>s.id===n.id);return `<li>${esc(i+1+". "+n.algorithm)} · 实例 ${esc(n.id||"旧记录")} · v${esc(n.version||"1.0")}${n.enabled===false?"（停用）":""}${stage?`<p>${esc(stage.input.label)} → ${esc(stage.output.label)}<br>${esc(stage.output.meaning)}</p>`:""}<pre>${esc(JSON.stringify({parameters:n.parameters,execution:n.execution||{}},null,2))}</pre></li>`;}).join("");
-  return `<div class="job-rename"><input id="job-rename-input" maxlength="160" value="${esc(job.name)}" aria-label="任务与结果名称"/><button id="job-rename-save" class="quiet">保存名称</button></div><dl class="job-detail-grid">${rows}</dl>${job.summary?`<p class="hint">${esc(job.summary)}</p>`:""}${job.error?`<pre>${esc(job.error)}</pre>`:""}${performanceHTML(job)}${flow?`<details><summary>模块顺序与各实例参数</summary><ol class="job-module-list">${flow}</ol></details>`:""}<details><summary>完整运行参数</summary><pre>${esc(JSON.stringify(c,null,2))}</pre></details>${job.logs?.length?`<details open><summary>任务日志</summary><pre>${esc(job.logs.join("\n"))}</pre></details>`:""}`;
+  return `<div class="job-rename"><input id="job-rename-input" maxlength="160" value="${esc(job.name)}" aria-label="任务与结果名称"/><button id="job-rename-save" class="quiet">保存名称</button></div><dl class="job-detail-grid">${rows}</dl>${job.summary?`<p class="hint">${esc(job.summary)}</p>`:""}${job.error?`<pre>${esc(job.error)}</pre>`:""}${performanceHTML(job)}${executionHTML(job)}${flow?`<details><summary>模块顺序与各实例参数</summary><ol class="job-module-list">${flow}</ol></details>`:""}<details><summary>完整运行参数</summary><pre>${esc(JSON.stringify(c,null,2))}</pre></details>${job.logs?.length?`<details open><summary>任务日志</summary><pre>${esc(job.logs.join("\n"))}</pre></details>`:""}`;
 }
 export function bindRename(job, refreshed, report) {
   document.getElementById("job-rename-save").onclick=async()=>{

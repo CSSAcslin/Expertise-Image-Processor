@@ -1,4 +1,4 @@
-"""Bounded, read-only NVIDIA memory sampling without creating a CUDA context."""
+"""Bounded, read-only NVIDIA utilization and memory without a CUDA context."""
 from __future__ import annotations
 
 import csv
@@ -17,6 +17,14 @@ def memory_bytes(value):
     try:
         number = float(value.strip())
         return int(number*MIB) if math.isfinite(number) and number >= 0 else None
+    except (ValueError, OverflowError):
+        return None
+
+
+def utilization_percent(value):
+    try:
+        number = float(value.strip())
+        return number if math.isfinite(number) and 0 <= number <= 100 else None
     except (ValueError, OverflowError):
         return None
 
@@ -47,14 +55,22 @@ class GpuMemoryMonitor:
             result["reason"] = "未找到 nvidia-smi，无法读取显存"
             return result
         try:
-            rows = self._query(executable, "--query-gpu=index,uuid,name,memory.total,memory.used,memory.free,driver_model.current")
+            query = "--query-gpu=index,uuid,name,memory.total,memory.used,memory.free,driver_model.current"
+            try:
+                rows = self._query(executable, query + ",utilization.gpu")
+            except subprocess.CalledProcessError:
+                # Older drivers may reject an unsupported utilization field.
+                rows = self._query(executable, query)
             for row in rows[:64]:
-                if len(row) != 7:
+                if len(row) not in (7, 8):
                     raise ValueError("无法识别驱动返回的显存数据")
-                index, uuid, name, total, used, free, model = (v.strip() for v in row)
+                index, uuid, name, total, used, free, model = (v.strip() for v in row[:7])
+                utilization = utilization_percent(row[7]) if len(row) == 8 else None
                 result["cards"].append(dict(index=int(index), uuid=uuid, name=name,
                     total_bytes=memory_bytes(total), used_bytes=memory_bytes(used),
-                    free_bytes=memory_bytes(free), driver_model=model))
+                    free_bytes=memory_bytes(free), driver_model=model,
+                    utilization_percent=utilization,
+                    utilization_reason=None if utilization is not None else "驱动未提供 GPU 利用率"))
             if not result["cards"]:
                 result["reason"] = "未检测到 NVIDIA 显卡"
                 return result
